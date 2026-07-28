@@ -1,0 +1,26 @@
+# Dockerfile.sandbox — C++ execution sandbox image.
+#
+# Based on gcc:13-slim. Provides g++ for compilation and a restricted
+# runtime environment. The backend mounts a temp directory read-only
+# at /mnt/code and writes the binary to /tmp (tmpfs, noexec is NOT set
+# here because we need to execute the binary — noexec is enforced by
+# the Docker SDK options in sandbox_config.py instead).
+#
+# Build:
+#   docker build -f docker/Dockerfile.sandbox -t dsa-sandbox:latest .
+#
+# The container is never run directly — docker_runner.py manages it.
+
+FROM gcc:latest
+
+# Install nothing extra — keep the image minimal.
+# gcc:13-slim already has g++ and libc.
+
+# Create a non-root user for execution
+RUN useradd -m -u 1001 sandbox
+
+# /tmp is the only writable location (tmpfs mounted by docker_runner.py)
+WORKDIR /tmp
+
+# Default: do nothing. docker_runner.py passes the actual command.
+CMD ["/bin/sh"]

@@ -1,0 +1,46 @@
+# Docker Compose configuration for DSA Visualiser
+version: "3.8"
+
+services:
+  # FastAPI Python backend
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: dsa-backend
+    # ports: no host exposure — backend is reached via internal Docker DNS through nginx proxy
+    volumes:
+      # Docker socket for spawning sandbox containers (DooD)
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Shared temp directory for code files (same path as host for Docker bind mounts)
+      - /tmp/dsa-visualizer:/tmp/dsa-visualizer
+    networks:
+      - dsa-network
+
+  # Nginx frontend serving built Vite output
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: dsa-frontend
+    ports:
+      - "9001:80"
+    depends_on:
+      - backend
+    networks:
+      - dsa-network
+
+  # Sandboxed C++ execution environment (build-only — image is used by backend)
+  # Build: creates dsa-sandbox:latest; backend spawns containers dynamically via Docker SDK
+  sandbox:
+    build:
+      context: ./backend/docker
+      dockerfile: Dockerfile.sandbox
+    image: dsa-sandbox:latest
+    container_name: dsa-sandbox
+    command: ["echo", "Sandbox image built successfully"]
+
+networks:
+  dsa-network:
+    driver: bridge
+    name: dsa-network

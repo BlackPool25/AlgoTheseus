@@ -10,6 +10,7 @@
 import {
   Background,
   Controls,
+  MiniMap,
   ReactFlow,
   useReactFlow,
   type Edge,
@@ -194,6 +195,8 @@ export function TraceFlow() {
       minZoom={0.2}
       maxZoom={2.5}
       proOptions={{ hideAttribution: true }}
+      nodesFocusable={true}
+      edgesFocusable={true}
     >
       <FlowViewController
         containerRef={containerRef}
@@ -203,6 +206,13 @@ export function TraceFlow() {
         flowNodes={flowNodes}
       />
       <Background color="#27272a" gap={16} />
+      <MiniMap
+        nodeColor={(node) => (node.data?.isActive ? '#f59e0b' : '#52525b')}
+        maskColor="rgba(0,0,0,0.7)"
+        style={{ background: '#18181b' }}
+        pannable
+        zoomable
+      />
       <Controls showInteractive={false} />
     </ReactFlow>
   );

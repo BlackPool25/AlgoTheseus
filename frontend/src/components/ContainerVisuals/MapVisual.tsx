@@ -8,6 +8,7 @@ import {
   useVirtualizedList,
   VIRTUALIZE_THRESHOLD,
 } from "../../hooks/useVirtualizedList";
+import { renderCellValue } from "../../utils/format";
 
 interface Props {
   value: Record<string, unknown>;
@@ -41,7 +42,7 @@ export function MapVisual({ value, name }: Props) {
                 {k}
               </div>
               <div className="px-2 py-1 text-xs font-mono text-zinc-200">
-                {String(v)}
+                {renderCellValue(v)}
               </div>
             </div>
           ))}
@@ -86,7 +87,7 @@ export function MapVisual({ value, name }: Props) {
                   {k}
                 </div>
                 <div className="px-2 py-1 text-xs font-mono text-zinc-200">
-                  {String(v)}
+                  {renderCellValue(v)}
                 </div>
               </div>
             );

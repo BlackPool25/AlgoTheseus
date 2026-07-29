@@ -251,7 +251,7 @@ function HeapNodeSVG({
 }: {
   node: NodePos;
   isTop: boolean;
-  highlight: "none" | "amber" | "green";
+  highlight: "none" | "pink" | "green";
   violation: boolean;
   appearing: boolean;
   disappearing: boolean;
@@ -266,11 +266,11 @@ function HeapNodeSVG({
     stroke = "#ef4444";
     strokeW = 2;
     textFill = "#fca5a5";
-  } else if (highlight === "amber") {
-    fill = "rgba(245,158,11,0.12)";
-    stroke = "#f59e0b";
+  } else if (highlight === "pink") {
+    fill = "rgba(236,72,153,0.12)";
+    stroke = "#ec4899";
     strokeW = 2;
-    textFill = "#fbbf24";
+    textFill = "#f472b6";
   } else if (highlight === "green") {
     fill = "rgba(16,185,129,0.12)";
     stroke = "#10b981";
@@ -519,9 +519,9 @@ export function HeapVisual({ value }: Props) {
               const isViolation = violations.has(node.index) && !isHighlighted;
 
               // If pop animation: the last element (which became root) highlights differently
-              let highlight: "none" | "amber" | "green" = "none";
-              if (isHighlighted) highlight = "amber";
-              if (animPhase === "push-bubble" && isHighlighted) highlight = "amber";
+              let highlight: "none" | "pink" | "green" = "none";
+              if (isHighlighted) highlight = "pink";
+              if (animPhase === "push-bubble" && isHighlighted) highlight = "pink";
 
               return (
                 <HeapNodeSVG

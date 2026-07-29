@@ -330,8 +330,19 @@ class ASTWalker:
 
             loop_counters.setdefault(fn, [])
 
-            # Walk the body
+            # Walk the body — inject STATE at the start of each unique source line
+            seen_lines: set[int] = set()
             for child in body.get_children():
+                line = child.location.line
+                if line not in seen_lines and line > 0:
+                    seen_lines.add(line)
+                    points.append(InjectionPoint(
+                        kind=InjectKind.STATE,
+                        line=line,
+                        col=1,
+                        func_name=fn,
+                        depth=fn_depth,
+                    ))
                 self._walk_stmt(child, points, loop_counters, fn, fn_depth)
 
             return  # Don't recurse further — _walk_stmt handles the body
@@ -500,7 +511,7 @@ class ASTWalker:
 
             return
 
-        # ── Loop statements → LOOP_ITER + STATE at loop line ─────────────────
+        # ── Loop statements → LOOP_ITER ───────────────────────────────────────
         if kind in (
             clang.CursorKind.FOR_STMT,
             clang.CursorKind.WHILE_STMT,
@@ -509,15 +520,6 @@ class ASTWalker:
             counter_var = f"__loop_iter_{self._loop_counter_seq}"
             self._loop_counter_seq += 1
             loop_counters.setdefault(func_name, []).append(counter_var)
-
-            # Inject STATE at the loop statement line so variables are visible
-            points.append(InjectionPoint(
-                kind=InjectKind.STATE,
-                line=cursor.location.line,
-                col=cursor.location.column,
-                func_name=func_name,
-                depth=func_depth,
-            ))
 
             # Find the loop body (last child for while/for, first for do)
             children = list(cursor.get_children())
@@ -544,78 +546,8 @@ class ASTWalker:
                 self._walk_stmt(child, points, loop_counters, func_name, func_depth)
             return
 
-        # ── Declaration statement → STATE after ───────────────────────────────
-        if kind == clang.CursorKind.DECL_STMT:
-            # Collect declared variable names
-            var_names = [
-                c.spelling
-                for c in cursor.get_children()
-                if c.kind == clang.CursorKind.VAR_DECL and c.spelling
-            ]
-            if var_names:
-                points.append(InjectionPoint(
-                    kind=InjectKind.STATE,
-                    line=cursor.extent.end.line,
-                    col=cursor.extent.end.column,
-                    func_name=func_name,
-                    depth=func_depth,
-                    var_names=var_names,
-                ))
-            return
-
-        # ── Expression/call statements → STATE after ─────────────────────────
-        expr_kinds = [
-            clang.CursorKind.CALL_EXPR,
-            clang.CursorKind.BINARY_OPERATOR,
-            clang.CursorKind.UNARY_OPERATOR,
-            clang.CursorKind.COMPOUND_ASSIGNMENT_OPERATOR,
-        ]
-        # Optional in some libclang builds
-        cxx_op_call = getattr(clang.CursorKind, "CXX_OPERATOR_CALL_EXPR", None)
-        cxx_member_call = getattr(clang.CursorKind, "CXX_MEMBER_CALL_EXPR", None)
-        if cxx_op_call is not None:
-            expr_kinds.append(cxx_op_call)
-        if cxx_member_call is not None:
-            expr_kinds.append(cxx_member_call)
-
-        if kind in tuple(expr_kinds):
-            points.append(InjectionPoint(
-                kind=InjectKind.STATE,
-                line=cursor.extent.end.line,
-                col=cursor.extent.end.column,
-                func_name=func_name,
-                depth=func_depth,
-            ))
-            return
-
-        # ── CXX operator call / member expr (may not be in libclang's CursorKind) ──
-        # These cover adj[x].push_back(y), cin >> x, cout << x, etc.
-        _cxx_kinds = [
-            getattr(clang.CursorKind, k, None)
-            for k in ("CXX_OPERATOR_CALL_EXPR", "CXX_MEMBER_CALL_EXPR",
-                      "OVERLOADED_CALL_EXPR", "CXX_BOOL_LITERAL_EXPR",
-                      "MEMBER_REF_EXPR")
-        ]
-        for _ck in _cxx_kinds:
-            if _ck is not None and kind == _ck:
-                points.append(InjectionPoint(
-                    kind=InjectKind.STATE,
-                    line=cursor.extent.end.line,
-                    col=cursor.extent.end.column,
-                    func_name=func_name,
-                    depth=func_depth,
-                ))
-                return
-
-        # Default: inject STATE for any unhandled statement type, then stop
-        # (don't recurse into children to avoid duplicate STATE events).
-        points.append(InjectionPoint(
-            kind=InjectKind.STATE,
-            line=cursor.location.line,
-            col=cursor.location.column,
-            func_name=func_name,
-            depth=func_depth,
-        ))
+        # Default: skip unhandled statement types (STATE is injected per-line
+        # by _walk_cursor, so we don't need catch-all STATE here).
         return
 
 

@@ -8,6 +8,7 @@ import {
   useVirtualizedList,
   VIRTUALIZE_THRESHOLD,
 } from "../../hooks/useVirtualizedList";
+import { renderCellValue } from "../../utils/format";
 
 interface Props {
   value: unknown[];
@@ -43,8 +44,8 @@ export function VectorVisual({ value, name, highlightIndex }: Props) {
         <div className="flex gap-0.5 overflow-x-auto pb-1">
           {value.map((item, i) => (
             <div key={i} className="flex flex-col items-center shrink-0">
-              <div className={boxClass(i)} title={String(item)}>
-                {String(item)}
+              <div className={boxClass(i)} title={renderCellValue(item)}>
+                {renderCellValue(item)}
               </div>
               <div className={`text-[10px] font-mono ${i === highlightIndex ? "text-amber-600" : "text-zinc-600"}`}>
                 {i}
@@ -87,8 +88,8 @@ export function VectorVisual({ value, name, highlightIndex }: Props) {
                   transform: `translateX(${virtualItem.start}px)`,
                 }}
               >
-                <div className={boxClass(virtualItem.index)} title={String(item)}>
-                  {String(item)}
+                <div className={boxClass(virtualItem.index)} title={renderCellValue(item)}>
+                  {renderCellValue(item)}
                 </div>
                 <div className={`text-[10px] font-mono ${virtualItem.index === highlightIndex ? "text-amber-600" : "text-zinc-600"}`}>
                   {virtualItem.index}

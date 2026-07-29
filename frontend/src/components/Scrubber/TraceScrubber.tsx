@@ -76,7 +76,7 @@ export function TraceScrubber() {
           {activeGroup && (
             <button
               onClick={() => toggleExpand(activeGroup.startStep)}
-              className="text-[10px] text-amber-400 hover:text-amber-300 bg-amber-400/10 px-1.5 py-0.5 rounded border border-amber-400/30 transition-colors"
+              className="text-[10px] text-violet-400 hover:text-violet-300 bg-violet-500/20 px-1.5 py-0.5 rounded border border-violet-500/30 transition-colors"
               title="Expand to see individual steps"
               aria-label="Expand compressed step group"
             >
@@ -84,7 +84,7 @@ export function TraceScrubber() {
             </button>
           )}
           {truncated && (
-            <span className="text-[10px] text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/30">
+            <span className="text-[10px] text-orange-400 bg-orange-500/10 px-2 py-0.5 rounded border border-orange-500/30">
               ⚠ trace truncated at {totalSteps} steps
             </span>
           )}
@@ -119,7 +119,7 @@ export function TraceScrubber() {
               {trackMap.map((seg) => (
                 <div
                   key={seg.startStep}
-                  className="absolute h-2 w-0.5 bg-amber-500/50 rounded-full"
+                  className="absolute h-2 w-0.5 bg-violet-500/60 rounded-full"
                   style={{
                     left: `${seg.left * 100}%`,
                     width: `${Math.max(seg.width * 100, 0.2)}%`,

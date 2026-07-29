@@ -16,16 +16,8 @@
 
 import { useRef, useState, useCallback, useEffect, useMemo } from "react";
 import type { ContainerKind } from "../../hooks/useContainerType";
-import { VectorVisual } from "./VectorVisual";
-import { StackVisual } from "./StackVisual";
-import { QueueVisual } from "./QueueVisual";
-import { MapVisual } from "./MapVisual";
-import { SetVisual } from "./SetVisual";
-import { PriorityQueueVisual } from "./PriorityQueueVisual";
-import { GridVisual } from "./GridVisual";
-import { DPTableVisual } from "./DPTableVisual";
-import { GraphAlgorithmVisual } from "./GraphAlgorithmVisual";
-import { TrieVisual } from "./TrieVisual";
+import { VISUAL_REGISTRY } from "./registry";
+import { ErrorBoundary } from "./ErrorBoundary";
 import { StructGraphVisual, type RenderAs } from "./StructGraphVisual";
 
 // ── Public types ─────────────────────────────────────────────────────────────
@@ -99,81 +91,34 @@ function renderStructureContent(def: StructureDef): React.ReactNode {
   const { name, value, kind, label, structMeta } = def;
   const displayName = label ?? name;
 
-  switch (kind) {
-    case "vector":
-      return <VectorVisual value={value as unknown[]} name={displayName} />;
-
-    case "stack":
-      return (
-        <StackVisual
-          value={value as { top: unknown; items: unknown[] }}
-          name={displayName}
-        />
-      );
-
-    case "queue":
-      return <QueueVisual value={value as { front: unknown; items: unknown[] }} />;
-
-    case "priority_queue":
-      return (
-        <PriorityQueueVisual
-          value={value as { top: unknown; items: unknown[] }}
-        />
-      );
-
-    case "map":
-      return (
-        <MapVisual
-          value={value as Record<string, unknown>}
-          name={displayName}
-        />
-      );
-
-    case "set":
-      return <SetVisual value={value as unknown[]} label={displayName} />;
-
-    case "grid":
-      return (
-        <GridVisual
-          value={value as number[][]}
-          name={displayName}
-        />
-      );
-
-    case "dp_table":
-      return <DPTableVisual value={value as never} name={displayName} />;
-
-    case "graph":
-      return <GraphAlgorithmVisual value={value} name={displayName} />;
-
-    case "trie":
-      return (
-        <TrieVisual
-          value={value as Record<string, unknown>}
-          name={displayName}
-        />
-      );
-
-    case "struct":
-      return (
-        <StructGraphVisual
-          value={value as Record<string, unknown> | null}
-          renderAs={structMeta?.renderAs ?? "tree"}
-          labelField={structMeta?.labelField}
-          leftField={structMeta?.leftField}
-          rightField={structMeta?.rightField}
-          nextField={structMeta?.nextField}
-        />
-      );
-
-    // "multi_structure" or "primitive" / "unknown" fallbacks
-    default:
-      return (
-        <span className="break-all text-xs font-mono text-zinc-200">
-          {renderFallback(value)}
-        </span>
-      );
+  // struct needs extra layout metadata from structMeta — handle separately
+  if (kind === "struct") {
+    return (
+      <StructGraphVisual
+        value={value as Record<string, unknown> | null}
+        renderAs={structMeta?.renderAs ?? "tree"}
+        labelField={structMeta?.labelField}
+        leftField={structMeta?.leftField}
+        rightField={structMeta?.rightField}
+        nextField={structMeta?.nextField}
+      />
+    );
   }
+
+  const Component = VISUAL_REGISTRY[kind];
+  if (!Component) {
+    return (
+      <span className="break-all text-xs font-mono text-zinc-200">
+        {renderFallback(value)}
+      </span>
+    );
+  }
+
+  return (
+    <ErrorBoundary>
+      <Component value={value} name={displayName} />
+    </ErrorBoundary>
+  );
 }
 
 // ── Main component ──────────────────────────────────────────────────────────

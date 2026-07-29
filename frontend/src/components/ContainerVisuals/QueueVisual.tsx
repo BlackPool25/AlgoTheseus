@@ -11,6 +11,7 @@ import {
   useVirtualizedList,
   VIRTUALIZE_THRESHOLD,
 } from "../../hooks/useVirtualizedList";
+import { renderCellValue } from "../../utils/format";
 
 interface QueueData {
   front: unknown;
@@ -52,7 +53,7 @@ export function QueueVisual({ value }: Props) {
                   : "border-zinc-600 bg-zinc-800 text-zinc-300"
               }`}
             >
-              {String(item)}
+              {renderCellValue(item)}
             </div>
           ))}
 
@@ -114,7 +115,7 @@ export function QueueVisual({ value }: Props) {
                     transform: `translateX(${virtualItem.start}px)`,
                   }}
                 >
-                  {String(items[idx])}
+                  {renderCellValue(items[idx])}
                 </div>
               );
             })}

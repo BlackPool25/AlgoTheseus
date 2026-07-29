@@ -12,7 +12,7 @@
  * Layout: circular (equal radius) — works for undirected and directed graphs.
  */
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import {
   Background,
   Handle,
@@ -24,38 +24,16 @@ import {
   type NodeProps,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import { GraphEdge } from "./GraphEdge";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
 const NODE_R = 20;
 const NODE_D = NODE_R * 2;
 
-/** Handle positions around the node — 8 points at 45° intervals */
-const HANDLE_POSITIONS = [
-  { id: "h0",  x: 0,      y: -NODE_R }, // top
-  { id: "h1",  x: NODE_R * 0.707, y: -NODE_R * 0.707 }, // top-right
-  { id: "h2",  x: NODE_R,  y: 0 },      // right
-  { id: "h3",  x: NODE_R * 0.707, y: NODE_R * 0.707 },  // bottom-right
-  { id: "h4",  x: 0,      y: NODE_R },  // bottom
-  { id: "h5",  x: -NODE_R * 0.707, y: NODE_R * 0.707 }, // bottom-left
-  { id: "h6",  x: -NODE_R, y: 0 },      // left
-  { id: "h7",  x: -NODE_R * 0.707, y: -NODE_R * 0.707 }, // top-left
-];
-
-/** Pick the handle closest to the direction from source to target. */
-function pickHandle(
-  srcIdx: number,
-  tgtIdx: number,
-  positions: { x: number; y: number }[],
-): string {
-  const dx = positions[tgtIdx].x - positions[srcIdx].x;
-  const dy = positions[tgtIdx].y - positions[srcIdx].y;
-  const angle = Math.atan2(dy, dx); // -π .. π
-  // Map angle to the nearest of 8 directions
-  const step = (2 * Math.PI) / 8;
-  const idx = Math.round((angle + Math.PI) / step) % 8;
-  return HANDLE_POSITIONS[idx].id;
-}
+// Center-to-center edge routing via custom GraphEdge component.
+// No manual handle picking needed — React Flow computes sourceX/sourceY
+// from the single hidden handle, and GraphEdge clips at NODE_R.
 
 type NodeState = 0 | 1 | 2 | 3;
 
@@ -150,6 +128,67 @@ function circularLayout(
   return positions;
 }
 
+function forceLayout(
+  n: number,
+  adj: number[][],
+): { x: number; y: number }[] {
+  const positions = Array.from({ length: n }, (_, i) => ({
+    x: Math.cos((2 * Math.PI * i) / n) * 100,
+    y: Math.sin((2 * Math.PI * i) / n) * 100,
+  }));
+  const velocity = positions.map(() => ({ x: 0, y: 0 }));
+  const W = 400, H = 400;
+  const REPULSION = 5000;
+  const ATTRACTION = 0.005;
+  const DAMPING = 0.85;
+  const ITERATIONS = 100;
+
+  for (let iter = 0; iter < ITERATIONS; iter++) {
+    // Repulsion between all pairs
+    for (let i = 0; i < n; i++) {
+      for (let j = i + 1; j < n; j++) {
+        const dx = positions[j].x - positions[i].x;
+        const dy = positions[j].y - positions[i].y;
+        const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+        const force = REPULSION / (dist * dist);
+        const fx = (dx / dist) * force;
+        const fy = (dy / dist) * force;
+        velocity[i].x -= fx;
+        velocity[i].y -= fy;
+        velocity[j].x += fx;
+        velocity[j].y += fy;
+      }
+    }
+    // Attraction along edges
+    for (let u = 0; u < n; u++) {
+      for (const v of adj[u]) {
+        if (v <= u) continue;
+        const dx = positions[v].x - positions[u].x;
+        const dy = positions[v].y - positions[u].y;
+        const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+        const force = ATTRACTION * dist;
+        velocity[u].x += (dx / dist) * force;
+        velocity[u].y += (dy / dist) * force;
+        velocity[v].x -= (dx / dist) * force;
+        velocity[v].y -= (dy / dist) * force;
+      }
+    }
+    // Center gravity
+    for (let i = 0; i < n; i++) {
+      velocity[i].x += (W / 2 - positions[i].x) * 0.001;
+      velocity[i].y += (H / 2 - positions[i].y) * 0.001;
+    }
+    // Apply velocity with damping
+    for (let i = 0; i < n; i++) {
+      velocity[i].x *= DAMPING;
+      velocity[i].y *= DAMPING;
+      positions[i].x += velocity[i].x;
+      positions[i].y += velocity[i].y;
+    }
+  }
+  return positions;
+}
+
 // ── Edge classification ──────────────────────────────────────────────────────
 
 function classifyEdge(
@@ -201,25 +240,20 @@ function GraphNode({ data }: NodeProps) {
         borderColor: (data as Record<string, unknown>).color as string,
       }}
     >
-      {/* 8 directional handles — invisible, used for edge routing */}
-      {HANDLE_POSITIONS.map((hp) => (
-        <Handle
-          key={hp.id}
-          type="source"
-          position={Position.Top}
-          id={hp.id}
-          style={{ top: hp.y + NODE_R, left: hp.x + NODE_R, opacity: 0, pointerEvents: "none" }}
-        />
-      ))}
-      {HANDLE_POSITIONS.map((hp) => (
-        <Handle
-          key={`t-${hp.id}`}
-          type="target"
-          position={Position.Top}
-          id={hp.id}
-          style={{ top: hp.y + NODE_R, left: hp.x + NODE_R, opacity: 0, pointerEvents: "none" }}
-        />
-      ))}
+      {/* Single hidden handle — exists only so React Flow can compute
+          sourceX/sourceY/targetX/targetY for the custom edge. */}
+      <Handle
+        type="source"
+        position={Position.Top}
+        id="center"
+        style={{ opacity: 0, pointerEvents: "none" }}
+      />
+      <Handle
+        type="target"
+        position={Position.Top}
+        id="center"
+        style={{ opacity: 0, pointerEvents: "none" }}
+      />
       <span className="text-[11px] font-mono font-bold text-white pointer-events-none">
         {data.label as string}
       </span>
@@ -233,11 +267,16 @@ function GraphNode({ data }: NodeProps) {
 }
 
 const NODE_TYPES = { graphNode: GraphNode };
+const EDGE_TYPES = { graphEdge: GraphEdge };
 
 // ── Main component ───────────────────────────────────────────────────────────
 
 export function GraphAlgorithmVisual({ value, name }: Props) {
   const graphData = useMemo(() => parseGraphValue(value), [value]);
+
+  const hasParent = !!(graphData?.parent && graphData.parent.length > 0);
+  const [useForce, setUseForce] = useState(false);
+  const effectiveUseForce = hasParent ? !useForce : useForce;
 
   const { nodes, edges } = useMemo(() => {
     if (!graphData) return { nodes: [], edges: [] };
@@ -245,9 +284,12 @@ export function GraphAlgorithmVisual({ value, name }: Props) {
     const { adj, state, distances, times, parent } = graphData;
     const n = adj.length;
 
-    // Circular layout — radius scales with node count
+    // Layout — auto-detect: if parent array exists (tree structure from DFS/BFS/MST/Dijkstra),
+    // prefer force-directed layout. Toggle button overrides the auto-detection.
     const radius = Math.max(120, Math.min(300, n * 22));
-    const positions = circularLayout(n, radius);
+    const positions = effectiveUseForce
+      ? forceLayout(n, adj)
+      : circularLayout(n, radius);
 
     // Build React Flow nodes
     const flowNodes: Node[] = positions.map((pos, i) => {
@@ -277,7 +319,9 @@ export function GraphAlgorithmVisual({ value, name }: Props) {
       };
     });
 
-    // Build edges — no dedup. Each edge routes through a handle pointing at its target.
+    // Build edges — center-to-center routing via custom graphEdge type.
+    // React Flow computes sourceX/sourceY/targetX/targetY from the single
+    // hidden handle; GraphEdge clips the line at NODE_R from each center.
     const flowEdges: Edge[] = [];
 
     for (let u = 0; u < n; u++) {
@@ -287,19 +331,14 @@ export function GraphAlgorithmVisual({ value, name }: Props) {
         if (typeof v !== "number" || v < 0 || v >= n) continue;
 
         const kind = classifyEdge(u, v, parent, times);
-        const arrow: { markerEnd: { type: MarkerType; color: string; width: number; height: number } } = {
-          markerEnd: { type: MarkerType.ArrowClosed, color: edgeStyle(kind).stroke ?? "#a1a1aa", width: 16, height: 16 },
-        };
 
         flowEdges.push({
           id: `e${u}-${v}`,
           source: `v${u}`,
           target: `v${v}`,
-          type: "default",
-          sourceHandle: pickHandle(u, v, positions),
-          targetHandle: pickHandle(v, u, positions),
+          type: "graphEdge",
           style: edgeStyle(kind),
-          ...arrow,
+          markerEnd: { type: MarkerType.ArrowClosed as const, color: edgeStyle(kind).stroke ?? "#a1a1aa", width: 14, height: 14 },
           label: kind !== "tree" ? kind : undefined,
           labelStyle: { fontSize: 9, fill: "#a1a1aa" },
           labelBgStyle: { fill: "#18181b", fontSize: 9 },
@@ -309,7 +348,7 @@ export function GraphAlgorithmVisual({ value, name }: Props) {
     }
 
     return { nodes: flowNodes, edges: flowEdges };
-  }, [graphData]);
+  }, [graphData, effectiveUseForce]);
 
   if (!graphData) return null;
 
@@ -326,8 +365,14 @@ export function GraphAlgorithmVisual({ value, name }: Props) {
   return (
     <div className="flex flex-col gap-1">
       {name && (
-        <div className="text-xs text-zinc-500">
-          {name}: graph · {n} nodes · {edges.length} edges
+        <div className="text-xs text-zinc-500 flex items-center gap-2">
+          <span>{name}: graph · {n} nodes · {edges.length} edges</span>
+          <button
+            onClick={() => setUseForce(!useForce)}
+            className="underline decoration-dotted underline-offset-2 hover:text-zinc-300"
+          >
+            {effectiveUseForce ? "circular" : "force-directed"}
+          </button>
         </div>
       )}
       <div className="border border-zinc-800 rounded-md overflow-hidden bg-zinc-900/50">
@@ -336,6 +381,7 @@ export function GraphAlgorithmVisual({ value, name }: Props) {
             nodes={nodes}
             edges={edges}
             nodeTypes={NODE_TYPES}
+            edgeTypes={EDGE_TYPES}
             minZoom={0.25}
             maxZoom={4}
             fitView

@@ -5,6 +5,8 @@
  * Backend serializes set as a plain array (already sorted for std::set).
  */
 
+import { renderCellValue } from "../../utils/format";
+
 interface Props {
   value: unknown[];
   label?: string;
@@ -23,7 +25,7 @@ export function SetVisual({ value, label = "set" }: Props) {
             key={i}
             className="flex items-center justify-center min-w-[28px] h-6 px-1.5 border border-teal-700 bg-teal-900/30 text-teal-300 text-[10px] font-mono rounded-sm"
           >
-            {String(item)}
+            {renderCellValue(item)}
           </div>
         ))}
         {overflow > 0 && (

@@ -128,7 +128,7 @@ function EventBadge({ event }: { event: NonNullable<ReturnType<typeof useTraceSt
     enter:  "bg-blue-500/20 text-blue-400",
     exit:   "bg-purple-500/20 text-purple-400",
     state:  "bg-zinc-700 text-zinc-400",
-    branch: "bg-amber-500/20 text-amber-400",
+    branch: "bg-orange-500/20 text-orange-400",
     iter:   "bg-emerald-500/20 text-emerald-400",
   };
   const labels: Record<string, string> = {

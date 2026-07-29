@@ -8,6 +8,7 @@ import {
   useVirtualizedList,
   VIRTUALIZE_THRESHOLD,
 } from "../../hooks/useVirtualizedList";
+import { renderCellValue } from "../../utils/format";
 
 interface StackValue {
   top: unknown;
@@ -47,7 +48,7 @@ export function StackVisual({ value, name }: Props) {
               }`}
             >
               {i === 0 && <span className="text-amber-500 mr-1">top →</span>}
-              {String(item)}
+              {renderCellValue(item)}
             </div>
           ))}
         </div>
@@ -95,7 +96,7 @@ export function StackVisual({ value, name }: Props) {
                 {idx === 0 && (
                   <span className="text-amber-500 mr-1">top →</span>
                 )}
-                {String(item)}
+                {renderCellValue(item)}
               </div>
             );
           })}

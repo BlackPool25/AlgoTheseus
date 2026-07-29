@@ -258,9 +258,9 @@ export function LinkedListVisual({ value, name, currentAddr }: Props) {
           {name}: {isDoubly ? "doubly" : "singly"}-linked list
           {hasCycle && <span className="text-red-400 ml-1">(cycle)</span>}
         </span>
-        {flat.length > 500 && (
-          <span className="text-amber-500">truncated</span>
-        )}
+          {flat.length > 500 && (
+            <span className="text-orange-400">truncated</span>
+          )}
       </div>
 
       <div className="overflow-x-auto pb-1">
@@ -453,7 +453,7 @@ export function LinkedListVisual({ value, name, currentAddr }: Props) {
 
       {/* Soft limit warning */}
       {flat.length > 500 && (
-        <div className="text-[10px] text-amber-400 mt-0.5">
+        <div className="text-[10px] text-orange-400 mt-0.5">
           ⚠ List has {flat.length} nodes — showing truncated view
         </div>
       )}

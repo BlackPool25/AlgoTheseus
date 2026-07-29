@@ -2,7 +2,7 @@
  * components/ContainerVisuals/DPTableVisual.tsx — DP table visualization.
  *
  * Renders a 2D grid of computed DP values with:
- *  – Current cell highlighted (amber pulse)
+ *  – Current cell highlighted (cyan pulse)
  *  – SVG dependency arrows from current cell to dependency cells
  *  – Recurrence formula on hover / tooltip
  *  – Row virtualization for grids > 50 rows
@@ -242,7 +242,7 @@ export function DPTableVisual({ value, name }: Props) {
 
     if (isCurrent) {
       cellClass +=
-        " border-amber-500 bg-amber-500/15 text-amber-300 animate-pulse shadow-[0_0_6px_rgba(245,158,11,0.3)]";
+        " border-cyan-500 bg-cyan-500/15 text-cyan-300 animate-pulse shadow-[0_0_6px_rgba(6,182,212,0.3)]";
     } else if (isDep) {
       cellClass +=
         " border-blue-500 bg-blue-500/10 text-blue-300";
@@ -368,7 +368,7 @@ export function DPTableVisual({ value, name }: Props) {
         {currentCell && (
           <div className="flex items-center gap-3 text-[9px] text-zinc-600">
             <span className="flex items-center gap-1">
-              <span className="inline-block w-2 h-2 rounded-sm bg-amber-500/30 border border-amber-500" />
+              <span className="inline-block w-2 h-2 rounded-sm bg-cyan-500/30 border border-cyan-500" />
               current
             </span>
             {dependencies.length > 0 && (
@@ -505,7 +505,7 @@ export function DPTableVisual({ value, name }: Props) {
       {currentCell && (
         <div className="flex items-center gap-3 text-[9px] text-zinc-600">
           <span className="flex items-center gap-1">
-            <span className="inline-block w-2 h-2 rounded-sm bg-amber-500/30 border border-amber-500" />
+            <span className="inline-block w-2 h-2 rounded-sm bg-cyan-500/30 border border-cyan-500" />
             current
           </span>
           {dependencies.length > 0 && (

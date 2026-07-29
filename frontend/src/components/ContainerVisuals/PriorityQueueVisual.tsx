@@ -5,6 +5,8 @@
  * Backend serializes priority_queue as: { top: T, items: T[] }
  */
 
+import { renderCellValue } from "../../utils/format";
+
 interface PQData {
   top: unknown;
   items: unknown[];
@@ -27,7 +29,7 @@ export function PriorityQueueVisual({ value }: Props) {
       {top !== null && top !== undefined && (
         <div className="flex justify-center">
           <div className="flex items-center justify-center min-w-[40px] h-7 px-2 border-2 border-orange-500 bg-orange-500/15 text-orange-300 text-[11px] font-mono font-bold rounded">
-            {String(top)}
+            {renderCellValue(top)}
           </div>
         </div>
       )}
@@ -40,7 +42,7 @@ export function PriorityQueueVisual({ value }: Props) {
               key={i}
               className="flex items-center justify-center min-w-[28px] h-6 px-1 border border-orange-800 bg-orange-900/20 text-orange-400 text-[10px] font-mono rounded-sm"
             >
-              {String(item)}
+              {renderCellValue(item)}
             </div>
           ))}
         </div>

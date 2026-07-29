@@ -116,7 +116,10 @@ class ScopeTracker:
         visible = list(visible)
 
         for stmt in cursor.get_children():
-            if not self._is_user_code(stmt):
+            # Process all DECL_STMT regardless of file origin (template types
+            # like vector<int> may report cursor location in STL headers).
+            # For non-declaration statements, filter by user code as usual.
+            if stmt.kind != clang.CursorKind.DECL_STMT and not self._is_user_code(stmt):
                 continue
 
             # Record what's visible at this line

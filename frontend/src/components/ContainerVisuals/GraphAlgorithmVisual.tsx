@@ -15,6 +15,8 @@
 import { useMemo } from "react";
 import {
   Background,
+  Handle,
+  Position,
   ReactFlow,
   type Edge,
   type Node,
@@ -171,6 +173,8 @@ function GraphNode({ data }: NodeProps) {
         borderColor: (data as Record<string, unknown>).color as string,
       }}
     >
+      <Handle type="target" position={Position.Left} id="a" className="!opacity-0" />
+      <Handle type="target" position={Position.Top} id="b" className="!opacity-0" />
       <span className="text-[11px] font-mono font-bold text-white">
         {data.label as string}
       </span>
@@ -179,6 +183,8 @@ function GraphNode({ data }: NodeProps) {
           {(data as Record<string, unknown>).annotation as string}
         </span>
       ) : null}
+      <Handle type="source" position={Position.Right} id="a" className="!opacity-0" />
+      <Handle type="source" position={Position.Bottom} id="b" className="!opacity-0" />
     </div>
   );
 }
@@ -228,8 +234,10 @@ export function GraphAlgorithmVisual({ value, name }: Props) {
       };
     });
 
-    // Build edges – deduplicate for undirected graphs
-    const seen = new Set<string>();
+    // Build edges — no dedup: if adj[u] has v, draw u→v. If adj[v] has u, draw v→u.
+    // For parallel edges (both directions between same nodes), offset handles so they
+    // curve differently and are both visible.
+    const pairCount = new Map<string, number>();
     const flowEdges: Edge[] = [];
 
     for (let u = 0; u < n; u++) {
@@ -237,18 +245,23 @@ export function GraphAlgorithmVisual({ value, name }: Props) {
       if (!neighbors) continue;
       for (const v of neighbors) {
         if (typeof v !== "number" || v < 0 || v >= n) continue;
+
         const key = `${Math.min(u, v)}-${Math.max(u, v)}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
+        const count = (pairCount.get(key) ?? 0) + 1;
+        pairCount.set(key, count);
 
         const kind = classifyEdge(u, v, parent, times);
+        const isReverse = count > 1 && key === `${u}-${v}`;
 
         flowEdges.push({
           id: `e${u}-${v}`,
           source: `v${u}`,
           target: `v${v}`,
           type: "smoothstep",
+          sourceHandle: isReverse ? "b" : "a",
+          targetHandle: isReverse ? "a" : "b",
           style: edgeStyle(kind),
+          markerEnd: `url(#arrow-${kind})`,
           label: kind !== "tree" ? kind : undefined,
           labelStyle: { fontSize: 9, fill: "#a1a1aa" },
           labelBgStyle: { fill: "#18181b", fontSize: 9 },
@@ -294,6 +307,20 @@ export function GraphAlgorithmVisual({ value, name }: Props) {
             nodesConnectable={false}
             elementsSelectable={false}
           >
+            <defs>
+              <marker id="arrow-tree" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+                <path d="M0,0 L0,8 L8,4 Z" fill="#a1a1aa" />
+              </marker>
+              <marker id="arrow-back" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+                <path d="M0,0 L0,8 L8,4 Z" fill="#ef4444" />
+              </marker>
+              <marker id="arrow-cross" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+                <path d="M0,0 L0,8 L8,4 Z" fill="#71717a" />
+              </marker>
+              <marker id="arrow-forward" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+                <path d="M0,0 L0,8 L8,4 Z" fill="#a1a1aa" />
+              </marker>
+            </defs>
             <Background color="#27272a" gap={16} />
           </ReactFlow>
         </div>

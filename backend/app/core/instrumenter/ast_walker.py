@@ -349,7 +349,10 @@ class ASTWalker:
         func_depth: int,
     ) -> None:
         """Walk a statement node inside a function body."""
-        if not self._is_user_code(cursor):
+        # Allow all DECL_STMT even if the cursor location is in a system header,
+        # which commonly happens with template variable declarations like
+        # vector<int> arr(m) due to libclang resolving the template location.
+        if cursor.kind != clang.CursorKind.DECL_STMT and not self._is_user_code(cursor):
             return
 
         kind = cursor.kind
@@ -497,7 +500,7 @@ class ASTWalker:
 
             return
 
-        # ── Loop statements → LOOP_ITER ───────────────────────────────────────
+        # ── Loop statements → LOOP_ITER + STATE at loop line ─────────────────
         if kind in (
             clang.CursorKind.FOR_STMT,
             clang.CursorKind.WHILE_STMT,
@@ -506,6 +509,15 @@ class ASTWalker:
             counter_var = f"__loop_iter_{self._loop_counter_seq}"
             self._loop_counter_seq += 1
             loop_counters.setdefault(func_name, []).append(counter_var)
+
+            # Inject STATE at the loop statement line so variables are visible
+            points.append(InjectionPoint(
+                kind=InjectKind.STATE,
+                line=cursor.location.line,
+                col=cursor.location.column,
+                func_name=func_name,
+                depth=func_depth,
+            ))
 
             # Find the loop body (last child for while/for, first for do)
             children = list(cursor.get_children())
@@ -576,9 +588,35 @@ class ASTWalker:
             ))
             return
 
-        # Default: recurse
-        for child in cursor.get_children():
-            self._walk_stmt(child, points, loop_counters, func_name, func_depth)
+        # ── CXX operator call / member expr (may not be in libclang's CursorKind) ──
+        # These cover adj[x].push_back(y), cin >> x, cout << x, etc.
+        _cxx_kinds = [
+            getattr(clang.CursorKind, k, None)
+            for k in ("CXX_OPERATOR_CALL_EXPR", "CXX_MEMBER_CALL_EXPR",
+                      "OVERLOADED_CALL_EXPR", "CXX_BOOL_LITERAL_EXPR",
+                      "MEMBER_REF_EXPR")
+        ]
+        for _ck in _cxx_kinds:
+            if _ck is not None and kind == _ck:
+                points.append(InjectionPoint(
+                    kind=InjectKind.STATE,
+                    line=cursor.extent.end.line,
+                    col=cursor.extent.end.column,
+                    func_name=func_name,
+                    depth=func_depth,
+                ))
+                return
+
+        # Default: inject STATE for any unhandled statement type, then stop
+        # (don't recurse into children to avoid duplicate STATE events).
+        points.append(InjectionPoint(
+            kind=InjectKind.STATE,
+            line=cursor.location.line,
+            col=cursor.location.column,
+            func_name=func_name,
+            depth=func_depth,
+        ))
+        return
 
 
 def walk(source_path: str, extra_args: list[str] | None = None) -> WalkResult:

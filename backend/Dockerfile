@@ -8,9 +8,10 @@
 
 FROM python:3.11-slim AS builder
 
-# Install curl for healthchecks and uv for package management
+# Install curl for healthchecks, uv for package management, and C++ headers for libclang
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
+    g++ \
     && rm -rf /var/lib/apt/lists/* \
     && pip install --no-cache-dir uv
 
@@ -29,6 +30,7 @@ FROM python:3.11-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
+    g++ \
     && rm -rf /var/lib/apt/lists/* \
     && pip install --no-cache-dir uv
 

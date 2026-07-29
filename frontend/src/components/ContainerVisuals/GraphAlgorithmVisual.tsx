@@ -16,6 +16,7 @@ import { useMemo } from "react";
 import {
   Background,
   Handle,
+  MarkerType,
   Position,
   ReactFlow,
   type Edge,
@@ -28,6 +29,33 @@ import "@xyflow/react/dist/style.css";
 
 const NODE_R = 20;
 const NODE_D = NODE_R * 2;
+
+/** Handle positions around the node — 8 points at 45° intervals */
+const HANDLE_POSITIONS = [
+  { id: "h0",  x: 0,      y: -NODE_R }, // top
+  { id: "h1",  x: NODE_R * 0.707, y: -NODE_R * 0.707 }, // top-right
+  { id: "h2",  x: NODE_R,  y: 0 },      // right
+  { id: "h3",  x: NODE_R * 0.707, y: NODE_R * 0.707 },  // bottom-right
+  { id: "h4",  x: 0,      y: NODE_R },  // bottom
+  { id: "h5",  x: -NODE_R * 0.707, y: NODE_R * 0.707 }, // bottom-left
+  { id: "h6",  x: -NODE_R, y: 0 },      // left
+  { id: "h7",  x: -NODE_R * 0.707, y: -NODE_R * 0.707 }, // top-left
+];
+
+/** Pick the handle closest to the direction from source to target. */
+function pickHandle(
+  srcIdx: number,
+  tgtIdx: number,
+  positions: { x: number; y: number }[],
+): string {
+  const dx = positions[tgtIdx].x - positions[srcIdx].x;
+  const dy = positions[tgtIdx].y - positions[srcIdx].y;
+  const angle = Math.atan2(dy, dx); // -π .. π
+  // Map angle to the nearest of 8 directions
+  const step = (2 * Math.PI) / 8;
+  const idx = Math.round((angle + Math.PI) / step) % 8;
+  return HANDLE_POSITIONS[idx].id;
+}
 
 type NodeState = 0 | 1 | 2 | 3;
 
@@ -173,18 +201,33 @@ function GraphNode({ data }: NodeProps) {
         borderColor: (data as Record<string, unknown>).color as string,
       }}
     >
-      <Handle type="target" position={Position.Left} id="a" className="!opacity-0" />
-      <Handle type="target" position={Position.Top} id="b" className="!opacity-0" />
-      <span className="text-[11px] font-mono font-bold text-white">
+      {/* 8 directional handles — invisible, used for edge routing */}
+      {HANDLE_POSITIONS.map((hp) => (
+        <Handle
+          key={hp.id}
+          type="source"
+          position={Position.Top}
+          id={hp.id}
+          style={{ top: hp.y + NODE_R, left: hp.x + NODE_R, opacity: 0, pointerEvents: "none" }}
+        />
+      ))}
+      {HANDLE_POSITIONS.map((hp) => (
+        <Handle
+          key={`t-${hp.id}`}
+          type="target"
+          position={Position.Top}
+          id={hp.id}
+          style={{ top: hp.y + NODE_R, left: hp.x + NODE_R, opacity: 0, pointerEvents: "none" }}
+        />
+      ))}
+      <span className="text-[11px] font-mono font-bold text-white pointer-events-none">
         {data.label as string}
       </span>
       {(data as Record<string, unknown>).annotation ? (
-        <span className="text-[8px] font-mono text-white/70">
+        <span className="text-[8px] font-mono text-white/70 pointer-events-none">
           {(data as Record<string, unknown>).annotation as string}
         </span>
       ) : null}
-      <Handle type="source" position={Position.Right} id="a" className="!opacity-0" />
-      <Handle type="source" position={Position.Bottom} id="b" className="!opacity-0" />
     </div>
   );
 }
@@ -234,10 +277,7 @@ export function GraphAlgorithmVisual({ value, name }: Props) {
       };
     });
 
-    // Build edges — no dedup: if adj[u] has v, draw u→v. If adj[v] has u, draw v→u.
-    // For parallel edges (both directions between same nodes), offset handles so they
-    // curve differently and are both visible.
-    const pairCount = new Map<string, number>();
+    // Build edges — no dedup. Each edge routes through a handle pointing at its target.
     const flowEdges: Edge[] = [];
 
     for (let u = 0; u < n; u++) {
@@ -246,26 +286,24 @@ export function GraphAlgorithmVisual({ value, name }: Props) {
       for (const v of neighbors) {
         if (typeof v !== "number" || v < 0 || v >= n) continue;
 
-        const key = `${Math.min(u, v)}-${Math.max(u, v)}`;
-        const count = (pairCount.get(key) ?? 0) + 1;
-        pairCount.set(key, count);
-
         const kind = classifyEdge(u, v, parent, times);
-        const isReverse = count > 1 && key === `${u}-${v}`;
+        const arrow: { markerEnd: { type: MarkerType; color: string; width: number; height: number } } = {
+          markerEnd: { type: MarkerType.ArrowClosed, color: edgeStyle(kind).stroke ?? "#a1a1aa", width: 16, height: 16 },
+        };
 
         flowEdges.push({
           id: `e${u}-${v}`,
           source: `v${u}`,
           target: `v${v}`,
-          type: "smoothstep",
-          sourceHandle: isReverse ? "b" : "a",
-          targetHandle: isReverse ? "a" : "b",
+          type: "default",
+          sourceHandle: pickHandle(u, v, positions),
+          targetHandle: pickHandle(v, u, positions),
           style: edgeStyle(kind),
-          markerEnd: `url(#arrow-${kind})`,
+          ...arrow,
           label: kind !== "tree" ? kind : undefined,
           labelStyle: { fontSize: 9, fill: "#a1a1aa" },
           labelBgStyle: { fill: "#18181b", fontSize: 9 },
-          animated: kind === "tree",
+          animated: false,
         });
       }
     }
@@ -307,20 +345,6 @@ export function GraphAlgorithmVisual({ value, name }: Props) {
             nodesConnectable={false}
             elementsSelectable={false}
           >
-            <defs>
-              <marker id="arrow-tree" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
-                <path d="M0,0 L0,8 L8,4 Z" fill="#a1a1aa" />
-              </marker>
-              <marker id="arrow-back" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
-                <path d="M0,0 L0,8 L8,4 Z" fill="#ef4444" />
-              </marker>
-              <marker id="arrow-cross" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
-                <path d="M0,0 L0,8 L8,4 Z" fill="#71717a" />
-              </marker>
-              <marker id="arrow-forward" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
-                <path d="M0,0 L0,8 L8,4 Z" fill="#a1a1aa" />
-              </marker>
-            </defs>
             <Background color="#27272a" gap={16} />
           </ReactFlow>
         </div>

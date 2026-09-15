@@ -63,10 +63,10 @@ def _trace_exit(point: InjectionPoint) -> str:
 
 
 def _trace_state(point: InjectionPoint, scope: FunctionScope | None) -> str:
-    # Always include ALL variables in scope — merge point-specific vars with scope
+    # Post-declaration snapshot: a STATE after `int x = 5;` sees x.
     var_names = list(point.var_names)
     if scope:
-        visible = scope.vars_at_line.get(point.line, [])
+        visible = scope.vars_at_line_post.get(point.line, [])
         for v in visible:
             if v.name not in var_names:
                 var_names.append(v.name)

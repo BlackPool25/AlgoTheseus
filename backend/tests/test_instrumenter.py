@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from app.core.instrumenter.ast_walker import InjectKind, walk
+from app.core.instrumenter.injector import instrument
 from app.core.instrumenter.scope_tracker import build_scope_map
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -135,3 +136,30 @@ class TestScopeTracker:
                 for v in vars_list:
                     assert not v.name.startswith("__"), \
                         f"Internal variable leaked into scope: {v.name}"
+
+    def test_declared_var_included_in_same_line_state(self, tmp_path):
+        """Post-decl snapshot: `int x = 5;` STATE carries x (pre does not)."""
+        src = tmp_path / "decl.cpp"
+        src.write_text("int foo() {\n    int x = 5;\n    return x;\n}\n")
+        scopes = build_scope_map(str(src))
+        post = scopes["foo"].vars_at_line_post[2]
+        assert {v.name for v in post} == {"x"}
+        pre = scopes["foo"].vars_at_line_pre[2]
+        assert "x" not in {v.name for v in pre}
+        out = instrument(src.read_text())
+        state_lines = [ln for ln in out.splitlines() if "__TRACE_STATE(2," in ln]
+        assert len(state_lines) == 1
+        assert '"x", x' in state_lines[0]
+
+    def test_params_plus_declared_vars(self, tmp_path):
+        """Post set on a decl line carries params + the newly declared var."""
+        src = tmp_path / "params.cpp"
+        src.write_text("int add(int a, int b) {\n    int s = a + b;\n    return s;\n}\n")
+        scopes = build_scope_map(str(src))
+        post = scopes["add"].vars_at_line_post[2]
+        assert {v.name for v in post} == {"a", "b", "s"}
+        out = instrument(src.read_text())
+        state_lines = [ln for ln in out.splitlines() if "__TRACE_STATE(2," in ln]
+        assert len(state_lines) == 1
+        for name in ("a", "b", "s"):
+            assert f'"{name}", {name}' in state_lines[0]

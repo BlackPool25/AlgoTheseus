@@ -56,9 +56,12 @@ export default function App() {
     traceStore.reset();
     cfgStore.reset();
 
+    let cfgReceived = false;
+
     const callbacks: StreamCallbacks = {
       onEvent: (event) => traceStore.appendEvent(event),
       onCFG: (cfg) => {
+        cfgReceived = true;
         cfgStore.loadCFG(cfg.cfg_nodes, cfg.cfg_edges);
         traceStore.streamComplete({ total_steps: cfg.total_steps });
         uiStore.setExecuteResult(
@@ -74,6 +77,17 @@ export default function App() {
           uiStore.setExecuteResult("", err.compile_error, null);
         } else {
           uiStore.setError(err.runtime_error ?? "Unknown streaming error");
+        }
+      },
+      // The stream reader resolves cleanly even when the connection drops
+      // before the final cfg line. Without this, status stays "executing"
+      // forever (no banner, Run stuck on "Running…").
+      onDone: () => {
+        if (!cfgReceived && useUIStore.getState().status === "executing") {
+          traceStore.streamError();
+          uiStore.setError(
+            "Stream ended unexpectedly before the trace completed — try running again.",
+          );
         }
       },
     };

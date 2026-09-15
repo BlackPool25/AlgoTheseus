@@ -236,6 +236,64 @@ class TestExecuteEndpoint:
         assert response.status_code == 500
         assert "Sandbox error" in response.text
 
+    @patch("app.api.routes.execute.run_in_sandbox")
+    @patch("app.api.routes.execute.instrument")
+    @patch("app.api.routes.execute.parse_stdin")
+    async def test_execute_response_carries_phase2_fields(
+        self, mock_parse_stdin, mock_instrument, mock_run_in_sandbox,
+    ):
+        """T10: API response trace events carry the phase-2 fields.
+
+        Wire aliases on the way in ("o" delta stdout, "g", "sd", "pl",
+        "op", "rl", "h"); python names on the way out (model_dump
+        by_alias=False, same contract the NDJSON stream uses).
+        """
+        mock_parse_stdin.return_value = ("3", "no changes")
+        mock_instrument.return_value = "#include \"tracer.h\"\nint main() {}"
+        mock_run_in_sandbox.return_value = RunResult(
+            stdout="1\n2\n",
+            stderr_clean="",
+            trace_raw=[
+                '{"t":"enter","l":1,"f":"main","d":1,"p":{},"o":""}',
+                '{"t":"state","l":2,"f":"main","d":1,"v":{"limit":3},"o":"1\\n","g":{"g":0},"sd":"assign limit = 3","pl":1}',
+                '{"t":"branch","l":3,"f":"main","d":1,"c":"x > 0","tk":true,"op":["x=2"],"sd":"branch taken: x > 0","o":""}',
+                '{"t":"state","l":3,"f":"main","d":1,"v":{"limit":3},"o":"2\\n","pl":2,"h":{"1":{"type":"Node","val":1}}}',
+                '{"t":"exit","l":4,"f":"main","d":1,"r":0,"sd":"return 0","rl":2,"o":""}',
+            ],
+            exit_code=0,
+            timed_out=False,
+            truncated=False,
+        )
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as ac:
+            response = await ac.post("/execute", json={
+                "code": SAMPLE_CODE,
+                "raw_stdin": "3",
+            })
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["total_steps"] == 5
+        assert len(body["trace"]) == 5
+        by_type = {e["t"]: e for e in body["trace"]}
+
+        state = [e for e in body["trace"] if e["t"] == "state"]
+        assert state[0]["o"] == "1\n"
+        assert state[0]["g"] == {"g": 0}
+        assert state[0]["sd"] == "assign limit = 3"
+        assert state[0]["pl"] == 1
+        assert state[1]["o"] == "1\n2\n"
+        assert state[1]["h"] == {"1": {"type": "Node", "val": 1}}
+
+        assert by_type["branch"]["op"] == ["x=2"]
+        assert "branch taken" in by_type["branch"]["sd"]
+
+        assert by_type["exit"]["rl"] == 2
+        assert by_type["exit"]["sd"] == "return 0"
+        assert by_type["enter"]["sd"] == "call main()"
+
 
 # ── /upload-testcases endpoint ────────────────────────────────────────────────
 

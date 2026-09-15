@@ -35,7 +35,9 @@ export interface MockStateEvent {
   step_desc?: string | null;
   globals?: Record<string, unknown> | null;
   stdout?: string | null;
+  stdout_truncated?: boolean;
   prev_line?: number | null;
+  heap?: Record<string, unknown> | null;
 }
 
 export interface MockBranchEvent {
@@ -109,23 +111,26 @@ function buildNDJSON(
     cfg_nodes?: unknown[];
     cfg_edges?: unknown[];
   },
+  omitCfg = false,
 ): string {
   const lines: string[] = [];
   for (const ev of events) {
     lines.push(JSON.stringify({ type: "event", data: ev }));
   }
-  lines.push(
-    JSON.stringify({
-      type: "cfg" as const,
-      stdout: meta.stdout ?? "",
-      runtime_error: meta.runtime_error ?? null,
-      timed_out: meta.timed_out ?? false,
-      truncated: meta.truncated ?? false,
-      cfg_nodes: meta.cfg_nodes ?? BASE_CFG.cfg_nodes,
-      cfg_edges: meta.cfg_edges ?? BASE_CFG.cfg_edges,
-      total_steps: meta.total_steps ?? events.length,
-    }),
-  );
+  if (!omitCfg) {
+    lines.push(
+      JSON.stringify({
+        type: "cfg" as const,
+        stdout: meta.stdout ?? "",
+        runtime_error: meta.runtime_error ?? null,
+        timed_out: meta.timed_out ?? false,
+        truncated: meta.truncated ?? false,
+        cfg_nodes: meta.cfg_nodes ?? BASE_CFG.cfg_nodes,
+        cfg_edges: meta.cfg_edges ?? BASE_CFG.cfg_edges,
+        total_steps: meta.total_steps ?? events.length,
+      }),
+    );
+  }
   // Trailing newline is critical — the stream reader's split() + pop()
   // discards the last line otherwise, losing the cfg chunk.
   return lines.join("\n") + "\n";
@@ -250,4 +255,73 @@ export function createFrameStdoutNDJSON(): string {
     { type: "exit", line: 6, func: "main", depth: 1, return_val: 0, step_desc: "return 0" },
   ];
   return buildNDJSON(events, { stdout: "a\nb\nc\n", total_steps: events.length });
+}
+
+/**
+ * NDJSON for T10 end-to-end wiring: a print-loop whose STATE events carry
+ * IDENTICAL vars but GROWING cumulative stdout (plus step_desc/globals on
+ * some steps to prove field passthrough). Compression must NOT merge these.
+ */
+export function createPrintLoopNDJSON(): string {
+  const events: MockTraceEvent[] = [
+    { type: "enter", line: 1, func: "main", depth: 1, params: {}, step_desc: "call main()" },
+    {
+      type: "state", line: 2, func: "main", depth: 1,
+      vars: { limit: 3 }, stdout: "1\n", prev_line: 1,
+      step_desc: "assign limit = 3", globals: { g: 0 },
+    },
+    {
+      type: "state", line: 3, func: "main", depth: 1,
+      vars: { limit: 3 }, stdout: "1\n2\n", prev_line: 2,
+      step_desc: "state at line 3",
+    },
+    {
+      type: "state", line: 3, func: "main", depth: 1,
+      vars: { limit: 3 }, stdout: "1\n2\n3\n", prev_line: 3,
+      step_desc: "state at line 3",
+    },
+    { type: "exit", line: 4, func: "main", depth: 1, return_val: 0, step_desc: "return 0" },
+  ];
+  return buildNDJSON(events, { stdout: "1\n2\n3\n", total_steps: events.length });
+}
+
+/**
+ * NDJSON for T10: IDENTICAL vars AND identical stdout, but DIFFERING heap
+ * snapshots across steps. Compression must NOT merge these either.
+ */
+export function createHeapDriftNDJSON(): string {
+  const events: MockTraceEvent[] = [
+    { type: "enter", line: 1, func: "main", depth: 1, params: {}, step_desc: "call main()" },
+    {
+      type: "state", line: 2, func: "main", depth: 1,
+      vars: { head: { $id: 1 } }, stdout: "",
+      heap: { "1": { type: "Node", val: 1 } },
+      step_desc: "assign head",
+    },
+    {
+      type: "state", line: 2, func: "main", depth: 1,
+      vars: { head: { $id: 1 } }, stdout: "",
+      heap: { "1": { type: "Node", val: 2 } },
+      step_desc: "assign head",
+    },
+    { type: "exit", line: 3, func: "main", depth: 1, return_val: 0, step_desc: "return 0" },
+  ];
+  return buildNDJSON(events, { stdout: "", total_steps: events.length });
+}
+
+/**
+ * NDJSON for T10 failure path: trace events stream, then the connection
+ * drops BEFORE the final cfg line. The app must land in an error state
+ * with a visible banner — never hang on "Running…".
+ */
+export function createDroppedStreamNDJSON(): string {
+  const events: MockTraceEvent[] = [
+    { type: "enter", line: 1, func: "main", depth: 1, params: {}, step_desc: "call main()" },
+    {
+      type: "state", line: 2, func: "main", depth: 1,
+      vars: { x: 1 }, stdout: "partial\n", prev_line: 1,
+      step_desc: "assign x = 1",
+    },
+  ];
+  return buildNDJSON(events, { stdout: "partial\n" }, true);
 }

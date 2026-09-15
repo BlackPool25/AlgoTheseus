@@ -11,7 +11,7 @@ import { VISUAL_REGISTRY } from "../ContainerVisuals/registry";
 import { ErrorBoundary } from "../ContainerVisuals/ErrorBoundary";
 import type { HeapDiffShape } from "../ContainerVisuals/HeapPanel";
 import { diffIndices, diffKeys, diffMembers } from "../ContainerVisuals/flash";
-import { trieNodeIds } from "../ContainerVisuals/TrieVisual";
+import { trieNodeIds } from "../ContainerVisuals/trieNormalize";
 import { renderCellValue } from "../../utils/format";
 
 

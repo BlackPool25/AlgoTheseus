@@ -18,7 +18,6 @@ from httpx import ASGITransport, AsyncClient
 from app.core.executor.docker_runner import RunResult
 from app.main import app
 
-
 VALID_BODY = {"code": "int main(){return 0;}", "raw_stdin": ""}
 
 OK_RUN = RunResult(

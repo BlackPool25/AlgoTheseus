@@ -16,7 +16,7 @@ to allow both alias and field name access.
 from __future__ import annotations
 
 from enum import Enum
-from typing import Annotated, Any, Literal, Union
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -86,7 +86,7 @@ class LoopIterEvent(_Base):
 
 # Discriminated union — use type: Annotated[..., Field(discriminator="type")]
 TraceEvent = Annotated[
-    Union[FuncEnterEvent, FuncExitEvent, StateEvent, BranchEvent, LoopIterEvent],
+    FuncEnterEvent | FuncExitEvent | StateEvent | BranchEvent | LoopIterEvent,
     Field(discriminator="type"),
 ]
 

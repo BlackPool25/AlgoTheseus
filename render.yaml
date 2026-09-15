@@ -3,7 +3,6 @@
 # Verified against current Render blueprint spec: services/-/type/web,
 # runtime/docker, plan/free, healthCheckPath, dockerfilePath/dockerContext,
 # envVars key/value. `sync: false` prompts for the value in the dashboard.
-# No secrets committed — ANTHROPIC_API_KEY (if ever needed) stays dashboard-set.
 
 services:
   - type: web

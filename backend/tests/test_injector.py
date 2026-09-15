@@ -9,8 +9,6 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-import pytest
-
 from app.core.instrumenter.injector import instrument
 
 FIXTURES = Path(__file__).parent / "fixtures"

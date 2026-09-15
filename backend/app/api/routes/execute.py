@@ -38,7 +38,10 @@ Batch endpoint:
   queue on the semaphore — never rejected.
 """
 
-from __future__ import annotations
+# NOTE: no `from __future__ import annotations` here on purpose. slowapi's
+# @limiter.limit wraps endpoints via functools.wraps, so FastAPI resolves
+# string annotations in slowapi's namespace — ExecuteRequest would vanish
+# and the body would parse as a query param (422). Real annotations avoid it.
 
 import asyncio
 import json
@@ -48,7 +51,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import AsyncGenerator
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse, StreamingResponse
 
@@ -61,6 +64,7 @@ from app.core.executor.cache import (
 from app.core.executor.docker_runner import RunResult, run_in_sandbox
 from app.core.executor.sandbox_config import MAX_TRACE_LINES
 from app.core.instrumenter.injector import instrument
+from app.core.rate_limit import EXECUTE_BATCH_LIMIT, EXECUTE_LIMIT, limiter
 from app.core.stdin.parser import parse_stdin
 from app.core.trace.cfg_builder import build as build_cfg
 from app.core.trace.parser import parse as parse_trace
@@ -315,8 +319,15 @@ async def _stream_resolved(resolved: _Resolved) -> AsyncGenerator[bytes, None]:
 # ── Single-execute endpoint ────────────────────────────────────────────────────
 
 
+# Route decorator stays ABOVE the limit decorator (slowapi requirement).
+# The limit runs inside the endpoint call, i.e. AFTER body validation —
+# a 422 consumes no quota. /execute-batch counts per-request here; todo 22's
+# per-case sandbox semaphore still caps fan-out inside the handler.
 @router.post("", response_model=ExecuteResponse)
-async def execute(req: ExecuteRequest) -> ExecuteResponse | StreamingResponse | JSONResponse:
+@limiter.limit(EXECUTE_LIMIT)
+async def execute(
+    request: Request, response: Response, req: ExecuteRequest
+) -> ExecuteResponse | StreamingResponse | JSONResponse:
     """Instrument, run, and trace a C++ program.
 
     Steps:
@@ -437,7 +448,10 @@ def _batch_fanout_limit() -> int:
 
 
 @batch_router.post("", response_model=list[ExecuteBatchResponseItem])
-async def execute_batch(req: ExecuteBatchRequest) -> list[ExecuteBatchResponseItem]:
+@limiter.limit(EXECUTE_BATCH_LIMIT)
+async def execute_batch(
+    request: Request, response: Response, req: ExecuteBatchRequest
+) -> list[ExecuteBatchResponseItem]:
     """Run code against multiple test cases in parallel.
 
     Steps for each test case:

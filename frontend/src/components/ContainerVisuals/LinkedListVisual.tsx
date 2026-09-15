@@ -56,10 +56,10 @@ function ArrowDefs() {
         <path d="M6,0 L6,5 L0,2.5 Z" fill="#52525b" />
       </marker>
       <marker id="ll-cycle-arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
-        <path d="M0,0 L0,6 L8,3 Z" fill="#ef4444" />
+        <path d="M0,0 L0,6 L8,3 Z" style={{ fill: "var(--viz-exception, #ef4444)" }} />
       </marker>
       <marker id="ll-highlight-arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
-        <path d="M0,0 L0,6 L8,3 Z" fill="#f59e0b" />
+        <path d="M0,0 L0,6 L8,3 Z" style={{ fill: "var(--viz-flash, #f59e0b)" }} />
       </marker>
     </defs>
   );
@@ -307,14 +307,14 @@ export function LinkedListVisual({ value, name, currentAddr }: Props) {
                 y1={y + NODE_H / 2}
                 x2={x + NODE_W + ARROW_LEN}
                 y2={y + NODE_H / 2}
-                stroke={
-                  node.cycleTargetId
-                    ? "#ef4444"
-                    : isHighlighted
-                      ? "#f59e0b"
-                      : "#52525b"
-                }
                 strokeWidth={isHighlighted || node.cycleTargetId ? 2 : 1.5}
+                style={{
+                  stroke: node.cycleTargetId
+                    ? "var(--viz-exception, #ef4444)"
+                    : isHighlighted
+                      ? "var(--viz-flash, #f59e0b)"
+                      : "#52525b",
+                }}
                 markerEnd={
                   node.cycleTargetId
                     ? "url(#ll-cycle-arrow)"
@@ -341,9 +341,9 @@ export function LinkedListVisual({ value, name, currentAddr }: Props) {
                     key={`cr-${node.id}`}
                     d={`M ${tx} ${ty} Q ${cx} ${qy} ${x + NODE_W / 2} ${y + NODE_H + 8}`}
                     fill="none"
-                    stroke="#ef4444"
                     strokeWidth={1.5}
                     strokeDasharray="4 3"
+                    style={{ stroke: "var(--viz-exception, #ef4444)" }}
                     markerEnd="url(#ll-cycle-arrow)"
                   />
                 );
@@ -401,8 +401,8 @@ export function LinkedListVisual({ value, name, currentAddr }: Props) {
                       cx={x + NODE_W - 10}
                       cy={y - 6}
                       r={10}
-                      fill="#ef4444"
                       className="drop-shadow-sm"
+                      style={{ fill: "var(--viz-exception, #ef4444)" }}
                     />
                     <text
                       x={x + NODE_W - 10}

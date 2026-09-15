@@ -1,23 +1,134 @@
 @import 'tailwindcss';
 
+/* Theme tokens — frozen contract docs/theme-tokens.md (todo 24).
+   :root carries the zinc-dark (§4.1) defaults byte-identical to the
+   previous values; each [data-theme] block below overrides all nine. */
+@theme inline {
+  --color-viz-body: var(--viz-body-bg);
+  --color-viz-ink: var(--viz-body-text);
+  --color-viz-panel: var(--viz-panel-bg);
+  --color-viz-line: var(--viz-panel-border);
+  --color-viz-accent: var(--viz-accent);
+  --color-viz-flash: var(--viz-flash);
+  --color-viz-alias: var(--viz-alias-edge);
+  --color-viz-exception: var(--viz-exception);
+}
+
 :root {
   font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   line-height: 1.5;
   font-weight: 400;
 
-  /* Two-arrow gutter pair (docs/theme-tokens.md §4.1 zinc-dark defaults). */
+  /* zinc-dark defaults (docs/theme-tokens.md §4.1). */
+  --viz-body-bg: #18181b;
+  --viz-body-text: #fafafa;
+  --viz-panel-bg: #27272a;
+  --viz-panel-border: #3f3f46;
+  --viz-accent: #f59e0b;
+  /* Two-arrow gutter pair. */
   --viz-gutter-prev: #c9e6ca;
   --viz-gutter-next: #e93f34;
   --viz-exception: #ef4444;
-  /* Per-object mutation flash + alias connectors (docs/theme-tokens.md §4.1). */
+  /* Per-object mutation flash + alias connectors. */
   --viz-flash: #f59e0b;
   --viz-alias-edge: #a1a1aa;
 }
 
+[data-theme="light"] {
+  --viz-body-bg: #fdf6e3;
+  --viz-body-text: #586e75;
+  --viz-panel-bg: #eee8d5;
+  --viz-panel-border: #93a1a1;
+  --viz-accent: #268bd2;
+  --viz-gutter-prev: #c9e6ca;
+  --viz-gutter-next: #dc322f;
+  --viz-exception: #dc322f;
+  --viz-flash: #b58900;
+  --viz-alias-edge: #657b83;
+}
+
+[data-theme="high-contrast"] {
+  --viz-body-bg: #000000;
+  --viz-body-text: #ffffff;
+  --viz-panel-bg: #0a0a0a;
+  --viz-panel-border: #ffffff;
+  --viz-accent: #ffff00;
+  --viz-gutter-prev: #00ff00;
+  --viz-gutter-next: #ff0000;
+  --viz-exception: #ff0000;
+  --viz-flash: #ffff00;
+  --viz-alias-edge: #00ffff;
+}
+
+[data-theme="colorblind-safe"] {
+  --viz-body-bg: #ffffff;
+  --viz-body-text: #111111;
+  --viz-panel-bg: #f0f0f0;
+  --viz-panel-border: #767676;
+  --viz-accent: #0072B2;
+  --viz-gutter-prev: #009E73;
+  --viz-gutter-next: #D55E00;
+  --viz-exception: #D55E00;
+  --viz-flash: #E69F00;
+  --viz-alias-edge: #0072B2;
+}
+
+[data-theme="papyrus"] {
+  --viz-body-bg: #f5edd8;
+  --viz-body-text: #3e2f1c;
+  --viz-panel-bg: #ece0c3;
+  --viz-panel-border: #b8a67a;
+  --viz-accent: #8a5a00;
+  --viz-gutter-prev: #d9e8c9;
+  --viz-gutter-next: #c0392b;
+  --viz-exception: #a93226;
+  --viz-flash: #d4a017;
+  --viz-alias-edge: #7a6a4f;
+}
+
+[data-theme="catppuccin-mocha"] {
+  --viz-body-bg: #1e1e2e;
+  --viz-body-text: #cdd6f4;
+  --viz-panel-bg: #313244;
+  --viz-panel-border: #585b70;
+  --viz-accent: #cba6f7;
+  --viz-gutter-prev: #a6e3a1;
+  --viz-gutter-next: #f38ba8;
+  --viz-exception: #f38ba8;
+  --viz-flash: #f9e2af;
+  --viz-alias-edge: #89b4fa;
+}
+
+[data-theme="gruvbox-dark"] {
+  --viz-body-bg: #282828;
+  --viz-body-text: #ebdbb2;
+  --viz-panel-bg: #3c3836;
+  --viz-panel-border: #504945;
+  --viz-accent: #fe8019;
+  --viz-gutter-prev: #b8bb26;
+  --viz-gutter-next: #fb4934;
+  --viz-exception: #fb4934;
+  --viz-flash: #fabd2f;
+  --viz-alias-edge: #83a598;
+}
+
+[data-theme="nord"] {
+  --viz-body-bg: #2e3440;
+  --viz-body-text: #eceff4;
+  --viz-panel-bg: #3b4252;
+  --viz-panel-border: #4c566a;
+  --viz-accent: #88c0d0;
+  --viz-gutter-prev: #a3be8c;
+  --viz-gutter-next: #bf616a;
+  --viz-exception: #bf616a;
+  --viz-flash: #ebcb8b;
+  --viz-alias-edge: #81a1c1;
+}
+
 body {
   margin: 0;
-  background: #1e1e1e;
-  color: #e5e7eb;
+  background: var(--viz-body-bg);
+  color: var(--viz-body-text);
   min-height: 100vh;
 }
 
@@ -31,7 +142,7 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #3f3f46;
+  background: var(--viz-panel-border, #3f3f46);
   border-radius: 4px;
 }
 
@@ -41,11 +152,11 @@ body {
 
 .current-line-highlight {
   background: rgba(245, 158, 11, 0.15) !important;
-  border-left: 3px solid #f59e0b !important;
+  border-left: 3px solid var(--viz-flash, #f59e0b) !important;
 }
 
 .current-line-glyph {
-  background: #f59e0b !important;
+  background: var(--viz-flash, #f59e0b) !important;
 }
 
 /* Two-arrow gutter (T9 phase-2): executed line vs next-to-execute line. */
@@ -82,7 +193,7 @@ body {
   padding: 1px 6px;
   border-radius: 4px;
   background: rgba(24, 24, 27, 0.9);
-  border: 1px solid #3f3f46;
+  border: 1px solid var(--viz-panel-border, #3f3f46);
 }
 
 .gutter-prev-chip {

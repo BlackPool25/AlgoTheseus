@@ -256,14 +256,14 @@ function HeapNodeSVG({
   appearing: boolean;
   disappearing: boolean;
 }) {
-  let fill = "#27272a";
+  let fill = "var(--viz-panel-bg, #27272a)";
   let stroke = "#52525b";
   let strokeW = 1.5;
   let textFill = "#e4e4e7";
 
   if (violation) {
     fill = "rgba(239,68,68,0.12)";
-    stroke = "#ef4444";
+    stroke = "var(--viz-exception, #ef4444)";
     strokeW = 2;
     textFill = "#fca5a5";
   } else if (highlight === "pink") {
@@ -277,9 +277,9 @@ function HeapNodeSVG({
     strokeW = 2;
     textFill = "#6ee7b7";
   } else if (isTop) {
-    stroke = "#f59e0b";
+    stroke = "var(--viz-flash, #f59e0b)";
     strokeW = 1.5;
-    textFill = "#f59e0b";
+    textFill = "var(--viz-flash, #f59e0b)";
   }
 
   const animStyle: React.CSSProperties = {};
@@ -296,14 +296,13 @@ function HeapNodeSVG({
         width={NODE_W}
         height={NODE_H}
         rx={4}
-        fill={fill}
-        stroke={stroke}
-        strokeWidth={strokeW}
+        style={{ fill, stroke, strokeWidth: strokeW }}
       />
       {disappearing && (
         <line
           x1={4} y1={4} x2={NODE_W - 4} y2={NODE_H - 4}
-          stroke="#ef4444" strokeWidth={2}
+          style={{ stroke: "var(--viz-exception, #ef4444)" }}
+          strokeWidth={2}
         />
       )}
       <text
@@ -311,10 +310,9 @@ function HeapNodeSVG({
         y={NODE_H / 2 + 1}
         textAnchor="middle"
         dominantBaseline="middle"
-        fill={textFill}
         fontSize={11}
         fontFamily="monospace"
-        style={{ pointerEvents: "none" }}
+        style={{ pointerEvents: "none", fill: textFill }}
       >
         {node.label.length > 4 ? node.label.slice(0, 4) : node.label}
       </text>
@@ -505,8 +503,8 @@ export function HeapVisual({ value }: Props) {
                 y1={e.y1}
                 x2={e.x2}
                 y2={e.y2}
-                stroke="#3f3f46"
                 strokeWidth={1.5}
+                style={{ stroke: "var(--viz-panel-border, #3f3f46)" }}
               />
             ))}
 
@@ -540,9 +538,9 @@ export function HeapVisual({ value }: Props) {
             {overflow > 0 && (
               <g transform={`translate(${PAD}, ${PAD + (getLevel(MAX_NODES - 1) + 1) * V_GAP + NODE_H + 8})`}>
                 <text
-                  fill="#a1a1aa"
                   fontSize={10}
                   fontFamily="monospace"
+                  style={{ fill: "var(--viz-alias-edge, #a1a1aa)" }}
                 >
                   +{overflow} more
                 </text>

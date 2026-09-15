@@ -40,12 +40,12 @@ type NodeState = 0 | 1 | 2 | 3;
 const STATE_BORDER: Record<NodeState, string> = {
   0: "#71717a", // unvisited – zinc-500
   1: "#3b82f6", // queued    – blue-500
-  2: "#f59e0b", // processing – amber-500
+  2: "var(--viz-accent, #f59e0b)", // processing – active-state accent
   3: "#22c55e", // processed  – green-500
 };
 
 const STATE_FILL: Record<NodeState, string> = {
-  0: "#3f3f46", // zinc-700
+  0: "var(--viz-panel-border, #3f3f46)", // unvisited fill – panel surface
   1: "#1e3a5f", // blue-900
   2: "#451a03", // amber-900
   3: "#052e16", // green-900
@@ -217,13 +217,13 @@ function classifyEdge(
 function edgeStyle(kind: EdgeKind): React.CSSProperties {
   switch (kind) {
     case "back":
-      return { stroke: "#ef4444", strokeWidth: 2, strokeDasharray: "6,4" };
+      return { stroke: "var(--viz-exception, #ef4444)", strokeWidth: 2, strokeDasharray: "6,4" };
     case "cross":
       return { stroke: "#71717a", strokeWidth: 1.5, strokeDasharray: "3,3" };
     case "forward":
-      return { stroke: "#a1a1aa", strokeWidth: 1.5, strokeDasharray: "4,2" };
+      return { stroke: "var(--viz-alias-edge, #a1a1aa)", strokeWidth: 1.5, strokeDasharray: "4,2" };
     default:
-      return { stroke: "#a1a1aa", strokeWidth: 2 };
+      return { stroke: "var(--viz-alias-edge, #a1a1aa)", strokeWidth: 2 };
   }
 }
 
@@ -338,10 +338,10 @@ export function GraphAlgorithmVisual({ value, name }: Props) {
           target: `v${v}`,
           type: "graphEdge",
           style: edgeStyle(kind),
-          markerEnd: { type: MarkerType.ArrowClosed as const, color: edgeStyle(kind).stroke ?? "#a1a1aa", width: 14, height: 14 },
+          markerEnd: { type: MarkerType.ArrowClosed as const, color: edgeStyle(kind).stroke ?? "var(--viz-alias-edge, #a1a1aa)", width: 14, height: 14 },
           label: kind !== "tree" ? kind : undefined,
-          labelStyle: { fontSize: 9, fill: "#a1a1aa" },
-          labelBgStyle: { fill: "#18181b", fontSize: 9 },
+          labelStyle: { fontSize: 9, fill: "var(--viz-alias-edge, #a1a1aa)" },
+          labelBgStyle: { fill: "var(--viz-body-bg, #18181b)", fontSize: 9 },
           animated: false,
         });
       }
@@ -391,7 +391,7 @@ export function GraphAlgorithmVisual({ value, name }: Props) {
             nodesConnectable={false}
             elementsSelectable={false}
           >
-            <Background color="#27272a" gap={16} />
+            <Background color="var(--viz-panel-bg, #27272a)" gap={16} />
           </ReactFlow>
         </div>
       </div>

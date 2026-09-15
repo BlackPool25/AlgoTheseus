@@ -53,7 +53,7 @@ const GRID_ROW_VIRT_THRESHOLD = 50;
 
 // ── Color helpers ────────────────────────────────────────────────────────────
 
-const COLORS_BINARY = { empty: "#27272a", filled: "#059669" };
+const COLORS_BINARY = { empty: "var(--viz-panel-bg, #27272a)", filled: "#059669" };
 
 /**
  * Heatmap HSL gradient: dark zinc → teal → emerald → amber.
@@ -69,10 +69,10 @@ function heatmapBg(value: number, maxVal: number): string {
 }
 
 function heatmapTextColor(value: number, maxVal: number): string {
-  if (maxVal <= 0 || value <= 0) return "#a1a1aa"; // zinc-400
+  if (maxVal <= 0 || value <= 0) return "var(--viz-alias-edge, #a1a1aa)"; // empty-cell text
   const t = Math.min(value / maxVal, 1);
   // Light text on dark bg, dark text on light bg
-  return t > 0.6 ? "#18181b" : "#e4e4e7";
+  return t > 0.6 ? "var(--viz-body-bg, #18181b)" : "#e4e4e7";
 }
 
 // ── Sub-components ───────────────────────────────────────────────────────────
@@ -109,11 +109,11 @@ function GridCell({
 
   const txtColor = isBinary
     ? value === 0
-      ? "#a1a1aa"
+      ? "var(--viz-alias-edge, #a1a1aa)"
       : "#d4d4d8"
     : heatmapTextColor(value, maxVal);
 
-  const highlightBorder = isHighlighted ? "2px solid #f59e0b" : undefined;
+  const highlightBorder = isHighlighted ? "2px solid var(--viz-flash, #f59e0b)" : undefined;
 
   const cellContent = (
     <div

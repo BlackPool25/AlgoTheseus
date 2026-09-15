@@ -133,8 +133,8 @@ export function layoutCFG(
     type: "trace", // our custom animated edge
     animated: false,
     style: { stroke: "#52525b", strokeWidth: 1.5 },
-    labelStyle: { fill: "#a1a1aa", fontSize: 10 },
-    labelBgStyle: { fill: "#18181b" },
+    labelStyle: { fill: "var(--viz-alias-edge, #a1a1aa)", fontSize: 10 },
+    labelBgStyle: { fill: "var(--viz-body-bg, #18181b)" },
   }));
 
   return { nodes, edges };

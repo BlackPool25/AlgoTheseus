@@ -65,6 +65,15 @@ COPY --from=builder /app/.venv /app/.venv
 # Copy application source (NOT tests/)
 COPY app/ ./app/
 
+# Free-tier deploy defaults (todo 21, D4): socketless subprocess jail, single
+# worker (in-memory rate-limit counters + disk LRU assume one instance),
+# ephemeral cache under /tmp (no volume — sleep/restart wipes it, cold MISS
+# expected). Compose overrides SANDBOX_MODE for local DooD dev.
+ENV SANDBOX_MODE=subprocess \
+    CACHE_DIR=/tmp/dsa-cache
+
 EXPOSE 8000
 
-CMD ["/app/.venv/bin/python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# $PORT binding (Render/SnapDeploy inject PORT; default 8000 local).
+# Single worker: exec-form would not expand $PORT, hence sh -c.
+CMD ["sh", "-c", "/app/.venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1"]

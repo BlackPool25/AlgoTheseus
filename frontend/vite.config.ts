@@ -24,6 +24,10 @@ const coopCoepHeaders = {
 };
 export default defineConfig({
   plugins: [react()],
+  // Base-path-safe (todo 21): '/' for Pages/Netlify custom domains; GH Pages
+  // mirror passes VITE_BASE=/<repo>/ at build time. Same-origin WASM blobs
+  // stay relative to base — no CDN subresource anywhere (see index.html).
+  base: process.env.VITE_BASE ?? '/',
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),

@@ -1,0 +1,24 @@
+# Netlify config — runner-up static host for the frontend (todo 21, D4).
+# Primary is Cloudflare Pages; this file is the Netlify equivalent.
+# Verified against current Netlify docs: [build] base/publish/command plus
+# [[headers]] for = ... [headers.values] tables and [[redirects]] SPA fallback.
+
+[build]
+  base = "frontend"
+  publish = "dist"
+  command = "bun install --frozen-lockfile && bun run build"
+
+# COOP/COEP pair (same values as frontend/public/_headers, todo 19).
+# Enables crossOriginIsolated for the future browser-WASM path; the app
+# routes to the server path when SharedArrayBuffer is unavailable.
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Cross-Origin-Opener-Policy = "same-origin"
+    Cross-Origin-Embedder-Policy = "require-corp"
+
+# SPA fallback — serve index.html for all frontend routes.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

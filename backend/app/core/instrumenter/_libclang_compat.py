@@ -30,6 +30,9 @@ native library; it IS the pin.
 from __future__ import annotations
 
 import logging
+import shutil
+import subprocess
+from functools import lru_cache
 from pathlib import Path
 
 import clang.cindex as clang
@@ -119,3 +122,47 @@ def _register_missing_kinds() -> None:
 
 _libclang_path = ensure_libclang()
 _register_missing_kinds()
+
+
+@lru_cache(maxsize=1)
+def _gcc_internal_include() -> str | None:
+    """Absolute path of the active g++'s freestanding-header dir, if usable.
+
+    W0.1 toolchain pin: libclang 18 does not know GCC 16's internal include
+    layout, so ``<cstddef>`` → ``#include_next <stddef.h>`` fails with
+    ``'stddef.h' file not found`` and every STL range-for node vanishes.
+    ``g++ -print-file-name=include`` reports the dir canonically on every
+    distro layout (host ``.../x86_64-redhat-linux/16/include`` and sandbox
+    ``.../x86_64-linux-gnu/16.2.0/include`` alike), so never hardcode it.
+    Returns None when g++ is absent or the dir does not exist.
+    """
+    gxx = shutil.which("g++")
+    if gxx is None:
+        return None
+    try:
+        out = subprocess.run(
+            [gxx, "-print-file-name=include"],
+            capture_output=True, text=True, timeout=10,
+        )
+        if out.returncode != 0:
+            return None
+        candidate = Path(out.stdout.strip())
+        if candidate.is_dir() and (candidate / "stddef.h").exists():
+            return str(candidate)
+    except (OSError, ValueError, subprocess.SubprocessError):
+        logger.debug("g++ include discovery failed", exc_info=True)
+    return None
+
+
+def default_extra_args() -> list[str]:
+    """Default clang args for parsing user C++ (single place both consumers use).
+
+    Base ``-std=c++17 -O0`` plus ``-isystem <gcc-include>`` when discovered —
+    the latter closes the GCC16-headers vs libclang-18 gap for STL headers.
+    Callers passing explicit ``extra_args`` bypass this (their flags win).
+    """
+    args = ["-std=c++17", "-O0"]
+    gcc_include = _gcc_internal_include()
+    if gcc_include is not None:
+        args += ["-isystem", gcc_include]
+    return args

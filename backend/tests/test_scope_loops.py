@@ -76,6 +76,52 @@ class TestR2RangeFor:
         assert result.loop_counters.get("range_carray_fn"), "no loop counter allocated"
 
 
+class TestR2RangeForSTL:
+    """W0.1 toolchain pin: STL range-for over std::vector<int> must parse.
+
+    Pre-fix libclang 18 misses GCC 16's internal headers (`stddef.h` not
+    found via c++/16/cstddef) so both loops are structurally invisible
+    (zero loop nodes, scope map jumps decl → return).
+    """
+    SRC = ("#include <vector>\n"
+           "int stl_range_fn() {\n"
+           "    std::vector<int> vec = {1, 2, 3};\n"
+           "    int total = 0;\n"
+           "    for (int x : vec) {\n"
+           "        total += x;\n"
+           "    }\n"
+           "    for (auto& y : vec) {\n"
+           "        total += y;\n"
+           "    }\n"
+           "    return total;\n"
+           "}\n")
+
+    def test_stl_range_for_scope(self, tmp_path):
+        import clang.cindex as clang
+        if not hasattr(clang.CursorKind, "CXX_FOR_RANGE_STMT"):
+            return
+        src = _write(tmp_path, "r2stl.cpp", self.SRC)
+        scopes = build_scope_map(src)
+        assert "x" in _names(scopes, "stl_range_fn", 5)
+        body = _names(scopes, "stl_range_fn", 6)
+        assert body, "STL range-for body line has no scope entry"
+        assert "x" in body and "total" in body
+        assert "y" in _names(scopes, "stl_range_fn", 8)
+
+    def test_stl_range_for_walker_emits_loops(self, tmp_path):
+        import clang.cindex as clang
+        if not hasattr(clang.CursorKind, "CXX_FOR_RANGE_STMT"):
+            return
+        src = _write(tmp_path, "r2stlw.cpp", self.SRC)
+        result = walk(src)
+        states = [p for p in result.injection_points
+                  if p.kind == InjectKind.STATE and p.line in (6, 9)]
+        assert states, "walker emits no STATE for STL range-for body lines"
+        iters = [p for p in result.injection_points
+                 if p.kind == InjectKind.LOOP_ITER]
+        assert len(iters) == 2, f"expected 2 LOOP_ITER, got {len(iters)}"
+
+
 class TestR3Braceless:
     SRC = ("int split_braceless_fn(int n) {\n"
            "    int x = 0;\n"

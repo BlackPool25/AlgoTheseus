@@ -125,7 +125,9 @@ class ASTWalker:
 
     def __init__(self, source_path: str, extra_args: list[str] | None = None):
         self.source_path = os.path.abspath(source_path)
-        self.extra_args = extra_args or ["-std=c++17", "-O0"]
+        # W0.1 pin: shared default carries -isystem <gcc-include> so STL
+        # headers parse (libclang 18 vs GCC 16 gap). Explicit args bypass it.
+        self.extra_args = extra_args if extra_args is not None else _libclang_compat.default_extra_args()
         self._index = clang.Index.create()
         self._loop_counter_seq = 0
 
@@ -313,7 +315,12 @@ class ASTWalker:
     ) -> None:
         if cursor.kind == clang.CursorKind.DECL_REF_EXPR and cursor.spelling:
             name = cursor.spelling
-            if name and not name.startswith("__") and name not in seen:
+            # W0.1: with STL headers fully parsed, overloaded operators
+            # (e.g. vector::operator[]) resolve to DECL_REF_EXPRs naming a
+            # CXX_METHOD; a bare `operator[]` is not evaluable at the
+            # injection site, so skip overload names (a user variable can
+            # never be spelled `operator<symbol>` — `operatorx` stays valid).
+            if name and not name.startswith("__") and not re.fullmatch(r"operator([^A-Za-z0-9_].*)?", name) and name not in seen:
                 ref = cursor.referenced
                 if ref is None or "FUNCTION" not in str(ref.kind):
                     seen.add(name)

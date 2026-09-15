@@ -83,7 +83,8 @@ class ScopeTracker:
 
     def __init__(self, source_path: str, extra_args: list[str] | None = None):
         self.source_path = os.path.abspath(source_path)
-        self.extra_args = extra_args or ["-std=c++17", "-O0"]
+        # W0.1 pin: same shared default as the walker (see ast_walker).
+        self.extra_args = extra_args if extra_args is not None else _libclang_compat.default_extra_args()
         self._index = clang.Index.create()
 
     def build(self) -> dict[str, FunctionScope]:

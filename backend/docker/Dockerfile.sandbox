@@ -1,6 +1,6 @@
 # Dockerfile.sandbox — C++ execution sandbox image.
 #
-# Based on gcc:13-slim. Provides g++ for compilation and a restricted
+# Based on gcc:16 (pinned — see W0.1 note at the FROM line). Provides g++ for compilation and a restricted
 # runtime environment. The backend mounts a temp directory read-only
 # at /mnt/code and writes the binary to /tmp (tmpfs, noexec is NOT set
 # here because we need to execute the binary — noexec is enforced by
@@ -11,7 +11,11 @@
 #
 # The container is never run directly — docker_runner.py manages it.
 
-FROM gcc:latest
+# W0.1 toolchain pin: gcc:16 pairs with the backend's libclang==18.1.1 pin
+# (pyproject.toml). libclang 18 parses GCC 16 headers via the -isystem
+# <gcc-include> default in _libclang_compat.default_extra_args(); do NOT float
+# this to gcc:latest — a GCC 17+ layout drift silently re-breaks STL parsing.
+FROM gcc:16
 
 # Install nothing extra — keep the image minimal.
 # gcc:13-slim already has g++ and libc.

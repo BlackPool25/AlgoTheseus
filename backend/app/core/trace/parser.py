@@ -218,10 +218,13 @@ def _apply_incremental_stdout(events: list[Any], deltas: list[str | None]) -> No
 
 
 def _compress_state_events(events: list[Any]) -> list[Any]:
-    """Collapse consecutive STATE events whose ``vars`` are identical.
+    """Collapse consecutive STATE events with identical vars AND output/heap.
 
     Only STATE events are compressed — FUNC_ENTER, FUNC_EXIT, BRANCH, and
-    LOOP_ITER events are never grouped.
+    LOOP_ITER events are never grouped. A group continues only while vars,
+    cumulative stdout, and heap all match; a differing stdout or heap breaks
+    the group (vars-equality alone would hide growing output). Absent
+    stdout/heap (None) matches only absent, so v1 traces group as before.
 
     Each group is replaced by its *first* event carrying extra attributes
     (via ``__pydantic_extra__`` so they survive ``model_dump``):
@@ -252,6 +255,10 @@ def _compress_state_events(events: list[Any]) -> list[Any]:
             _serialise_vars(events[j])
             if events[j]._vars_cache != event._vars_cache:
                 break
+            if events[j].stdout != event.stdout:
+                break
+            if _serialise_heap(events[j]) != _serialise_heap(event):
+                break
             j += 1
 
         group_count = j - i
@@ -272,6 +279,14 @@ def _compress_state_events(events: list[Any]) -> list[Any]:
         i = j
 
     return result
+
+
+def _serialise_heap(event: Any) -> str | None:
+    """Stable JSON string of ``event.heap`` for group comparison (None when absent)."""
+    heap = event.heap
+    if heap is None:
+        return None
+    return json.dumps(heap, sort_keys=True, default=str)
 
 
 def _serialise_vars(event: Any) -> None:

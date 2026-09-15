@@ -111,3 +111,57 @@ class TestAdversarial:
         ]
         events = parse(lines)
         assert len(events) == 2  # only the two valid events survive
+
+
+def _phase2_lines(stdout_deltas, heaps=None, vars_list=None):
+    """Two consecutive STATEs with identical vars but controlled stdout/heap."""
+    lines = [
+        json.dumps({"t": "enter", "l": 1, "f": "main", "d": 0, "p": {}}),
+    ]
+    vs = vars_list or [{"x": 2}, {"x": 2}]
+    for k, v in enumerate(vs):
+        ev = {"t": "state", "l": 2, "f": "main", "d": 0, "v": v}
+        if stdout_deltas[k] is not None:
+            ev["o"] = stdout_deltas[k]
+        if heaps is not None and heaps[k] is not None:
+            ev["h"] = heaps[k]
+        lines.append(json.dumps(ev))
+    lines.append(json.dumps({"t": "exit", "l": 3, "f": "main", "d": 0, "r": 0}))
+    return lines
+
+
+class TestCompressionRespectsStdoutHeap:
+    """Server compression must not hide growing stdout or a changing heap."""
+
+    def test_differing_stdout_breaks_group(self):
+        events = parse(_phase2_lines(["a", "\nb"]), compressed=True)
+        states = [e for e in events if e.type.value == "state"]
+        assert len(states) == 2  # both survive, nothing merged
+        assert states[0].stdout == "a"
+        assert states[1].stdout == "a\nb"
+        assert all(
+            e.__pydantic_extra__.get("group_count", 1) == 1 for e in events
+        )
+
+    def test_identical_stdout_still_merges(self):
+        events = parse(_phase2_lines(["a", ""]), compressed=True)
+        states = [e for e in events if e.type.value == "state"]
+        assert len(states) == 1  # cumulative "a" == "a" → one group
+        assert states[0].__pydantic_extra__["group_count"] == 2
+
+    def test_differing_heap_breaks_group(self):
+        events = parse(
+            _phase2_lines(["", ""], heaps=[{"1": {"val": 1}}, {"1": {"val": 2}}]),
+            compressed=True,
+        )
+        states = [e for e in events if e.type.value == "state"]
+        assert len(states) == 2
+        assert states[0].heap == {"1": {"val": 1}}
+        assert states[1].heap == {"1": {"val": 2}}
+
+    def test_v1_identical_vars_still_merge(self):
+        events = parse(_phase2_lines([None, None]), compressed=True)
+        states = [e for e in events if e.type.value == "state"]
+        assert len(states) == 1  # absent-vs-absent merges, exactly as before
+        assert states[0].__pydantic_extra__["group_count"] == 2
+        assert states[0].stdout is None

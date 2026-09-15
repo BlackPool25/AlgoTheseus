@@ -201,31 +201,6 @@ std::string __ser(const std::vector<T>& v) {
 }
 
 template<typename T>
-std::string __ser(const std::vector<std::vector<T>>& v) {
-    bool jagged = !v.empty() && [&]{
-        size_t firstLen = v[0].size();
-        for (size_t i = 1; i < v.size(); ++i)
-            if (v[i].size() != firstLen) return true;
-        return false;
-    }();
-
-    if (jagged) {
-        std::string out = "{\"_type\":\"graph\",\"adj\":[";
-        for (size_t i = 0; i < v.size(); ++i) {
-            if (i) out += ",";
-            out += __ser(v[i]);
-        }
-        return out + "]}";
-    }
-    std::string out = "{\"_type\":\"dp_table\",\"data\":[";
-    for (size_t i = 0; i < v.size(); ++i) {
-        if (i) out += ",";
-        out += __ser(v[i]);
-    }
-    return out + "]}";
-}
-
-template<typename T>
 std::string __ser(const std::deque<T>& v) {
     std::string out = "[";
     bool first = true;

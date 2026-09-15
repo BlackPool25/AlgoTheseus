@@ -274,22 +274,22 @@ class TestExecuteEndpoint:
         body = response.json()
         assert body["total_steps"] == 5
         assert len(body["trace"]) == 5
-        by_type = {e["t"]: e for e in body["trace"]}
+        by_type = {e["type"]: e for e in body["trace"]}
 
-        state = [e for e in body["trace"] if e["t"] == "state"]
-        assert state[0]["o"] == "1\n"
-        assert state[0]["g"] == {"g": 0}
-        assert state[0]["sd"] == "assign limit = 3"
-        assert state[0]["pl"] == 1
-        assert state[1]["o"] == "1\n2\n"
-        assert state[1]["h"] == {"1": {"type": "Node", "val": 1}}
+        state = [e for e in body["trace"] if e["type"] == "state"]
+        assert state[0]["stdout"] == "1\n"
+        assert state[0]["globals"] == {"g": 0}
+        assert state[0]["step_desc"] == "assign limit = 3"
+        assert state[0]["prev_line"] == 1
+        assert state[1]["stdout"] == "1\n2\n"
+        assert state[1]["heap"] == {"1": {"type": "Node", "val": 1}}
 
-        assert by_type["branch"]["op"] == ["x=2"]
-        assert "branch taken" in by_type["branch"]["sd"]
+        assert by_type["branch"]["ops"] == ["x=2"]
+        assert "branch taken" in by_type["branch"]["step_desc"]
 
-        assert by_type["exit"]["rl"] == 2
-        assert by_type["exit"]["sd"] == "return 0"
-        assert by_type["enter"]["sd"] == "call main()"
+        assert by_type["exit"]["return_line"] == 2
+        assert by_type["exit"]["step_desc"] == "return 0"
+        assert by_type["enter"]["step_desc"] == "call main()"
 
 
 # ── /upload-testcases endpoint ────────────────────────────────────────────────

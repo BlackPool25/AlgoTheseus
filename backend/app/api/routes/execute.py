@@ -429,7 +429,9 @@ async def execute(
                 cfg_nodes=cfg_nodes,
                 cfg_edges=cfg_edges,
                 total_steps=len(events),
-            )
+            ),
+            # Wire contract: FULL names (encoder default by_alias=True re-emits SHORT aliases).
+            by_alias=False,
         ),
         headers=headers,
     )
@@ -447,7 +449,8 @@ def _batch_fanout_limit() -> int:
         return 4
 
 
-@batch_router.post("", response_model=list[ExecuteBatchResponseItem])
+@batch_router.post("", response_model=list[ExecuteBatchResponseItem],
+                   response_model_by_alias=False)
 @limiter.limit(EXECUTE_BATCH_LIMIT)
 async def execute_batch(
     request: Request, response: Response, req: ExecuteBatchRequest

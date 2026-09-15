@@ -29,4 +29,4 @@ SANDBOX_CONFIG: dict = {
 # Hard limits enforced by docker_runner.py
 EXECUTION_TIMEOUT_SECONDS: int = 10
 MAX_TRACE_LINES: int = 100_000   # truncate trace output beyond this
-SANDBOX_IMAGE: str = "dsa-sandbox:latest"
+SANDBOX_IMAGE: str = "algo-theseus-sandbox:latest"

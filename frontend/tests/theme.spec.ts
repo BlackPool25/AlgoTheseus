@@ -63,7 +63,7 @@ test.describe("Theme switcher", () => {
     await select.selectOption("nord");
     expect(await themeOf(page)).toBe("nord");
     expect(
-      await page.evaluate(() => localStorage.getItem("dsa-viz-theme")),
+      await page.evaluate(() => localStorage.getItem("algo-theseus-theme")),
     ).toBe("nord");
   });
 
@@ -84,7 +84,7 @@ test.describe("Theme switcher", () => {
       if (msg.type() === "warning") warnings.push(msg.text());
     });
     await page.addInitScript(() => {
-      localStorage.setItem("dsa-viz-theme", "bogus-theme");
+      localStorage.setItem("algo-theseus-theme", "bogus-theme");
     });
     await page.goto("/");
     await expect(page.getByRole("button", { name: /^Run$/ })).toBeVisible();

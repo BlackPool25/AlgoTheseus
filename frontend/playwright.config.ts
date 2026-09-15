@@ -1,7 +1,7 @@
 import { defineConfig } from "@playwright/test";
 
 /**
- * Playwright config for DSA Visualizer visual tests.
+ * Playwright config for AlgoTheseus visual tests.
  *
  * Starts the Vite dev server before tests, runs against it.
  * Screenshots are stored in frontend/tests/screenshots/.

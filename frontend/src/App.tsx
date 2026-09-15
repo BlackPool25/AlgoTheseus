@@ -128,7 +128,7 @@ export default function App() {
       {/* Header */}
       <header className="flex items-center justify-between px-4 py-2 bg-viz-body border-b border-viz-line shrink-0">
         <div className="flex items-center gap-3">
-          <h1 className="text-sm font-semibold text-viz-ink">DSA Visualiser</h1>
+          <h1 className="text-sm font-semibold text-viz-ink">AlgoTheseus</h1>
           <span className="text-xs bg-viz-panel text-viz-ink/60 px-2 py-0.5 rounded font-mono">C++ · libclang</span>
           <span data-testid="engine-badge" title={engineSel.crossOriginIsolated ? "cross-origin isolated (SAB available)" : "SAB disabled — server fallback active"} className="text-xs bg-viz-panel text-viz-ink/60 px-2 py-0.5 rounded font-mono">engine: {engineSel.engine}</span>
         </div>

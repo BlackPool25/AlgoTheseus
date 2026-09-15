@@ -13,7 +13,7 @@ Single-endpoint flow: the user provides code + raw_stdin, the server
 handles stdin cleaning and execution in one shot.
 
 Efficiency (task 22, warm-instance-only):
-  Disk LRU under /tmp/dsa-cache (or $CACHE_DIR) holds two entries per run —
+  Disk LRU under /tmp/algo-theseus-cache (or $CACHE_DIR) holds two entries per run —
   the instrumented source (keyed by source + flags) and the execution result
   (keyed by instrumented + stdin + flags). Lookups happen BEFORE the sandbox
   run; stores happen after SUCCESS only (compile errors are never cached).
@@ -79,7 +79,7 @@ router = APIRouter()
 # ── Batch-execute router ──────────────────────────────────────────────────
 batch_router = APIRouter()
 
-_TESTCASE_DIR = Path("/tmp/dsa-visualizer/testcases")
+_TESTCASE_DIR = Path("/tmp/algo-theseus/testcases")
 _BATCH_PER_CASE_TIMEOUT = 10  # seconds per test case
 
 
@@ -455,7 +455,7 @@ async def execute_batch(
     """Run code against multiple test cases in parallel.
 
     Steps for each test case:
-      1. Read input.txt from /tmp/dsa-visualizer/testcases/<test_id>/
+      1. Read input.txt from /tmp/algo-theseus/testcases/<test_id>/
       2. Instrument the source (done once, shared across all cases).
       3. Run the instrumented binary in a dedicated sandbox.
       4. Parse trace output and build CFG.

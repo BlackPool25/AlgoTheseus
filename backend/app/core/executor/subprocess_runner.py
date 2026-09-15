@@ -7,7 +7,7 @@ working-dir jail. Selected via SANDBOX_MODE=subprocess; the Docker-DooD
 path stays the default for local dev. NEVER mounts the Docker socket.
 
 Jail primitives (stdlib + POSIX only):
-  - Working-dir jail: one mkdtemp dir per run under /tmp/dsa-visualizer,
+  - Working-dir jail: one mkdtemp dir per run under /tmp/algo-theseus,
     removed afterwards. CWD of the child is the jail, so relative paths
     (including the tracer's fd-1 temp files from todo 10) stay inside.
   - setrlimit: RLIMIT_CPU (timeout), RLIMIT_AS (memory), RLIMIT_FSIZE
@@ -52,7 +52,7 @@ from .docker_runner import RunResult, _is_compile_error, _split_stderr
 from .sandbox_config import EXECUTION_TIMEOUT_SECONDS
 
 _TRACER_H = Path(__file__).parent.parent / "instrumenter" / "tracer.h"
-_JAIL_ROOT = Path("/tmp/dsa-visualizer")
+_JAIL_ROOT = Path("/tmp/algo-theseus")
 
 # Output byte caps (docker path has no stdout cap; this is a subprocess-jail
 # DoS guard only — trace semantics unchanged, TRACE: lines still split by

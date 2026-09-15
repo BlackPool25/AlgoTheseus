@@ -2,7 +2,7 @@
 api/routes/upload.py — POST /upload-testcases endpoint.
 
 Accepts multipart file uploads for test case input/output files.
-Stores files under /tmp/dsa-visualizer/testcases/<uuid>/ and returns
+Stores files under /tmp/algo-theseus/testcases/<uuid>/ and returns
 a preview of each uploaded file.
 """
 
@@ -19,7 +19,7 @@ router = APIRouter()
 
 # ── Constants ──────────────────────────────────────────────────────────────────
 
-BASE_DIR = Path("/tmp/dsa-visualizer/testcases")
+BASE_DIR = Path("/tmp/algo-theseus/testcases")
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
 MAX_FILES = 50
 ALLOWED_EXTENSIONS = {".txt", ".in", ".out", ".ans"}
@@ -65,7 +65,7 @@ async def upload_testcases(files: list[UploadFile] = File(..., description="Test
 
     Accepts up to **50 files** (10 MB each) with extensions
     ``.txt``, ``.in``, ``.out``, or ``.ans``. Files are stored under
-    ``/tmp/dsa-visualizer/testcases/<uuid>/`` and a preview of each
+    ``/tmp/algo-theseus/testcases/<uuid>/`` and a preview of each
     file is returned.
 
     Returns ``{test_id, files: [{name, size, preview}]}``.

@@ -1,5 +1,5 @@
 {
-  "name": "@dsa-visualizer/backend",
+  "name": "@algo-theseus/backend",
   "version": "1.0.0",
   "private": true,
   "type": "module",
@@ -12,7 +12,7 @@
     "lint": "eslint src/**/*.ts"
   },
   "dependencies": {
-    "@dsa-visualizer/shared": "file:../shared",
+    "@algo-theseus/shared": "file:../shared",
     "cors": "^2.8.5",
     "dockerode": "^4.0.2",
     "express": "^4.18.2",

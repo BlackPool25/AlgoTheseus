@@ -137,9 +137,9 @@ def test_symlink_escape_and_privileged_write_blocked():
 
 
 def test_jail_dir_cleaned_up():
-    before = set(os.listdir("/tmp/dsa-visualizer")) if os.path.isdir("/tmp/dsa-visualizer") else set()
+    before = set(os.listdir("/tmp/algo-theseus")) if os.path.isdir("/tmp/algo-theseus") else set()
     _run(HELLO)
-    after = set(os.listdir("/tmp/dsa-visualizer")) if os.path.isdir("/tmp/dsa-visualizer") else set()
+    after = set(os.listdir("/tmp/algo-theseus")) if os.path.isdir("/tmp/algo-theseus") else set()
     assert after - before == set()
 
 

@@ -13,7 +13,7 @@ of passing the binary between two containers. The binary lives in /tmp (tmpfs).
 
 Gotcha: asyncio.to_thread wraps all blocking Docker SDK calls.
 Gotcha: The container is always removed (auto_remove=True) even on timeout.
-Gotcha: The sandbox directory under /tmp/dsa-visualizer is chmod'd to 755 so the
+Gotcha: The sandbox directory under /tmp/algo-theseus is chmod'd to 755 so the
 container (running as root) can read the mounted files.
 """
 
@@ -96,7 +96,7 @@ def _is_compile_error(stderr_clean: str, exit_code: int) -> bool:
 def _run_container_sync(cpp_source: str, stdin_data: str) -> RunResult:
     """Blocking implementation — called via asyncio.to_thread."""
     client = docker.from_env()
-    _sandbox_root = Path("/tmp/dsa-visualizer")
+    _sandbox_root = Path("/tmp/algo-theseus")
     tmp = _sandbox_root / f"dsa_{uuid4().hex}"
     tmp.mkdir(parents=True, exist_ok=True)
 

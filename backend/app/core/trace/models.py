@@ -41,22 +41,37 @@ class _Base(BaseModel):
 class FuncEnterEvent(_Base):
     type: Literal[EventType.FUNC_ENTER] = Field(alias="t")
     params: dict[str, Any] = Field(default_factory=dict, alias="p")
+    # v2 additive-only: one-line step description (absent → None)
+    step_desc: str | None = Field(default=None, alias="sd")
 
 
 class FuncExitEvent(_Base):
     type: Literal[EventType.FUNC_EXIT] = Field(alias="t")
     return_val: Any = Field(default=None, alias="r")
+    # v2 additive-only
+    step_desc: str | None = Field(default=None, alias="sd")
+    return_line: int | None = Field(default=None, alias="rl")
 
 
 class StateEvent(_Base):
     type: Literal[EventType.STATE] = Field(alias="t")
     vars: dict[str, Any] = Field(default_factory=dict, alias="v")
+    # v2 additive-only (stdout capped at 64KB per-event; see docs/trace-schema-v2.md)
+    stdout: str | None = Field(default=None, alias="o")
+    stdout_truncated: bool = Field(default=False, alias="o_tr")
+    globals: dict[str, Any] | None = Field(default=None, alias="g")
+    step_desc: str | None = Field(default=None, alias="sd")
+    prev_line: int | None = Field(default=None, alias="pl")
+    heap: dict[str, Any] | None = Field(default=None, alias="h")
 
 
 class BranchEvent(_Base):
     type: Literal[EventType.BRANCH] = Field(alias="t")
     condition: str = Field(alias="c")
     taken: bool = Field(alias="tk")
+    # v2 additive-only
+    ops: list[str] | None = Field(default=None, alias="op")
+    step_desc: str | None = Field(default=None, alias="sd")
 
 
 class LoopIterEvent(_Base):

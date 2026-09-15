@@ -9,6 +9,10 @@ services:
       dockerfile: Dockerfile
     container_name: dsa-backend
     # ports: no host exposure — backend is reached via internal Docker DNS through nginx proxy
+    environment:
+      # docker = local-dev DooD path (default); subprocess = socketless
+      # single-container jail (no socket mount needed in that mode).
+      - SANDBOX_MODE=${SANDBOX_MODE:-docker}
     volumes:
       # Docker socket for spawning sandbox containers (DooD)
       - /var/run/docker.sock:/var/run/docker.sock

@@ -11,6 +11,8 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { renderCellValue } from "../../utils/format";
+import { flashStyle } from "./flash";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -56,6 +58,8 @@ interface HeapData {
 
 interface Props {
   value: HeapData;
+  /** Indices that mutated this step (sift-swap pair) — flash both together. */
+  changedIndices?: number[];
 }
 
 interface NodePos {
@@ -79,7 +83,7 @@ function getLeftChild(i: number): number {
 }
 
 function getRightChild(i: number): number {
-  return (i << 1) | 2;
+  return (i << 1) + 2;
 }
 
 function getLevel(i: number): number {
@@ -248,38 +252,35 @@ function HeapNodeSVG({
   violation,
   appearing,
   disappearing,
+  flashed,
 }: {
   node: NodePos;
   isTop: boolean;
-  highlight: "none" | "pink" | "green";
+  highlight: "none" | "swap";
   violation: boolean;
   appearing: boolean;
   disappearing: boolean;
+  flashed: boolean;
 }) {
-  let fill = "var(--viz-panel-bg, #27272a)";
-  let stroke = "#52525b";
+  let fill = "var(--viz-panel-bg)";
+  let stroke = "var(--viz-panel-border)";
   let strokeW = 1.5;
-  let textFill = "#e4e4e7";
+  let textFill = "var(--viz-body-text)";
 
   if (violation) {
-    fill = "rgba(239,68,68,0.12)";
-    stroke = "var(--viz-exception, #ef4444)";
+    fill = "rgba(245, 158, 11, 0.06)";
+    stroke = "var(--viz-exception)";
     strokeW = 2;
-    textFill = "#fca5a5";
-  } else if (highlight === "pink") {
-    fill = "rgba(236,72,153,0.12)";
-    stroke = "#ec4899";
+    textFill = "var(--viz-exception)";
+  } else if (highlight === "swap" || flashed) {
+    fill = "rgba(245, 158, 11, 0.12)";
+    stroke = "var(--viz-flash)";
     strokeW = 2;
-    textFill = "#f472b6";
-  } else if (highlight === "green") {
-    fill = "rgba(16,185,129,0.12)";
-    stroke = "#10b981";
-    strokeW = 2;
-    textFill = "#6ee7b7";
+    textFill = "var(--viz-flash)";
   } else if (isTop) {
-    stroke = "var(--viz-flash, #f59e0b)";
+    stroke = "var(--viz-flash)";
     strokeW = 1.5;
-    textFill = "var(--viz-flash, #f59e0b)";
+    textFill = "var(--viz-flash)";
   }
 
   const animStyle: React.CSSProperties = {};
@@ -291,7 +292,13 @@ function HeapNodeSVG({
   }
 
   return (
-    <g transform={`translate(${node.x},${node.y})`} style={animStyle}>
+    <g
+      transform={`translate(${node.x},${node.y})`}
+      style={animStyle}
+      data-testid="heap-tree-node"
+      data-index={node.index}
+      data-flash={flashed || highlight !== "none" ? "true" : "false"}
+    >
       <rect
         width={NODE_W}
         height={NODE_H}
@@ -301,7 +308,7 @@ function HeapNodeSVG({
       {disappearing && (
         <line
           x1={4} y1={4} x2={NODE_W - 4} y2={NODE_H - 4}
-          style={{ stroke: "var(--viz-exception, #ef4444)" }}
+          style={{ stroke: "var(--viz-exception)" }}
           strokeWidth={2}
         />
       )}
@@ -322,8 +329,9 @@ function HeapNodeSVG({
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export function HeapVisual({ value }: Props) {
+export function HeapVisual({ value, changedIndices = [] }: Props) {
   const items = value.items ?? [];
+  const propFlash = new Set(changedIndices);
 
   // ── Animation state ──
   const prevItemsRef = useRef<unknown[]>([]);
@@ -483,6 +491,30 @@ export function HeapVisual({ value }: Props) {
         </span>
       </div>
 
+      {/* Array strip dual (render-spec §2: triangle array-tree dual view) */}
+      {items.length > 0 && (
+        <div data-testid="heap-array-strip" className="flex gap-0.5 overflow-x-auto pb-1">
+          {items.slice(0, MAX_NODES).map((item, i) => {
+            const flashed = swapHighlight.has(i) || propFlash.has(i);
+            return (
+              <div key={i} className="flex flex-col items-center shrink-0">
+                <div
+                  data-testid="heap-strip-cell"
+                  data-index={i}
+                  data-flash={flashed ? "true" : "false"}
+                  className={`w-8 h-7 flex items-center justify-center text-xs font-mono truncate overflow-hidden border ${flashed ? "border-viz-flash bg-viz-flash/15 text-viz-flash" : "border-viz-line bg-viz-panel text-viz-ink"}`}
+                  style={flashStyle(flashed)}
+                  title={renderCellValue(item)}
+                >
+                  {renderCellValue(item)}
+                </div>
+                <div className="text-[10px] font-mono text-viz-ink/60">{i}</div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       {/* SVG tree */}
       {items.length === 0 ? (
         <span className="text-[10px] text-viz-ink/60 italic">empty</span>
@@ -504,7 +536,7 @@ export function HeapVisual({ value }: Props) {
                 x2={e.x2}
                 y2={e.y2}
                 strokeWidth={1.5}
-                style={{ stroke: "var(--viz-panel-border, #3f3f46)" }}
+                style={{ stroke: "var(--viz-panel-border)" }}
               />
             ))}
 
@@ -514,12 +546,11 @@ export function HeapVisual({ value }: Props) {
               const isAppearing = animPhase === "push-appear" && node.index === appearingIndex;
               const isDisappearing = animPhase === "pop-mark" && node.index === 0 && disappearingIndex === -1;
               const isHighlighted = swapHighlight.has(node.index);
-              const isViolation = violations.has(node.index) && !isHighlighted;
+              const isViolation = violations.has(node.index) && !isHighlighted && !propFlash.has(node.index);
+              const flashed = isHighlighted || propFlash.has(node.index);
 
-              // If pop animation: the last element (which became root) highlights differently
-              let highlight: "none" | "pink" | "green" = "none";
-              if (isHighlighted) highlight = "pink";
-              if (animPhase === "push-bubble" && isHighlighted) highlight = "pink";
+              let highlight: "none" | "swap" = "none";
+              if (flashed) highlight = "swap";
 
               return (
                 <HeapNodeSVG
@@ -530,6 +561,7 @@ export function HeapVisual({ value }: Props) {
                   violation={isViolation}
                   appearing={isAppearing}
                   disappearing={isDisappearing}
+                  flashed={propFlash.has(node.index)}
                 />
               );
             })}
@@ -540,7 +572,7 @@ export function HeapVisual({ value }: Props) {
                 <text
                   fontSize={10}
                   fontFamily="monospace"
-                  style={{ fill: "var(--viz-alias-edge, #a1a1aa)" }}
+                  style={{ fill: "var(--viz-alias-edge)" }}
                 >
                   +{overflow} more
                 </text>

@@ -327,6 +327,17 @@ def instrument(source: str, source_path: str | None = None) -> str:
         for text in insertions_after.get(line_num, []):
             output.append(text + "\n")
 
+    # 4. Per-struct identity serializers (todo 15, T11a). Appended at END of
+    # file so struct types are complete; ADL finds the global __ser
+    # overloads from tracer.h's dependent calls. Never raises — on any
+    # failure the program keeps the existing $addr fallback behavior.
+    try:
+        from . import serializer_gen as _serializer_gen
+
+        output.append(_serializer_gen.generate_serializers(source_path))
+    except Exception:
+        logger.debug("serializer_gen hookup skipped", exc_info=True)
+
     instrumented = "".join(output)
 
     return instrumented

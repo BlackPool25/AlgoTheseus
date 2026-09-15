@@ -1,8 +1,8 @@
 # Render Spec (vendored from research, todos 15/25/26 cite this file)
 
 Status: frozen vendor copy. Transcribed from the Python-Tutor gap
-research (`docs/python-tutor-gap-analysis.md`) and the implementation plan
-Phase 2/3 sections. Downstream todos must cite this file, never the
+research and the implementation plan
+Phase 2/3 sections (the standalone gap-analysis note was never vendored, Downstream todos must cite this file, never the
 research directory, and never use absolute-path references.
 
 Conventions: all file references are repo-relative. There are no

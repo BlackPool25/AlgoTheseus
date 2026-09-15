@@ -24,6 +24,38 @@ import os
 import clang.cindex as clang
 
 
+def _cursor_kind(cursor: clang.Cursor) -> clang.CursorKind | None:
+    """Return cursor.kind, or None if libclang reports an unknown kind id.
+
+    Newer system headers can expose cursor kinds newer than these bindings
+    (see ast_walker._cursor_kind). Unknown kinds carry no scope info.
+    """
+    try:
+        return cursor.kind
+    except ValueError:
+        return None
+
+
+# R2 (M3): range-for is a distinct cursor kind, not FOR_STMT. getattr guard so
+# older bindings without it fall back gracefully (stays None → never matches).
+_RANGE_FOR_KIND: clang.CursorKind | None = getattr(
+    clang.CursorKind, "CXX_FOR_RANGE_STMT", None
+)
+
+
+def _record_line(scope: FunctionScope, line: int, visible: list[ScopeVar]) -> None:
+    """Merge `visible` into scope.vars_at_line[line] (innermost wins)."""
+    if line <= 0:
+        return
+    if line not in scope.vars_at_line:
+        scope.vars_at_line[line] = []
+    existing_names = {v.name for v in scope.vars_at_line[line]}
+    for v in visible:
+        if v.name not in existing_names:
+            scope.vars_at_line[line].append(v)
+            existing_names.add(v.name)
+
+
 @dataclass
 class ScopeVar:
     """A variable visible at a particular point in the source."""
@@ -73,7 +105,8 @@ class ScopeTracker:
         )
 
     def _visit(self, cursor: clang.Cursor, scopes: dict[str, FunctionScope]) -> None:
-        if cursor.kind in (clang.CursorKind.FUNCTION_DECL, clang.CursorKind.CXX_METHOD) and cursor.is_definition():
+        kind = _cursor_kind(cursor)
+        if kind in (clang.CursorKind.FUNCTION_DECL, clang.CursorKind.CXX_METHOD) and cursor.is_definition():
             if not self._is_user_code(cursor):
                 return
             fn = cursor.spelling
@@ -116,95 +149,156 @@ class ScopeTracker:
         visible = list(visible)
 
         for stmt in cursor.get_children():
-            # Process all DECL_STMT regardless of file origin (template types
-            # like vector<int> may report cursor location in STL headers).
-            # For non-declaration statements, filter by user code as usual.
-            if stmt.kind != clang.CursorKind.DECL_STMT and not self._is_user_code(stmt):
+            stmt_kind = _cursor_kind(stmt)
+            if stmt_kind is None:
                 continue
 
-            # Record what's visible at this line
-            line = stmt.location.line
-            if line not in scope.vars_at_line:
-                scope.vars_at_line[line] = []
-            # Merge: keep unique names (innermost wins)
-            existing_names = {v.name for v in scope.vars_at_line[line]}
-            for v in visible:
-                if v.name not in existing_names:
-                    scope.vars_at_line[line].append(v)
-                    existing_names.add(v.name)
+            # R1 (M2): post-declaration semantics — fold this line's DECL_STMT
+            # vars into `visible` BEFORE recording, so declared names appear in
+            # their own line's entry (incl. multi-decl `int lo = 0, hi = n`).
+            if stmt_kind == clang.CursorKind.DECL_STMT:
+                self._append_decl_vars(stmt, visible, depth)
+                # Template-type decls (e.g. vector<int>) report the DECL_STMT
+                # location in STL headers — record at the user-code VAR_DECL
+                # line instead so the entry lands on the real source line.
+                _record_line(scope, self._decl_line(stmt), visible)
+            else:
+                if not self._is_user_code(stmt):
+                    continue
+                # Record what's visible at this line
+                _record_line(scope, stmt.location.line, visible)
 
-            # Variable declaration → add to visible scope
-            if stmt.kind == clang.CursorKind.DECL_STMT:
-                for c in stmt.get_children():
-                    if c.kind == clang.CursorKind.VAR_DECL and c.spelling:
-                        # Check for shadowing
-                        uid = c.spelling
-                        if any(v.name == c.spelling for v in visible):
-                            uid = f"{c.spelling}_{depth}"
-                        visible.append(ScopeVar(
-                            name=c.spelling,
-                            unique_id=uid,
-                            decl_line=c.location.line,
-                            scope_depth=depth,
-                        ))
+                # Nested compound statement (if/loop body) → recurse
+                if stmt_kind == clang.CursorKind.COMPOUND_STMT:
+                    self._walk_body(stmt, scope, visible, depth + 1)
 
-            # Nested compound statement (if/loop body) → recurse with new scope
-            elif stmt.kind == clang.CursorKind.COMPOUND_STMT:
-                self._walk_body(stmt, scope, visible, depth + 1)
+                # For-loop and range-for: loop vars are scoped to the loop only.
+                elif stmt_kind == clang.CursorKind.FOR_STMT or (
+                    _RANGE_FOR_KIND is not None and stmt_kind == _RANGE_FOR_KIND
+                ):
+                    self._walk_loop(stmt, scope, visible, depth)
 
-            # For-loop init can declare variables; include them in scope
-            elif stmt.kind == clang.CursorKind.FOR_STMT:
-                # for-loop init vars are scoped to the loop only, not after it.
-                loop_visible = list(visible)
+                # If/loop → recurse into sub-bodies (incl. braceless, see R3)
+                elif stmt_kind in (
+                    clang.CursorKind.IF_STMT,
+                    clang.CursorKind.WHILE_STMT,
+                    clang.CursorKind.DO_STMT,
+                ):
+                    self._walk_cond(stmt, stmt_kind, scope, visible, depth)
 
-                # Capture init declarations like: for (int i = 0; ...)
-                for child in stmt.get_children():
-                    if child.kind == clang.CursorKind.DECL_STMT:
-                        for c in child.get_children():
-                            if c.kind == clang.CursorKind.VAR_DECL and c.spelling:
-                                uid = c.spelling
-                                if any(v.name == c.spelling for v in loop_visible):
-                                    uid = f"{c.spelling}_{depth}"
-                                loop_visible.append(ScopeVar(
-                                    name=c.spelling,
-                                    unique_id=uid,
-                                    decl_line=c.location.line,
-                                    scope_depth=depth,
-                                ))
-                    elif child.kind == clang.CursorKind.VAR_DECL and child.spelling:
-                        uid = child.spelling
-                        if any(v.name == child.spelling for v in loop_visible):
-                            uid = f"{child.spelling}_{depth}"
-                        loop_visible.append(ScopeVar(
-                            name=child.spelling,
-                            unique_id=uid,
-                            decl_line=child.location.line,
-                            scope_depth=depth,
-                        ))
+    @staticmethod
+    def _append_decl_vars(
+        decl_stmt: clang.Cursor, visible: list[ScopeVar], depth: int
+    ) -> None:
+        """Append VAR_DECL children of a DECL_STMT to `visible` (shadow-safe)."""
+        for c in decl_stmt.get_children():
+            if c.kind == clang.CursorKind.VAR_DECL and c.spelling:
+                uid = c.spelling
+                if any(v.name == c.spelling for v in visible):
+                    uid = f"{c.spelling}_{depth}"
+                visible.append(ScopeVar(
+                    name=c.spelling,
+                    unique_id=uid,
+                    decl_line=c.location.line,
+                    scope_depth=depth,
+                ))
 
-                # Ensure loop line records newly added vars
-                line = stmt.location.line
-                if line in scope.vars_at_line:
-                    existing_names = {v.name for v in scope.vars_at_line[line]}
-                    for v in loop_visible:
-                        if v.name not in existing_names:
-                            scope.vars_at_line[line].append(v)
-                            existing_names.add(v.name)
+    def _decl_line(self, decl_stmt: clang.Cursor) -> int:
+        """Line to attribute a DECL_STMT's scope entry to (user-code VAR_DECL)."""
+        for c in decl_stmt.get_children():
+            if c.kind == clang.CursorKind.VAR_DECL and c.spelling:
+                loc = c.location
+                if loc.file is not None and loc.line > 0:
+                    try:
+                        if os.path.abspath(loc.file.name) == self.source_path:
+                            return loc.line
+                    except ValueError:
+                        pass
+        return decl_stmt.location.line
 
-                # Recurse into loop body with loop-scoped visibility
-                for child in stmt.get_children():
-                    if child.kind == clang.CursorKind.COMPOUND_STMT:
-                        self._walk_body(child, scope, loop_visible, depth + 1)
+    def _walk_loop(
+        self,
+        stmt: clang.Cursor,
+        scope: FunctionScope,
+        visible: list[ScopeVar],
+        depth: int,
+    ) -> None:
+        """Walk FOR_STMT / CXX_FOR_RANGE_STMT: loop-var scope + body."""
+        loop_visible = list(visible)
 
-            # If/loop → recurse into sub-bodies
-            elif stmt.kind in (
-                clang.CursorKind.IF_STMT,
-                clang.CursorKind.WHILE_STMT,
-                clang.CursorKind.DO_STMT,
-            ):
-                for child in stmt.get_children():
-                    if child.kind == clang.CursorKind.COMPOUND_STMT:
-                        self._walk_body(child, scope, visible, depth + 1)
+        # Capture init declarations (`for (int i = 0; ...)`) and the range-for
+        # loop var (direct VAR_DECL child of CXX_FOR_RANGE_STMT).
+        for child in stmt.get_children():
+            if child.kind == clang.CursorKind.DECL_STMT:
+                self._append_decl_vars(child, loop_visible, depth)
+            elif child.kind == clang.CursorKind.VAR_DECL and child.spelling:
+                uid = child.spelling
+                if any(v.name == child.spelling for v in loop_visible):
+                    uid = f"{child.spelling}_{depth}"
+                loop_visible.append(ScopeVar(
+                    name=child.spelling,
+                    unique_id=uid,
+                    decl_line=child.location.line,
+                    scope_depth=depth,
+                ))
+
+        # Ensure loop header line records newly added vars
+        _record_line(scope, stmt.location.line, loop_visible)
+
+        # Body is the last child; a lone statement is a braceless body (R3).
+        children = list(stmt.get_children())
+        if not children:
+            return
+        body = children[-1]
+        if _cursor_kind(body) == clang.CursorKind.COMPOUND_STMT:
+            self._walk_body(body, scope, loop_visible, depth + 1)
+        else:
+            self._walk_braceless_body(body, scope, loop_visible, depth + 1)
+
+    def _walk_cond(
+        self,
+        stmt: clang.Cursor,
+        stmt_kind: clang.CursorKind,
+        scope: FunctionScope,
+        visible: list[ScopeVar],
+        depth: int,
+    ) -> None:
+        """Walk IF/WHILE/DO sub-bodies, recursing into braceless bodies (R3)."""
+        children = list(stmt.get_children())
+        if stmt_kind == clang.CursorKind.IF_STMT:
+            bodies = children[1:]  # then + else (children[0] is the condition)
+        elif stmt_kind == clang.CursorKind.DO_STMT:
+            bodies = children[:1]  # body first, condition second
+        else:  # WHILE_STMT: condition first, body last
+            bodies = children[1:]
+        for body in bodies:
+            if _cursor_kind(body) == clang.CursorKind.COMPOUND_STMT:
+                self._walk_body(body, scope, visible, depth + 1)
+            else:
+                self._walk_braceless_body(body, scope, visible, depth + 1)
+
+    def _walk_braceless_body(
+        self,
+        node: clang.Cursor,
+        scope: FunctionScope,
+        visible: list[ScopeVar],
+        depth: int,
+    ) -> None:
+        """Record scope for a single-statement body; recurse if nested control."""
+        _record_line(scope, node.location.line, visible)
+        kind = _cursor_kind(node)
+        if kind == clang.CursorKind.FOR_STMT or (
+            _RANGE_FOR_KIND is not None and kind == _RANGE_FOR_KIND
+        ):
+            self._walk_loop(node, scope, visible, depth)
+        elif kind in (
+            clang.CursorKind.IF_STMT,
+            clang.CursorKind.WHILE_STMT,
+            clang.CursorKind.DO_STMT,
+        ):
+            self._walk_cond(node, kind, scope, visible, depth)
+        elif kind == clang.CursorKind.COMPOUND_STMT:
+            self._walk_body(node, scope, visible, depth + 1)
 
 
 def build_scope_map(

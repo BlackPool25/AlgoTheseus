@@ -13,6 +13,11 @@
 
 import { create } from "zustand";
 import type { TraceEvent } from "../types/trace";
+import {
+  findLastLiveSnapshot,
+  frameKey,
+  liveVarsOf,
+} from "../utils/scopeDisplay";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -31,6 +36,12 @@ interface StackFrame {
   func: string;
   depth: number;
   line: number;
+}
+
+/** Last live (`state` / `enter`) snapshot per `func@depth` frame. */
+export interface LiveSnapshot {
+  vars: Record<string, unknown>;
+  step: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -74,6 +85,25 @@ function rebuildCallStack(
     applyEvent(stack, trace[i], true);
   }
   return stack;
+}
+
+/**
+ * Rebuild the per-frame last-live snapshot cache by scanning
+ * trace[0 … upToStep]. Used on load / random jump / stream completion.
+ */
+function buildLiveCache(
+  trace: TraceEvent[],
+  upToStep: number,
+): Record<string, LiveSnapshot> {
+  const cache: Record<string, LiveSnapshot> = {};
+  const end = Math.min(upToStep, trace.length - 1);
+  for (let i = 0; i <= end; i++) {
+    const live = liveVarsOf(trace[i]);
+    if (live !== null) {
+      cache[frameKey(trace[i].func, trace[i].depth)] = { vars: live, step: i };
+    }
+  }
+  return cache;
 }
 
 /** Serialise event.vars to a stable JSON string for comparison. */
@@ -170,6 +200,8 @@ interface TraceStore {
   expandedGroups: number[];
   /** True while an NDJSON streaming response is being consumed. */
   isStreaming: boolean;
+  /** Last live snapshot per `func@depth` frame (forward-fill source). */
+  lastLiveByFrame: Record<string, LiveSnapshot>;
 
   /** Load a new trace (resets step to 0 and builds the initial stack). */
   loadTrace: (trace: TraceEvent[]) => void;
@@ -205,6 +237,7 @@ export const useTraceStore = create<TraceStore>((set, get) => ({
   compressedSteps: [],
   expandedGroups: [],
   isStreaming: false,
+  lastLiveByFrame: {},
 
   loadTrace: (trace) => {
     const compressedSteps = rebuildCompression(trace);
@@ -217,16 +250,29 @@ export const useTraceStore = create<TraceStore>((set, get) => ({
       compressedSteps,
       expandedGroups: [],
       isStreaming: false,
+      lastLiveByFrame: buildLiveCache(trace, 0),
     });
   },
 
   // ── Streaming append ──────────────────────────────────────────────────────
 
   appendEvent: (event) => {
-    const { trace, callStack } = get();
+    const { trace, callStack, lastLiveByFrame } = get();
     const newTrace = [...trace, event];
     const newStack = [...callStack];
     applyEvent(newStack, event, true);
+
+    const live = liveVarsOf(event);
+    const nextCache =
+      live !== null
+        ? {
+            ...lastLiveByFrame,
+            [frameKey(event.func, event.depth)]: {
+              vars: live,
+              step: newTrace.length - 1,
+            },
+          }
+        : lastLiveByFrame;
 
     set({
       trace: newTrace,
@@ -234,6 +280,7 @@ export const useTraceStore = create<TraceStore>((set, get) => ({
       currentEvent: trace.length === 0 ? event : get().currentEvent,
       callStack: newStack,
       isStreaming: true,
+      lastLiveByFrame: nextCache,
     });
   },
 
@@ -248,6 +295,7 @@ export const useTraceStore = create<TraceStore>((set, get) => ({
       // Set currentStep to 0 and currentEvent if not yet set (streaming never positioned)
       currentStep: 0,
       currentEvent: trace[0] ?? null,
+      lastLiveByFrame: buildLiveCache(trace, 0),
     });
   },
 
@@ -261,6 +309,7 @@ export const useTraceStore = create<TraceStore>((set, get) => ({
       callStack: [],
       compressedSteps: [],
       expandedGroups: [],
+      lastLiveByFrame: {},
     });
   },
 
@@ -284,12 +333,19 @@ export const useTraceStore = create<TraceStore>((set, get) => ({
       currentStep: clamped,
       currentEvent: trace[clamped] ?? null,
       callStack: newStack,
+      lastLiveByFrame: buildLiveCache(trace, clamped),
     });
   },
 
   next: () => {
-    const { currentStep, trace, callStack, compressedSteps, expandedGroups } =
-      get();
+    const {
+      currentStep,
+      trace,
+      callStack,
+      compressedSteps,
+      expandedGroups,
+      lastLiveByFrame,
+    } = get();
     if (currentStep >= trace.length - 1) return;
 
     let nextStep = currentStep + 1;
@@ -307,16 +363,33 @@ export const useTraceStore = create<TraceStore>((set, get) => ({
       applyEvent(newStack, trace[i], true);
     }
 
+    const landed = trace[nextStep];
+    const live = liveVarsOf(landed);
+    const nextCache =
+      live !== null
+        ? {
+            ...lastLiveByFrame,
+            [frameKey(landed.func, landed.depth)]: { vars: live, step: nextStep },
+          }
+        : lastLiveByFrame;
+
     set({
       currentStep: nextStep,
       currentEvent: trace[nextStep],
       callStack: newStack,
+      lastLiveByFrame: nextCache,
     });
   },
 
   prev: () => {
-    const { currentStep, trace, callStack, compressedSteps, expandedGroups } =
-      get();
+    const {
+      currentStep,
+      trace,
+      callStack,
+      compressedSteps,
+      expandedGroups,
+      lastLiveByFrame,
+    } = get();
     if (currentStep <= 0) return;
 
     let prevStep = currentStep - 1;
@@ -334,10 +407,35 @@ export const useTraceStore = create<TraceStore>((set, get) => ({
       applyEvent(newStack, trace[i], false);
     }
 
+    const landed = trace[prevStep];
+    const live = liveVarsOf(landed);
+    let prevCache = lastLiveByFrame;
+    if (live !== null) {
+      prevCache = {
+        ...lastLiveByFrame,
+        [frameKey(landed.func, landed.depth)]: { vars: live, step: prevStep },
+      };
+    } else {
+      const scanned = findLastLiveSnapshot(
+        trace,
+        prevStep,
+        landed.func,
+        landed.depth,
+      );
+      const key = frameKey(landed.func, landed.depth);
+      if (scanned !== null) {
+        prevCache = { ...lastLiveByFrame, [key]: scanned };
+      } else {
+        prevCache = { ...lastLiveByFrame };
+        delete prevCache[key];
+      }
+    }
+
     set({
       currentStep: prevStep,
       currentEvent: trace[prevStep],
       callStack: newStack,
+      lastLiveByFrame: prevCache,
     });
   },
 
@@ -363,5 +461,6 @@ export const useTraceStore = create<TraceStore>((set, get) => ({
       callStack: [],
       compressedSteps: [],
       expandedGroups: [],
+      lastLiveByFrame: {},
     }),
 }));

@@ -1,17 +1,28 @@
 /**
  * components/StatePanel/StatePanel.tsx — Variable state at the current step.
  *
- * Shows variables from the current trace event.
- * Highlights values that changed since the previous step.
+ * Loop-control steps (`iter` / `branch`) and `exit` carry no vars by schema,
+ * so they forward-fill the last live snapshot of the current frame instead
+ * of rendering blank. Carried rows render dimmed with a staleness caption;
+ * diffs are always computed live-vs-last-LIVE so held values flash once on
+ * the mutating step and never on carried steps.
  * Pure display component — reads from traceStore only.
  */
 
 import { useTraceStore } from "../../store/traceStore";
 import { CallStackView } from "./CallStackView";
 import { VariableRow } from "./VariableRow";
+import {
+  buildHighlightMap,
+  computeRowStates,
+  findLastLiveSnapshot,
+  frameKey,
+  liveVarsOf,
+  resolveDisplayVars,
+} from "../../utils/scopeDisplay";
 
 export function StatePanel() {
-  const { trace, currentStep, currentEvent } = useTraceStore();
+  const { trace, currentStep, currentEvent, lastLiveByFrame } = useTraceStore();
 
   if (!currentEvent) {
     return (
@@ -21,30 +32,42 @@ export function StatePanel() {
     );
   }
 
-  // Get vars from current event
-  const vars: Record<string, unknown> =
-    currentEvent.type === "state"
-      ? currentEvent.vars
-      : currentEvent.type === "enter"
-      ? currentEvent.params
-      : {};
+  const key = frameKey(currentEvent.func, currentEvent.depth);
+  const isLiveStep = liveVarsOf(currentEvent) !== null;
 
-  // Get previous step's vars for diff highlighting
-  const prevEvent = currentStep > 0 ? trace[currentStep - 1] : null;
-  const prevVars: Record<string, unknown> =
-    prevEvent?.type === "state"
-      ? prevEvent.vars
-      : prevEvent?.type === "enter"
-      ? prevEvent.params
-      : {};
+  // Carried display source: O(1) store cache, scan-back fallback on jumps.
+  const cached = lastLiveByFrame[key] ?? null;
+  const lastLive =
+    cached !== null && cached.step <= currentStep
+      ? cached
+      : findLastLiveSnapshot(
+          trace,
+          currentStep,
+          currentEvent.func,
+          currentEvent.depth,
+        );
+  const display = resolveDisplayVars(
+    currentEvent,
+    isLiveStep ? null : lastLive,
+  );
 
-  const entries = Object.entries(vars);
+  // Diff base: last LIVE snapshot strictly before this step (carried steps
+  // are excluded from both sides, so holds across blank iters never flash).
+  const prevLive = isLiveStep
+    ? findLastLiveSnapshot(
+        trace,
+        currentStep - 1,
+        currentEvent.func,
+        currentEvent.depth,
+      )
+    : null;
+  const rows = computeRowStates(
+    display,
+    prevLive?.vars ?? null,
+    isLiveStep,
+  );
 
-  // ── Highlight index mapping ─────────────────────────────────────────
-  // For binary search / divide-and-conquer patterns: if the current state
-  // has scalar index variables (mid, lo, hi), find the corresponding array
-  // and compute which index to highlight.
-  const highlightMap = buildHighlightMap(vars);
+  const highlight = buildHighlightMap(display.vars);
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -66,23 +89,30 @@ export function StatePanel() {
           <span className="text-xs text-zinc-500 ml-2">in</span>
           <span className="text-xs font-mono text-zinc-300">{currentEvent.func}()</span>
         </div>
+        {display.carried && display.staleStep !== null && (
+          <div className="text-[11px] text-zinc-600 mt-0.5">
+            showing last state · step {display.staleStep}
+          </div>
+        )}
+        {highlight.caption && (
+          <div className="text-[11px] font-mono text-zinc-500 mt-0.5">
+            {highlight.caption}
+          </div>
+        )}
       </div>
 
       {/* Variable list */}
       <div className="flex-1 overflow-y-auto">
-        {entries.length === 0 ? (
+        {rows.length === 0 ? (
           <div className="px-3 py-2 text-xs text-zinc-600">No variables in scope</div>
         ) : (
-          entries.map(([name, value]) => (
+          rows.map((row) => (
             <VariableRow
-              key={name}
-              name={name}
-              value={value}
-              changed={
-                name in prevVars &&
-                JSON.stringify(prevVars[name]) !== JSON.stringify(value)
-              }
-              highlightIndex={highlightMap[name]}
+              key={row.name}
+              name={row.name}
+              value={row.value}
+              status={row.status}
+              highlightIndex={highlight.map[row.name]}
             />
           ))
         )}
@@ -97,30 +127,6 @@ export function StatePanel() {
       <CallStackView />
     </div>
   );
-}
-
-/**
- * For state events: if scalar index variables (mid, lo, hi) exist alongside
- * array variables, map each array variable to the primary highlight index.
- * Order of preference: mid → lo → hi.
- */
-function buildHighlightMap(vars: Record<string, unknown>): Record<string, number> {
-  const map: Record<string, number> = {};
-
-  // Determine the primary index to highlight
-  let index: number | undefined;
-  if (typeof vars.mid === "number") index = vars.mid as number;
-  else if (typeof vars.lo === "number") index = vars.lo as number;
-  else if (typeof vars.hi === "number") index = vars.hi as number;
-  if (index === undefined) return map;
-
-  // Apply to every 1D array variable in scope (not 2D arrays)
-  for (const [name, value] of Object.entries(vars)) {
-    if (Array.isArray(value) && !(value.length > 0 && Array.isArray(value[0]))) {
-      map[name] = index;
-    }
-  }
-  return map;
 }
 
 function EventBadge({ event }: { event: NonNullable<ReturnType<typeof useTraceStore.getState>["currentEvent"]> }) {

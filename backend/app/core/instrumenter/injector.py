@@ -76,10 +76,13 @@ def _trace_state(point: InjectionPoint, scope: FunctionScope | None) -> str:
 
 
 def _trace_branch(point: InjectionPoint) -> str:
-    cond = point.condition_text.replace("\\", "\\\\").replace('"', '\\"')
+    cond_expr = " ".join(point.condition_text.split())
+    if not cond_expr or cond_expr == "?" or re.fullmatch(r"line \d+", cond_expr):
+        cond_expr = "true"
+    cond = cond_expr.replace("\\", "\\\\").replace('"', '\\"')
     return (
         f'__TRACE_BRANCH({point.line}, "{point.func_name}", {point.depth}, '
-        f'"{cond}", ({point.condition_text}));'
+        f'"{cond}", ({cond_expr}));'
     )
 
 
@@ -88,6 +91,36 @@ def _trace_loop_iter(point: InjectionPoint) -> str:
         f'__TRACE_LOOP_ITER({point.line}, "{point.func_name}", {point.depth}, '
         f'{point.counter_var}++);'
     )
+
+
+def _state_insert_line(point_line: int, lines: list[str]) -> int:
+    """Return the line a __TRACE_STATE call can safely follow.
+
+    STATE is spliced after a line, but if that line is mid-statement (a
+    multi-line if condition, call, or assignment) the splice splits the
+    statement and g++ rejects it. Scan forward while parens/brackets are
+    unbalanced or the line ends mid-expression, stopping at the first
+    statement-complete line (ends with ;, {, or }). Bounded; falls back
+    to point_line. The event keeps point_line for scope lookup and
+    reporting — only the physical placement moves.
+    """
+    n = len(lines)
+    depth = 0
+    k = point_line
+    while k <= n:
+        code = re.sub(r'"(?:\\.|[^"\\])*"', '""', lines[k - 1].split("//")[0])
+        for ch in code:
+            if ch in "([":
+                depth += 1
+            elif ch in ")]":
+                depth -= 1
+        stripped = code.strip()
+        if depth <= 0 and stripped.endswith((";", "{", "}")):
+            return k
+        k += 1
+        if k - point_line > 100:
+            return point_line
+    return point_line
 
 
 def _is_safe_return_expr(expr: str) -> bool:
@@ -236,13 +269,29 @@ def instrument(source: str, source_path: str | None = None) -> str:
                 )
 
         elif point.kind == InjectKind.STATE:
-            line_text = lines[point.line - 1] if point.line <= len(lines) else ""
+            insert_line = _state_insert_line(point.line, lines)
+            line_text = lines[insert_line - 1] if insert_line <= len(lines) else ""
             if "return" in line_text:
+                # R4 (M5): never leave a return-line step snapshot-less. STATE
+                # after a return is unreachable, so snapshot BEFORE it. Reading
+                # vars needs no return-expr evaluation, so no temp var is
+                # needed here; FUNC_EXIT (walker-ordered after STATE) still
+                # handles the return value via the safe-expr/temp-var paths.
+                add_before(point.line, _trace_state(point, scope))
                 continue
-            next_line = lines[point.line].strip() if point.line < len(lines) else ""
+            next_line = lines[insert_line].strip() if insert_line < len(lines) else ""
             if next_line.startswith("else"):
+                # Splicing after this line would split the if/else chain
+                # (compile break). The else branch gets its own STATE points
+                # from the walker over the same parent scope, so snapshot
+                # BEFORE this line (chain-safe) — except when this line is
+                # itself an `else` one-liner, where before-placement splits
+                # the chain too; then skip (else-body STATE covers it).
+                if line_text.lstrip().startswith("else"):
+                    continue
+                add_before(point.line, _trace_state(point, scope))
                 continue
-            add_after(point.line, _trace_state(point, scope))
+            add_after(insert_line, _trace_state(point, scope))
 
         elif point.kind == InjectKind.BRANCH:
             add_before(point.line, _trace_branch(point))

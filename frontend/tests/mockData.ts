@@ -40,11 +40,20 @@ export interface MockBranchEvent {
   taken: boolean;
 }
 
+export interface MockLoopIterEvent {
+  type: "iter";
+  line: number;
+  func: string;
+  depth: number;
+  iteration: number;
+}
+
 export type MockTraceEvent =
   | MockFuncEnterEvent
   | MockFuncExitEvent
   | MockStateEvent
-  | MockBranchEvent;
+  | MockBranchEvent
+  | MockLoopIterEvent;
 
 // ── Step indices (used by visual.spec.ts) ─────────────────────────
 // clang-format off
@@ -185,6 +194,25 @@ export function createCompressedNDJSON(count: number): string {
     });
   }
   events.push({ type: "exit", line: 3, func: "main", depth: 1, return_val: 0 });
+  return buildNDJSON(events, { stdout: "", total_steps: events.length });
+}
+
+/**
+ * NDJSON for a `for (int i = 0; …)` loop over a vector, with blank
+ * `iter` control steps interleaved between live `state` steps.
+ * Step layout: 0 enter, 1 state(i=0), 2 iter, 3 state(i=1),
+ * 4 iter, 5 state(i=2, tmp removed), 6 exit(return 3).
+ */
+export function createForLoopNDJSON(): string {
+  const events: MockTraceEvent[] = [
+    { type: "enter", line: 1, func: "main", depth: 1, params: {} },
+    { type: "state", line: 2, func: "main", depth: 1, vars: { arr: [10, 20, 30], i: 0, tmp: 10 } },
+    { type: "iter", line: 2, func: "main", depth: 1, iteration: 1 },
+    { type: "state", line: 2, func: "main", depth: 1, vars: { arr: [10, 20, 30], i: 1, tmp: 20 } },
+    { type: "iter", line: 2, func: "main", depth: 1, iteration: 2 },
+    { type: "state", line: 3, func: "main", depth: 1, vars: { arr: [10, 99, 30], i: 2 } },
+    { type: "exit", line: 4, func: "main", depth: 1, return_val: 3 },
+  ];
   return buildNDJSON(events, { stdout: "", total_steps: events.length });
 }
 

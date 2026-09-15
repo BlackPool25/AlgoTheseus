@@ -42,6 +42,13 @@ class FunctionScope:
     func_name: str
     # Maps line number → list of ScopeVar visible at that line
     vars_at_line: dict[int, list[ScopeVar]] = field(default_factory=dict)
+    # Pre-declaration snapshot: visible just before the line executes
+    # (a DECL_STMT's own names are NOT in its line's pre set).
+    vars_at_line_pre: dict[int, list[ScopeVar]] = field(default_factory=dict)
+    # Post-declaration snapshot: pre + names declared on the line itself.
+    # STATE injection reads this, so `int x = 5;` captures x. Built only
+    # from decls on that same line — never leaks out-of-scope names.
+    vars_at_line_post: dict[int, list[ScopeVar]] = field(default_factory=dict)
 
 
 class ScopeTracker:
@@ -82,6 +89,8 @@ class ScopeTracker:
             fn = cursor.spelling
             scope = FunctionScope(func_name=fn)
             scopes[fn] = scope
+            # vars_at_line is the pre snapshot (backward-compatible alias).
+            scope.vars_at_line = scope.vars_at_line_pre
 
             # Collect params as scope depth 0
             params: list[ScopeVar] = []
@@ -107,6 +116,58 @@ class ScopeTracker:
         for child in cursor.get_children():
             self._visit(child, scopes)
 
+    def _record_line(
+        self,
+        scope: FunctionScope,
+        line: int,
+        visible: list[ScopeVar],
+    ) -> None:
+        if line not in scope.vars_at_line:
+            scope.vars_at_line[line] = []
+        existing_names = {v.name for v in scope.vars_at_line[line]}
+        for v in visible:
+            if v.name not in existing_names:
+                scope.vars_at_line[line].append(v)
+                existing_names.add(v.name)
+        if line not in scope.vars_at_line_post:
+            scope.vars_at_line_post[line] = list(scope.vars_at_line[line])
+
+    def _add_post_decls(
+        self,
+        scope: FunctionScope,
+        line: int,
+        new_vars: list[ScopeVar],
+    ) -> None:
+        post = scope.vars_at_line_post.setdefault(line, [])
+        by_name = {v.name: i for i, v in enumerate(post)}
+        for v in new_vars:
+            if v.name in by_name:
+                post[by_name[v.name]] = v
+            else:
+                post.append(v)
+
+    def _walk_control_child(
+        self,
+        child: clang.Cursor,
+        scope: FunctionScope,
+        visible: list[ScopeVar],
+        depth: int,
+    ) -> None:
+        if child.kind == clang.CursorKind.COMPOUND_STMT:
+            self._walk_body(child, scope, visible, depth + 1)
+        elif child.kind in (
+            clang.CursorKind.IF_STMT,
+            clang.CursorKind.WHILE_STMT,
+            clang.CursorKind.DO_STMT,
+            clang.CursorKind.FOR_STMT,
+        ):
+            if self._is_user_code(child):
+                self._record_line(scope, child.location.line, visible)
+            for grandchild in child.get_children():
+                self._walk_control_child(grandchild, scope, visible, depth)
+        elif self._is_user_code(child) and child.location.line:
+            self._record_line(scope, child.location.line, visible)
+
     def _walk_body(
         self,
         cursor: clang.Cursor,
@@ -125,31 +186,28 @@ class ScopeTracker:
             if stmt.kind != clang.CursorKind.DECL_STMT and not self._is_user_code(stmt):
                 continue
 
-            # Record what's visible at this line
+            # Record what's visible at this line (pre snapshot; post inits as its copy)
             line = stmt.location.line
-            if line not in scope.vars_at_line:
-                scope.vars_at_line[line] = []
-            # Merge: keep unique names (innermost wins)
-            existing_names = {v.name for v in scope.vars_at_line[line]}
-            for v in visible:
-                if v.name not in existing_names:
-                    scope.vars_at_line[line].append(v)
-                    existing_names.add(v.name)
+            self._record_line(scope, line, visible)
 
-            # Variable declaration → add to visible scope
+            # Variable declaration → add to visible scope + own line's post set
             if stmt.kind == clang.CursorKind.DECL_STMT:
+                new_vars: list[ScopeVar] = []
                 for c in stmt.get_children():
                     if c.kind == clang.CursorKind.VAR_DECL and c.spelling:
                         # Check for shadowing
                         uid = c.spelling
                         if any(v.name == c.spelling for v in visible):
                             uid = f"{c.spelling}_{depth}"
-                        visible.append(ScopeVar(
+                        sv = ScopeVar(
                             name=c.spelling,
                             unique_id=uid,
                             decl_line=c.location.line,
                             scope_depth=depth,
-                        ))
+                        )
+                        visible.append(sv)
+                        new_vars.append(sv)
+                self._add_post_decls(scope, line, new_vars)
 
             # Nested compound statement (if/loop body) → recurse with new scope
             elif stmt.kind == clang.CursorKind.COMPOUND_STMT:
@@ -159,6 +217,7 @@ class ScopeTracker:
             elif stmt.kind == clang.CursorKind.FOR_STMT:
                 # for-loop init vars are scoped to the loop only, not after it.
                 loop_visible = list(visible)
+                loop_new: list[ScopeVar] = []
 
                 # Capture init declarations like: for (int i = 0; ...)
                 for child in stmt.get_children():
@@ -168,46 +227,44 @@ class ScopeTracker:
                                 uid = c.spelling
                                 if any(v.name == c.spelling for v in loop_visible):
                                     uid = f"{c.spelling}_{depth}"
-                                loop_visible.append(ScopeVar(
+                                sv = ScopeVar(
                                     name=c.spelling,
                                     unique_id=uid,
                                     decl_line=c.location.line,
                                     scope_depth=depth,
-                                ))
+                                )
+                                loop_visible.append(sv)
+                                loop_new.append(sv)
                     elif child.kind == clang.CursorKind.VAR_DECL and child.spelling:
                         uid = child.spelling
                         if any(v.name == child.spelling for v in loop_visible):
                             uid = f"{child.spelling}_{depth}"
-                        loop_visible.append(ScopeVar(
+                        sv = ScopeVar(
                             name=child.spelling,
                             unique_id=uid,
                             decl_line=child.location.line,
                             scope_depth=depth,
-                        ))
+                        )
+                        loop_visible.append(sv)
+                        loop_new.append(sv)
 
-                # Ensure loop line records newly added vars
-                line = stmt.location.line
-                if line in scope.vars_at_line:
-                    existing_names = {v.name for v in scope.vars_at_line[line]}
-                    for v in loop_visible:
-                        if v.name not in existing_names:
-                            scope.vars_at_line[line].append(v)
-                            existing_names.add(v.name)
+                # The for line's post set carries the loop vars; outer visible is untouched.
+                self._add_post_decls(scope, line, loop_new)
 
                 # Recurse into loop body with loop-scoped visibility
                 for child in stmt.get_children():
                     if child.kind == clang.CursorKind.COMPOUND_STMT:
                         self._walk_body(child, scope, loop_visible, depth + 1)
 
-            # If/loop → recurse into sub-bodies
+            # If/loop → recurse into sub-bodies (compounds get a new scope,
+            # single-statement bodies share the current one)
             elif stmt.kind in (
                 clang.CursorKind.IF_STMT,
                 clang.CursorKind.WHILE_STMT,
                 clang.CursorKind.DO_STMT,
             ):
                 for child in stmt.get_children():
-                    if child.kind == clang.CursorKind.COMPOUND_STMT:
-                        self._walk_body(child, scope, visible, depth + 1)
+                    self._walk_control_child(child, scope, visible, depth)
 
 
 def build_scope_map(

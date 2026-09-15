@@ -62,7 +62,11 @@ def _trace_exit(point: InjectionPoint) -> str:
     return f'__TRACE_FUNC_EXIT_VOID({point.line}, "{point.func_name}", {point.depth});'
 
 
-def _trace_state(point: InjectionPoint, scope: FunctionScope | None) -> str:
+def _trace_state(
+    point: InjectionPoint,
+    scope: FunctionScope | None,
+    global_vars: list[str] | None = None,
+) -> str:
     # Post-declaration snapshot: a STATE after `int x = 5;` sees x.
     var_names = list(point.var_names)
     if scope:
@@ -71,8 +75,19 @@ def _trace_state(point: InjectionPoint, scope: FunctionScope | None) -> str:
             if v.name not in var_names:
                 var_names.append(v.name)
     vars_args = _make_vars_args(var_names)
-    sep = ", " if vars_args else ""
-    return f'__TRACE_STATE({point.line}, "{point.func_name}", {point.depth}{sep}{vars_args});'
+    # Globals shadowed by a same-named local read as the local — drop them
+    # from the globals pack so `g` never mislabels a local value.
+    g_names = [g for g in (global_vars or []) if g not in var_names]
+    if not g_names:
+        sep = ", " if vars_args else ""
+        return f'__TRACE_STATE({point.line}, "{point.func_name}", {point.depth}{sep}{vars_args});'
+    # Commas inside __vars_build(...) are paren-protected, so _G takes 5 args.
+    v_json = f"__vars_build({vars_args})" if vars_args else "__vars_build()"
+    g_json = f"__vars_build({_make_vars_args(g_names)})"
+    return (
+        f'__TRACE_STATE_G({point.line}, "{point.func_name}", {point.depth}, '
+        f"{v_json}, {g_json});"
+    )
 
 
 def _trace_branch(point: InjectionPoint) -> str:
@@ -242,7 +257,7 @@ def instrument(source: str, source_path: str | None = None) -> str:
             next_line = lines[point.line].strip() if point.line < len(lines) else ""
             if next_line.startswith("else"):
                 continue
-            add_after(point.line, _trace_state(point, scope))
+            add_after(point.line, _trace_state(point, scope, walk_result.global_vars))
 
         elif point.kind == InjectKind.BRANCH:
             add_before(point.line, _trace_branch(point))

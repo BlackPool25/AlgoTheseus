@@ -21,22 +21,37 @@ interface BaseEvent {
 export interface FuncEnterEvent extends BaseEvent {
   type: "enter";
   params: Record<string, unknown>;
+  // v2 additive-only: all optional, absent on v1 traces
+  step_desc?: string | null;
 }
 
 export interface FuncExitEvent extends BaseEvent {
   type: "exit";
   return_val: unknown;
+  // v2 additive-only
+  step_desc?: string | null;
+  return_line?: number | null;
 }
 
 export interface StateEvent extends BaseEvent {
   type: "state";
   vars: Record<string, unknown>;
+  // v2 additive-only (stdout capped at 64KB per-event; see docs/trace-schema-v2.md)
+  stdout?: string | null;
+  stdout_truncated?: boolean;
+  globals?: Record<string, unknown> | null;
+  step_desc?: string | null;
+  prev_line?: number | null;
+  heap?: Record<string, unknown> | null;
 }
 
 export interface BranchEvent extends BaseEvent {
   type: "branch";
   condition: string;
   taken: boolean;
+  // v2 additive-only
+  ops?: string[] | null;
+  step_desc?: string | null;
 }
 
 export interface LoopIterEvent extends BaseEvent {

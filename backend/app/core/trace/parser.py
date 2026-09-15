@@ -39,6 +39,14 @@ logger = logging.getLogger(__name__)
 # TypeAdapter lets us validate a discriminated union without a wrapper model
 _event_adapter: TypeAdapter[TraceEvent] = TypeAdapter(TraceEvent)  # type: ignore[type-arg]
 
+# T7 adaptive cumulative stdout (engine-agnostic "o" protocol — see
+# docs/trace-schema-v2.md): the tracer (Docker-local now, WASM shim later)
+# emits "o" = bytes printed since the previous event. The parser accumulates
+# those transport deltas into cumulative per-STATE stdout. No engine
+# specifics here — only the "o" field contract.
+_STDOUT_CAP_BYTES = 65536  # 64 KB per-event cap, UTF-8 code-point safe
+_ADAPTIVE_STEP_THRESHOLD = 2000  # >2000 steps: stdout on loop-boundary STATEs only
+
 
 def parse(raw_lines: list[str], compressed: bool = False) -> list[Any]:
     """Parse raw TRACE: JSON lines into a list of typed TraceEvent objects.
@@ -56,6 +64,7 @@ def parse(raw_lines: list[str], compressed: bool = False) -> list[Any]:
         Malformed lines are skipped with a warning.
     """
     events: list[Any] = []
+    deltas: list[str | None] = []  # parallel "o" transport deltas (None = v1 absent)
 
     for i, line in enumerate(raw_lines):
         line = line.strip()
@@ -70,6 +79,8 @@ def parse(raw_lines: list[str], compressed: bool = False) -> list[Any]:
         try:
             event = _event_adapter.validate_python(data)
             events.append(event)
+            o = data.get("o")
+            deltas.append(o if isinstance(o, str) else None)
         except ValidationError as e:
             logger.warning("Skipping invalid trace event at line %d: %s — %s", i, data, e)
             continue
@@ -90,6 +101,10 @@ def parse(raw_lines: list[str], compressed: bool = False) -> list[Any]:
                 call_stack.pop(idx)
         else:
             event.depth = len(call_stack) - 1 if call_stack else 0
+
+    # Accumulate "o" transport deltas into cumulative per-STATE stdout
+    # (adaptive granularity + 64KB cap per docs/trace-schema-v2.md).
+    _apply_incremental_stdout(events, deltas)
 
     # Synthesize per-step explanations (pure, never raises).
     for event in events:
@@ -144,6 +159,62 @@ def frames_at_step(events: list[Any]) -> list[list[StackFrame]]:
 def stack_to_render(events: list[Any], step: int) -> list[StackFrame]:
     """Live frames to render at a single step (slice of ``frames_at_step``)."""
     return frames_at_step(events)[step]
+
+
+def _cap_stdout(text: str) -> tuple[str, bool]:
+    """Cap cumulative stdout at 64KB (UTF-8 code-point safe)."""
+    raw = text.encode("utf-8")
+    if len(raw) <= _STDOUT_CAP_BYTES:
+        return text, False
+    return raw[:_STDOUT_CAP_BYTES].decode("utf-8", errors="ignore"), True
+
+
+def _apply_incremental_stdout(events: list[Any], deltas: list[str | None]) -> None:
+    """Fold per-event "o" deltas into cumulative STATE stdout in place.
+
+    Absent everywhere → v1 trace, stdout stays None. Present (even "") →
+    every STATE gets the cumulative output (small traces) or, for traces
+    over the adaptive threshold, only loop-boundary STATEs do: a STATE
+    next to the first/last ITER of its source line, plus the final STATE
+    (loop-exit / program-end snapshot). Transport "o" is stripped from
+    non-STATE events so only STATE carries stdout on the wire.
+    """
+    if not any(d is not None for d in deltas):
+        return
+
+    boundary: set[int] | None = None
+    if len(events) > _ADAPTIVE_STEP_THRESHOLD:
+        first_iter: dict[int, int] = {}
+        last_iter: dict[int, int] = {}
+        for i, event in enumerate(events):
+            if event.type == EventType.LOOP_ITER:
+                first_iter.setdefault(event.line, i)
+                last_iter[event.line] = i
+        edge_iters = set(first_iter.values()) | set(last_iter.values())
+        state_indices = [i for i, e in enumerate(events)
+                         if e.type == EventType.STATE]
+        boundary = {state_indices[-1]} if state_indices else set()
+        for i in state_indices:
+            if (i - 1) in edge_iters or (i + 1) in edge_iters:
+                boundary.add(i)
+
+    cumulative = ""
+    for i, event in enumerate(events):
+        d = deltas[i]
+        if d:
+            cumulative += d
+        if event.type == EventType.STATE:
+            if boundary is None or i in boundary:
+                capped, truncated = _cap_stdout(cumulative)
+                event.stdout = capped
+                event.stdout_truncated = truncated
+            else:
+                event.stdout = None
+                event.stdout_truncated = False
+        else:
+            extra = getattr(event, "__pydantic_extra__", None)
+            if isinstance(extra, dict):
+                extra.pop("o", None)
 
 
 def _compress_state_events(events: list[Any]) -> list[Any]:

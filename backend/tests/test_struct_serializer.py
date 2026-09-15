@@ -134,6 +134,30 @@ int main() {
     assert a["$addr"] == b["$addr"]
 
 
+def test_instrument_without_path_emits_serializers():
+    """Production path: instrument() with NO source_path (as execute.py
+    calls it) still generates struct serializers."""
+    import tempfile as _tf
+
+    from app.core.instrumenter.injector import instrument
+
+    before = set(Path(_tf.gettempdir()).glob("tmp*.cpp"))
+    src = TREENODE + "int main(){TreeNode t{1,nullptr,nullptr};return t.val;}\n"
+    out = instrument(src)  # no source_path — the production call shape
+    assert "__serialize_TreeNode" in out
+    assert set(Path(_tf.gettempdir()).glob("tmp*.cpp")) == before  # no leftovers
+
+
+def test_instrument_without_path_structless_ok():
+    """Struct-less source with no path still instruments (no serializers,
+    no crash)."""
+    from app.core.instrumenter.injector import instrument
+
+    out = instrument("int main(){return 0;}\n")
+    assert "__serialize_" not in out
+    assert '#include "tracer.h"' in out
+
+
 def test_instrumented_fixture_trace_carries_id_ref_addr():
     """End-to-end: injector.instrument() on the linked_list fixture compiles
     and its TRACE state values carry $id/$ref + $addr (proves end-of-file

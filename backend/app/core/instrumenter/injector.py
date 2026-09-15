@@ -334,7 +334,27 @@ def instrument(source: str, source_path: str | None = None) -> str:
     try:
         from . import serializer_gen as _serializer_gen
 
-        output.append(_serializer_gen.generate_serializers(source_path))
+        # Production callers (execute.py) pass no source_path, and the walk
+        # temp file is already unlinked above — materialize source to a real
+        # .cpp file so libclang can parse it. Best-effort: any failure here
+        # degrades to the $addr fallback exactly as before.
+        _gen_path = source_path
+        _gen_tmp = None
+        try:
+            if _gen_path is None or not Path(_gen_path).is_file():
+                _gen_tmp = tempfile.NamedTemporaryFile(
+                    suffix=".cpp", mode="w", delete=False, encoding="utf-8"
+                )
+                _gen_tmp.write(source)
+                _gen_tmp.flush()
+                _gen_path = _gen_tmp.name
+            output.append(_serializer_gen.generate_serializers(_gen_path))
+        finally:
+            if _gen_tmp is not None:
+                try:
+                    Path(_gen_tmp.name).unlink(missing_ok=True)
+                except Exception:
+                    pass
     except Exception:
         logger.debug("serializer_gen hookup skipped", exc_info=True)
 

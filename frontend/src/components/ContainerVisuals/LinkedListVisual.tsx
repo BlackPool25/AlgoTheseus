@@ -50,16 +50,16 @@ function ArrowDefs() {
   return (
     <defs>
       <marker id="ll-forward" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
-        <path d="M0,0 L0,6 L8,3 Z" fill="#52525b" />
+        <path d="M0,0 L0,6 L8,3 Z" fill="var(--viz-panel-border)" />
       </marker>
       <marker id="ll-backward" markerWidth="6" markerHeight="5" refX="5" refY="2.5" orient="auto">
-        <path d="M6,0 L6,5 L0,2.5 Z" fill="#52525b" />
+        <path d="M6,0 L6,5 L0,2.5 Z" fill="var(--viz-panel-border)" />
       </marker>
       <marker id="ll-cycle-arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
-        <path d="M0,0 L0,6 L8,3 Z" style={{ fill: "var(--viz-exception, #ef4444)" }} />
+        <path d="M0,0 L0,6 L8,3 Z" style={{ fill: "var(--viz-exception)" }} />
       </marker>
       <marker id="ll-highlight-arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
-        <path d="M0,0 L0,6 L8,3 Z" style={{ fill: "var(--viz-flash, #f59e0b)" }} />
+        <path d="M0,0 L0,6 L8,3 Z" style={{ fill: "var(--viz-flash)" }} />
       </marker>
     </defs>
   );
@@ -291,7 +291,7 @@ export function LinkedListVisual({ value, name, currentAddr }: Props) {
                   y1={y + NODE_H + 4}
                   x2={x - 16}
                   y2={y + NODE_H + 4}
-                  stroke="#52525b"
+                  stroke="var(--viz-panel-border)"
                   strokeWidth={1}
                   markerEnd="url(#ll-backward)"
                 />
@@ -313,10 +313,10 @@ export function LinkedListVisual({ value, name, currentAddr }: Props) {
                 }
                 style={{
                   stroke: node.cycleTargetId
-                    ? "var(--viz-exception, #ef4444)"
+                    ? "var(--viz-exception)"
                     : isHighlighted
-                      ? "var(--viz-flash, #f59e0b)"
-                      : "#52525b",
+                      ? "var(--viz-flash)"
+                      : "var(--viz-panel-border)",
                 }}
                 markerEnd={
                   node.cycleTargetId
@@ -346,7 +346,7 @@ export function LinkedListVisual({ value, name, currentAddr }: Props) {
                     fill="none"
                     strokeWidth={1.5}
                     strokeDasharray="4 3"
-                    style={{ stroke: "var(--viz-exception, #ef4444)" }}
+                    style={{ stroke: "var(--viz-exception)" }}
                     markerEnd="url(#ll-cycle-arrow)"
                   />
                 );
@@ -405,7 +405,7 @@ export function LinkedListVisual({ value, name, currentAddr }: Props) {
                       cy={y - 6}
                       r={10}
                       className="drop-shadow-sm"
-                      style={{ fill: "var(--viz-exception, #ef4444)" }}
+                      style={{ fill: "var(--viz-exception)" }}
                     />
                     <text
                       x={x + NODE_W - 10}

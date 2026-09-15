@@ -10,6 +10,8 @@ import { useContainerType } from "../../hooks/useContainerType";
 import { VISUAL_REGISTRY } from "../ContainerVisuals/registry";
 import { ErrorBoundary } from "../ContainerVisuals/ErrorBoundary";
 import type { HeapDiffShape } from "../ContainerVisuals/HeapPanel";
+import { diffIndices, diffKeys, diffMembers } from "../ContainerVisuals/flash";
+import { trieNodeIds } from "../ContainerVisuals/TrieVisual";
 import { renderCellValue } from "../../utils/format";
 
 
@@ -141,9 +143,69 @@ function ValueVisual({ name, value, kind, highlightIndex, heap, heapDiff, prevVa
       }
     }
   }
+  if ((kind === "vector" || kind === "stack" || kind === "queue" || kind === "priority_queue") && prevValue !== undefined) {
+    const currItems = stackQueueItems(value);
+    if (currItems) {
+      // Envelope idioms (render-spec §2): length change flashes the
+      // boundary cell only (new top / new tail / new front), never the
+      // shifted body; same-length steps diff cell-by-cell (sift-swap pair).
+      const prevItems = stackQueueItems(prevValue);
+      if (prevItems && prevItems.length !== currItems.length) {
+        const grown = currItems.length > prevItems.length;
+        if (kind === "queue" || kind === "priority_queue") {
+          extra.changedIndices = [grown ? currItems.length - 1 : 0];
+        } else {
+          extra.changedIndices = [0];
+        }
+      } else {
+        const changed = diffIndices(prevItems ?? null, currItems);
+        if (changed.length > 0) extra.changedIndices = changed;
+      }
+    } else if (Array.isArray(value)) {
+      const changed = diffIndices(prevValue, value);
+      if (changed.length > 0) extra.changedIndices = changed;
+    }
+  }
+  if (kind === "map" && prevValue !== undefined && value && typeof value === "object" && !Array.isArray(value)) {
+    const changed = diffKeys(prevValue, value as Record<string, unknown>);
+    if (changed.length > 0) extra.changedKeys = changed;
+  }
+  if (kind === "set" && prevValue !== undefined) {
+    const currItems = setItems(value);
+    if (currItems) {
+      const prevItems = setItems(prevValue);
+      const added = diffMembers(prevItems ?? null, currItems);
+      if (added.length > 0) extra.changedMembers = added;
+    }
+  }
+  if (kind === "trie" && prevValue !== undefined && value && typeof value === "object") {
+    const before = trieNodeIds(prevValue as Record<string, unknown>);
+    if (before.size > 0) {
+      const now = trieNodeIds(value as Record<string, unknown>);
+      const created = [...now].filter((id) => !before.has(id));
+      if (created.length > 0) extra.createdIds = created;
+    }
+  }
   return (
     <ErrorBoundary>
       <Component value={value} name={name} highlightIndex={highlightIndex} {...extra} />
     </ErrorBoundary>
   );
+}
+
+/** items array of a { top/front, items } envelope, or null. */
+function stackQueueItems(value: unknown): unknown[] | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const items = (value as Record<string, unknown>).items;
+  return Array.isArray(items) ? items : null;
+}
+
+/** items array of a set value (plain array or { _type: "set", items }). */
+function setItems(value: unknown): unknown[] | null {
+  if (Array.isArray(value)) return value;
+  if (value && typeof value === "object") {
+    const items = (value as Record<string, unknown>).items;
+    if (Array.isArray(items)) return items;
+  }
+  return null;
 }

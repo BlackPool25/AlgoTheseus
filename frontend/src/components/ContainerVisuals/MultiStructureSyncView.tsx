@@ -321,7 +321,7 @@ export function MultiStructureSyncView({
                   className="border rounded bg-viz-body/30 overflow-hidden mx-px"
                   style={{
                     borderColor: flashFor(def.value)
-                      ? "var(--viz-flash, #f59e0b)"
+                      ? "var(--viz-flash)"
                       : "rgba(63, 63, 70, 0.5)",
                   }}
                 >
@@ -361,7 +361,7 @@ export function MultiStructureSyncView({
                 className="border rounded bg-viz-body/30 overflow-hidden"
                 style={{
                   borderColor: flashFor(def.value)
-                    ? "var(--viz-flash, #f59e0b)"
+                    ? "var(--viz-flash)"
                     : "rgba(63, 63, 70, 0.5)",
                 }}
               >
@@ -387,7 +387,7 @@ export function MultiStructureSyncView({
             className="border rounded bg-viz-body/30 overflow-hidden"
             style={{
               borderColor: flashFor(structures[0].value)
-                ? "var(--viz-flash, #f59e0b)"
+                ? "var(--viz-flash)"
                 : "rgba(63, 63, 70, 0.5)",
             }}
           >
@@ -420,7 +420,7 @@ export function MultiStructureSyncView({
                 refY="3"
                 orient="auto-start-reverse"
               >
-                <path d="M0,0 L0,6 L6,3 z" fill="#3b82f6" />
+                <path d="M0,0 L0,6 L6,3 z" fill="var(--viz-alias-edge)" />
               </marker>
             </defs>
             {connectorLines.map((line, i) => (
@@ -430,7 +430,7 @@ export function MultiStructureSyncView({
                   y1={line.y1}
                   x2={line.x2}
                   y2={line.y2}
-                  stroke="#3b82f6"
+                  stroke="var(--viz-alias-edge)"
                   strokeWidth={1.5}
                   strokeDasharray="4 2"
                   markerEnd="url(#multi-conn-arrow)"
@@ -443,7 +443,7 @@ export function MultiStructureSyncView({
                     textAnchor="middle"
                     fontSize={9}
                     fontFamily="monospace"
-                    style={{ fill: "var(--viz-alias-edge, #a1a1aa)" }}
+                    style={{ fill: "var(--viz-alias-edge)" }}
                   >
                     {line.label}
                   </text>

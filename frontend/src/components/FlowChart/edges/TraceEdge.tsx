@@ -43,9 +43,9 @@ export function TraceEdge({
         path={edgePath}
         markerEnd={markerEnd}
         style={{
-          stroke: isActive ? "var(--viz-accent, #f59e0b)" : "#52525b",
+          stroke: isActive ? "var(--viz-accent)" : "var(--viz-panel-border)",
           strokeWidth: isActive ? 2 : 1.5,
-          filter: isActive ? "drop-shadow(0 0 4px color-mix(in srgb, var(--viz-accent, #f59e0b) 53%, transparent))" : undefined,
+          filter: isActive ? "drop-shadow(0 0 4px color-mix(in srgb, var(--viz-accent) 53%, transparent))" : undefined,
           transition: "stroke 0.2s, stroke-width 0.2s",
         }}
       />

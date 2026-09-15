@@ -441,9 +441,9 @@ export function MultiStructureSyncView({
                     x={(line.x1 + line.x2) / 2}
                     y={(line.y1 + line.y2) / 2 - 6}
                     textAnchor="middle"
-                    fill="#a1a1aa"
                     fontSize={9}
                     fontFamily="monospace"
+                    style={{ fill: "var(--viz-alias-edge, #a1a1aa)" }}
                   >
                     {line.label}
                   </text>

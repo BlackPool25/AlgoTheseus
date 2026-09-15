@@ -17,9 +17,11 @@
  *   3. User scrubs through the trace.
  */
 
+import { useState } from "react";
 import { useCFGStore } from "./store/cfgStore";
 import { useTraceStore } from "./store/traceStore";
 import { useUIStore } from "./store/uiStore";
+import { THEMES, applyTheme, currentTheme, type ThemeName } from "./theme";
 import { streamExecute } from "./utils/api";
 import type { StreamCallbacks } from "./utils/api";
 import { CodeEditor } from "./components/Editor/CodeEditor";
@@ -41,6 +43,7 @@ export default function App() {
     runtimeError,
   } = useUIStore();
   const { reset } = useUIStore();
+  const [theme, setTheme] = useState<ThemeName>(() => currentTheme());
   const trace = useTraceStore((s) => s.trace);
   // Per-step stdout present → ProgramOutputBox owns output; else static banner.
   const hasPerStepStdout = trace.some(
@@ -106,6 +109,18 @@ export default function App() {
           <span className="text-xs bg-zinc-800 text-zinc-400 px-2 py-0.5 rounded font-mono">C++ · libclang</span>
         </div>
         <div className="flex items-center gap-2">
+          <select
+            aria-label="Theme"
+            value={theme}
+            onChange={(e) => setTheme(applyTheme(e.target.value))}
+            className="text-xs bg-zinc-800 text-zinc-400 px-2 py-1 rounded font-mono"
+          >
+            {THEMES.map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
+          </select>
           {status === "done" && (
             <button
               onClick={() => { reset(); useTraceStore.getState().reset(); useCFGStore.getState().reset(); }}

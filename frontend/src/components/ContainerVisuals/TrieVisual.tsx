@@ -251,7 +251,7 @@ function TrieNodeSVG({
   const stroke = node.isRoot
     ? "#a78bfa"               // violet-400 for root
     : isHighlighted
-      ? "#f59e0b"             // amber-500 for highlight
+      ? "var(--viz-flash, #f59e0b)"   // highlight — mutation-flash token
       : node.isEnd
         ? "#3b82f6"           // blue-500 for word-end
         : "#78716c";           // zinc-500 default
@@ -274,17 +274,15 @@ function TrieNodeSVG({
     >
       <circle
         r={r}
-        fill={fill}
-        stroke={stroke}
         strokeWidth={strokeW}
+        style={{ fill, stroke }}
       />
       <text
         textAnchor="middle"
         dominantBaseline="middle"
-        fill={textFill}
         fontSize={FONT_SIZE}
         fontFamily="monospace"
-        style={{ pointerEvents: "none" }}
+        style={{ pointerEvents: "none", fill: textFill }}
       >
         {node.char.length > 3 ? node.char.slice(0, 3) : node.char}
       </text>
@@ -297,17 +295,17 @@ function TrieNodeSVG({
             width={28}
             height={16}
             rx={3}
-            fill="#27272a"
             stroke="#52525b"
             strokeWidth={1}
+            style={{ fill: "var(--viz-panel-bg, #27272a)" }}
           />
           <text
             x={r + 18}
             y={2}
             textAnchor="middle"
-            fill="#a1a1aa"
             fontSize={8}
             fontFamily="monospace"
+            style={{ fill: "var(--viz-alias-edge, #a1a1aa)" }}
           >
             +{node.overflowCount > 99 ? "99+" : node.overflowCount}
           </text>
@@ -338,8 +336,8 @@ function TrieEdgeSVG({
       <line
         x1={edge.x1} y1={edge.y1}
         x2={edge.x2} y2={edge.y2}
-        stroke={isHighlighted ? "#f59e0b" : "#52525b"}
         strokeWidth={isHighlighted ? 2 : 1.5}
+        style={{ stroke: isHighlighted ? "var(--viz-flash, #f59e0b)" : "#52525b" }}
       />
       {/* Edge label background */}
       <rect
@@ -348,18 +346,17 @@ function TrieEdgeSVG({
         width={16}
         height={14}
         rx={2}
-        fill="#18181b"
         opacity={0.85}
+        style={{ fill: "var(--viz-body-bg, #18181b)" }}
       />
       <text
         x={midX}
         y={midY + 1}
         textAnchor="middle"
         dominantBaseline="middle"
-        fill={isHighlighted ? "#fbbf24" : "#a1a1aa"}
         fontSize={9}
         fontFamily="monospace"
-        style={{ pointerEvents: "none" }}
+        style={{ pointerEvents: "none", fill: isHighlighted ? "#fbbf24" : "var(--viz-alias-edge, #a1a1aa)" }}
       >
         {edge.label}
       </text>

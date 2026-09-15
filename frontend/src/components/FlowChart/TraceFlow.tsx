@@ -205,11 +205,11 @@ export function TraceFlow() {
         activeId={activeId}
         flowNodes={flowNodes}
       />
-      <Background color="#27272a" gap={16} />
+      <Background color="var(--viz-panel-bg, #27272a)" gap={16} />
       <MiniMap
-        nodeColor={(node) => (node.data?.isActive ? '#f59e0b' : '#52525b')}
+        nodeColor={(node) => (node.data?.isActive ? 'var(--viz-accent, #f59e0b)' : '#52525b')}
         maskColor="rgba(0,0,0,0.7)"
-        style={{ background: '#18181b' }}
+        style={{ background: 'var(--viz-body-bg, #18181b)' }}
         pannable
         zoomable
       />

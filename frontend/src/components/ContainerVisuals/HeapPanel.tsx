@@ -166,8 +166,8 @@ export function HeapPanel({ heap, heapDiff, vars }: Props) {
                   onMouseLeave={() => setHoveredId((cur) => (cur === id ? null : cur))}
                   className="rounded border px-2 py-1 font-mono text-[11px]"
                   style={{
-                    borderColor: flashed ? "var(--viz-flash, #f59e0b)" : highlighted ? "var(--viz-alias-edge, #a1a1aa)" : "#3f3f46",
-                    backgroundColor: flashed ? "rgba(245, 158, 11, 0.12)" : "#27272a",
+                    borderColor: flashed ? "var(--viz-flash, #f59e0b)" : highlighted ? "var(--viz-alias-edge, #a1a1aa)" : "var(--viz-panel-border, #3f3f46)",
+                    backgroundColor: flashed ? "rgba(245, 158, 11, 0.12)" : "var(--viz-panel-bg, #27272a)",
                     boxShadow: flashed ? "0 0 6px rgba(245, 158, 11, 0.4)" : undefined,
                   }}
                 >

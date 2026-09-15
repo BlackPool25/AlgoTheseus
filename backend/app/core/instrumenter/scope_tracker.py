@@ -17,11 +17,14 @@ Gotcha: We assign unique IDs to variables with the same name in nested scopes
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from pathlib import Path
 import os
+from dataclasses import dataclass, field
 
 import clang.cindex as clang
+
+from app.core.instrumenter import _libclang_compat
+
+_libclang_compat.ensure_libclang()
 
 
 @dataclass

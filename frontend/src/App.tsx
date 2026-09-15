@@ -17,6 +17,7 @@
  *   3. User scrubs through the trace.
  */
 
+import { useRef, useState } from "react";
 import { useCFGStore } from "./store/cfgStore";
 import { useTraceStore } from "./store/traceStore";
 import { useUIStore } from "./store/uiStore";
@@ -28,6 +29,14 @@ import { TestCaseManager } from "./components/Editor/TestCaseManager";
 import { TraceScrubber } from "./components/Scrubber/TraceScrubber";
 import { StatePanel } from "./components/StatePanel/StatePanel";
 import { TraceFlow } from "./components/FlowChart/TraceFlow";
+import { Splitter } from "./components/Layout/Splitter";
+
+const MIN_EDITOR_W = 320;
+const MIN_CFG_W = 320;
+const MIN_STATE_W = 220;
+const MAX_STATE_W = 480;
+const MIN_INPUT_H = 140;
+const MIN_EDITOR_H = 200;
 
 export default function App() {
   const {
@@ -77,6 +86,42 @@ export default function App() {
 
   const isLoading = status === "executing";
 
+  const mainRef = useRef<HTMLDivElement>(null);
+  const leftColRef = useRef<HTMLDivElement>(null);
+
+  // null = default size (first paint matches the old fixed layout).
+  const [leftW, setLeftW] = useState<number | null>(null);
+  const [inputH, setInputH] = useState<number | null>(null);
+  const [stateW, setStateW] = useState<number | null>(null);
+
+  const mainW = () => mainRef.current?.clientWidth ?? window.innerWidth;
+
+  const dragLeft = (dx: number) => {
+    setLeftW((prev) => {
+      const cur = prev ?? (leftColRef.current?.clientWidth || 0);
+      const max = mainW() - MIN_CFG_W - MIN_STATE_W - 8;
+      return Math.min(Math.max(cur + dx, MIN_EDITOR_W), Math.max(max, MIN_EDITOR_W));
+    });
+  };
+
+  const dragInput = (_dx: number, dy: number) => {
+    setInputH((prev) => {
+      const colH = leftColRef.current?.clientHeight ?? window.innerHeight;
+      const cur = prev ?? 360;
+      const max = colH - MIN_EDITOR_H;
+      return Math.min(Math.max(cur - dy, MIN_INPUT_H), Math.max(max, MIN_INPUT_H));
+    });
+  };
+
+  const dragState = (dx: number) => {
+    setStateW((prev) => {
+      const cur = prev ?? 260;
+      const rightW = mainW() - (leftColRef.current?.clientWidth || 0);
+      const max = Math.min(MAX_STATE_W, rightW - MIN_CFG_W - 8);
+      return Math.min(Math.max(cur - dx, MIN_STATE_W), Math.max(max, MIN_STATE_W));
+    });
+  };
+
   return (
     <div className="flex flex-col h-screen bg-zinc-950 text-zinc-100">
       {/* Header */}
@@ -105,13 +150,21 @@ export default function App() {
       </header>
 
       {/* Main content */}
-      <div className="flex flex-1 overflow-hidden">
+      <div ref={mainRef} className="flex flex-1 overflow-hidden">
         {/* Left panel: editor + input */}
-        <div className="flex flex-col w-[45%] border-r border-zinc-800">
-          <div className="flex-1 overflow-hidden">
+        <div
+          ref={leftColRef}
+          className="flex flex-col shrink-0 min-w-0 overflow-hidden"
+          style={{ width: leftW ?? "45%" }}
+        >
+          <div className="flex-1 min-h-0 overflow-hidden">
             <CodeEditor />
           </div>
-          <div className="h-[360px] border-t border-zinc-800 flex flex-col">
+          <Splitter direction="horizontal" onDrag={dragInput} label="Resize input area" />
+          <div
+            className="flex flex-col shrink-0 overflow-hidden"
+            style={{ height: inputH ?? 360 }}
+          >
             <div className="flex-1 overflow-y-auto p-3 border-b border-zinc-800">
               <InputPanel />
             </div>
@@ -121,14 +174,20 @@ export default function App() {
           </div>
         </div>
 
+        <Splitter direction="vertical" onDrag={dragLeft} label="Resize editor area" />
+
         {/* Right panel: CFG + state */}
-        <div className="flex flex-1 overflow-hidden">
+        <div className="flex flex-1 min-w-0 overflow-hidden">
           {/* CFG */}
-          <div className="flex-1 overflow-hidden">
+          <div className="flex-1 min-w-0 overflow-hidden">
             <TraceFlow />
           </div>
+          <Splitter direction="vertical" onDrag={dragState} label="Resize state panel" />
           {/* State panel */}
-          <div className="w-[260px] border-l border-zinc-800 overflow-hidden">
+          <div
+            className="shrink-0 overflow-hidden"
+            style={{ width: stateW ?? 260 }}
+          >
             <StatePanel />
           </div>
         </div>

@@ -95,6 +95,18 @@ std::string __ser(const std::vector<T>& v) {
     return out + "]";
 }
 
+// vector<bool> is bit-packed: v[i] returns a proxy, not bool&.
+// The generic template resolves it via operator bool(), but spell it out
+// so proxy quirks on other toolchains can't pick the wrong overload.
+inline std::string __ser(const std::vector<bool>& v) {
+    std::string out = "[";
+    for (size_t i = 0; i < v.size(); ++i) {
+        if (i) out += ",";
+        out += __ser(static_cast<bool>(v[i]));
+    }
+    return out + "]";
+}
+
 template<typename T>
 std::string __ser(const std::vector<std::vector<T>>& v) {
     bool jagged = !v.empty() && [&]{
@@ -112,6 +124,18 @@ std::string __ser(const std::vector<std::vector<T>>& v) {
         }
         return out + "]}";
     }
+    std::string out = "{\"_type\":\"dp_table\",\"data\":[";
+    for (size_t i = 0; i < v.size(); ++i) {
+        if (i) out += ",";
+        out += __ser(v[i]);
+    }
+    return out + "]}";
+}
+
+// Rectangular bool tables use the dp_table shape; rows reuse the
+// vector<bool> overload above. (Jagged bool tables render as plain
+// arrays via that overload — no separate graph-shape special case.)
+inline std::string __ser(const std::vector<std::vector<bool>>& v) {
     std::string out = "{\"_type\":\"dp_table\",\"data\":[";
     for (size_t i = 0; i < v.size(); ++i) {
         if (i) out += ",";

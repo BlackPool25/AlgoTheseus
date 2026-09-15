@@ -17,6 +17,7 @@ import { useMemo, useState, useCallback } from "react";
 import {
   useVirtualizedList,
 } from "../../hooks/useVirtualizedList";
+import { renderCellValue } from "../../utils/format";
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
@@ -37,9 +38,11 @@ const MAX_LIST_HEIGHT = 400;
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
+type CellValue = number | boolean | string;
+
 export interface DPTableMeta {
   _type?: "dp_table";
-  data: number[][];
+  data: CellValue[][];
   current_cell?: [number, number];
   formula?: string;
   dependencies?: [number, number][];
@@ -48,7 +51,7 @@ export interface DPTableMeta {
 }
 
 interface Props {
-  value: DPTableMeta | number[][] | number[];
+  value: DPTableMeta | CellValue[][] | CellValue[];
   name: string;
 }
 
@@ -61,17 +64,17 @@ interface ArrowDesc {
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 
-function is2DArray(v: unknown): v is number[][] {
+function is2DArray(v: unknown): v is CellValue[][] {
   return Array.isArray(v) && v.length > 0 && Array.isArray(v[0]);
 }
 
-function is1DArray(v: unknown): v is number[] {
+function is1DArray(v: unknown): v is CellValue[] {
   return Array.isArray(v) && v.length > 0 && !Array.isArray(v[0]);
 }
 
 /** Normalize the input value into a consistent shape for rendering. */
 function normalizeTable(value: Props["value"]): {
-  data: number[][];
+  data: CellValue[][];
   rows: number;
   cols: number;
   currentCell: [number, number] | null;
@@ -80,7 +83,7 @@ function normalizeTable(value: Props["value"]): {
   rowLabels: string[];
   colLabels: string[];
 } {
-  let data: number[][];
+  let data: CellValue[][];
   let currentCell: [number, number] | null = null;
   let formula = "";
   let dependencies: [number, number][] = [];
@@ -231,7 +234,7 @@ export function DPTableVisual({ value, name }: Props) {
   }
 
   // ── Render a single cell ──
-  function Cell({ r, c, val }: { r: number; c: number; val: number }) {
+  function Cell({ r, c, val }: { r: number; c: number; val: CellValue }) {
     const isCurrent = isCurrentCell(r, c);
     const isDep = isDepCell(r, c);
     const isHovered =
@@ -249,6 +252,9 @@ export function DPTableVisual({ value, name }: Props) {
     } else if (isHovered) {
       cellClass +=
         " border-zinc-500 bg-zinc-700 text-zinc-200";
+    } else if (val === true) {
+      cellClass +=
+        " border-emerald-500 bg-emerald-500/10 text-emerald-300";
     } else {
       cellClass +=
         " border-zinc-600 bg-zinc-800 text-zinc-200";
@@ -259,9 +265,9 @@ export function DPTableVisual({ value, name }: Props) {
         className={cellClass}
         onMouseEnter={() => handleCellHover(r, c)}
         onMouseLeave={handleCellLeave}
-        title={`[${r}][${c}] = ${val}${isCurrent && formula ? `\n${formula}` : ""}`}
+        title={`[${r}][${c}] = ${renderCellValue(val)}${isCurrent && formula ? `\n${formula}` : ""}`}
       >
-        {val}
+        {renderCellValue(val)}
       </div>
     );
   }

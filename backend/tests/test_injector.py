@@ -89,3 +89,35 @@ class TestInjector:
         instrumented = instrument(source, str(FIXTURES / "simple_bsearch.cpp"))
         count = instrumented.count('#include "tracer.h"')
         assert count == 1
+
+    def test_nested_multiline_if_condition_compiles_and_traces(self):
+        """STATE after a multi-line if header must follow the full condition.
+
+        Regression: STATE spliced after the header's first line splits the
+        condition (if (a && / __TRACE_STATE(..); / b)) and g++ rejects it.
+        """
+        source = (
+            "#include <vector>\n"
+            "#include <string>\n"
+            "using namespace std;\n"
+            "int main() {\n"
+            '    string s = "ababa";\n'
+            "    int n = s.size();\n"
+            "    vector<vector<bool>> pal(n, vector<bool>(n, false));\n"
+            "    for (int i = n - 1; i >= 0; --i) {\n"
+            "        for (int j = i; j < n; ++j) {\n"
+            "            if (s[i] == s[j] &&\n"
+            "                (j - i <= 2 || pal[i + 1][j - 1])) {\n"
+            "                pal[i][j] = true;\n"
+            "            }\n"
+            "        }\n"
+            "    }\n"
+            "    return 0;\n"
+            "}\n"
+        )
+        instrumented = instrument(source, None)
+        assert ")) {\n__TRACE_STATE(10" in instrumented
+        _, stderr, code = _compile_and_run(instrumented)
+        assert code == 0, f"instrumented multi-line if failed to compile:\n{stderr}"
+        trace_lines = [l for l in stderr.splitlines() if l.startswith("TRACE:")]
+        assert len(trace_lines) > 0, "No TRACE: lines produced"

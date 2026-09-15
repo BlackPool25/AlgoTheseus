@@ -152,10 +152,103 @@ export function TraceFlow() {
     [visibleNodes]
   );
 
-  const visibleEdges = useMemo(
-    () => cfgEdges.filter((e) => visibleNodeIds.has(e.source) && visibleNodeIds.has(e.target)),
-    [cfgEdges, visibleNodeIds]
-  );
+  const visibleEdges = useMemo(() => {
+    // Rebuild the hidden set (same rule as filterForExpansion) so edges
+    // orphaned by collapsed loops can be rewired through hidden children.
+    const hiddenIds = new Set<string>();
+    for (const node of cfgNodes) {
+      if (node.type === "loop" && !expandedNodeIds.has(node.id)) {
+        for (const childId of node.children) {
+          hiddenIds.add(childId);
+        }
+      }
+    }
+
+    const successors = new Map<string, string[]>();
+    const predecessors = new Map<string, string[]>();
+    for (const e of cfgEdges) {
+      const s = successors.get(e.source);
+      if (s) s.push(e.target);
+      else successors.set(e.source, [e.target]);
+      const p = predecessors.get(e.target);
+      if (p) p.push(e.source);
+      else predecessors.set(e.target, [e.source]);
+    }
+
+    // Walk forward through hidden nodes to the nearest visible successor(s).
+    const forwardVisible = (startHidden: string): string[] => {
+      const found: string[] = [];
+      const seen = new Set<string>([startHidden]);
+      const stack: string[] = [startHidden];
+      while (stack.length > 0) {
+        const cur = stack.pop() as string;
+        if (!hiddenIds.has(cur)) {
+          if (visibleNodeIds.has(cur)) found.push(cur);
+          continue;
+        }
+        for (const next of successors.get(cur) ?? []) {
+          if (!seen.has(next)) {
+            seen.add(next);
+            stack.push(next);
+          }
+        }
+      }
+      return found;
+    };
+
+    // Walk back through hidden nodes to the nearest visible ancestor(s).
+    const backVisible = (startHidden: string): string[] => {
+      const found: string[] = [];
+      const seen = new Set<string>([startHidden]);
+      const stack: string[] = [startHidden];
+      while (stack.length > 0) {
+        const cur = stack.pop() as string;
+        if (!hiddenIds.has(cur)) {
+          if (visibleNodeIds.has(cur)) found.push(cur);
+          continue;
+        }
+        for (const prev of predecessors.get(cur) ?? []) {
+          if (!seen.has(prev)) {
+            seen.add(prev);
+            stack.push(prev);
+          }
+        }
+      }
+      return found;
+    };
+
+    const out: typeof cfgEdges = [];
+    const seenEdge = new Set<string>();
+    const pushEdge = (source: string, target: string, label: string): void => {
+      if (source === target) return;
+      const key = `${source}|${target}`;
+      if (seenEdge.has(key)) return;
+      seenEdge.add(key);
+      out.push({ source, target, label });
+    };
+
+    // Keep original visible-direct edges unchanged (they win dedupe).
+    for (const e of cfgEdges) {
+      if (visibleNodeIds.has(e.source) && visibleNodeIds.has(e.target)) {
+        pushEdge(e.source, e.target, e.label);
+      }
+    }
+
+    // Bypass hidden chains: visible -> hidden... -> visible.
+    for (const e of cfgEdges) {
+      if (visibleNodeIds.has(e.source) && hiddenIds.has(e.target)) {
+        for (const succ of forwardVisible(e.target)) {
+          pushEdge(e.source, succ, e.label);
+        }
+      } else if (hiddenIds.has(e.source) && visibleNodeIds.has(e.target)) {
+        for (const anc of backVisible(e.source)) {
+          pushEdge(anc, e.target, e.label);
+        }
+      }
+    }
+
+    return out;
+  }, [cfgEdges, visibleNodeIds, cfgNodes, expandedNodeIds]);
 
   // Apply Dagre layout
   const { nodes: flowNodes, edges: flowEdges } = useMemo(() => {

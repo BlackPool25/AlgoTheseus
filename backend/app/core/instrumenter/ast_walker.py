@@ -63,6 +63,12 @@ class InjectionPoint:
     var_names: list[str] = field(default_factory=list)
     # For BRANCH: the condition text
     condition_text: str = ""
+    # For BRANCH: free variable names referenced by the condition (T8 ops).
+    # Collected from DECL_REF_EXPR spellings only (never MEMBER_REF — a bare
+    # member name is not evaluable at the injection site). Capped at 8 names
+    # so the emitted __TRACE_BRANCH_OPS call stays bounded. Empty for switch
+    # labels (the runtime expr is `true /* ... */`, not user vars).
+    cond_vars: list[str] = field(default_factory=list)
     # For LOOP_ITER / LOOP_COUNTER: unique counter variable name
     counter_var: str = ""
 
@@ -241,6 +247,29 @@ class ASTWalker:
             return f"line {start.line}"
         except Exception:
             return "?"
+
+    def _get_condition_vars(self, cond: clang.Cursor) -> list[str]:
+        """Free variable names referenced by a branch condition (T8 ops)."""
+        names: list[str] = []
+        seen: set[str] = set()
+        try:
+            self._collect_refs(cond, names, seen)
+        except Exception:
+            return []
+        return names[:8]
+
+    def _collect_refs(
+        self, cursor: clang.Cursor, names: list[str], seen: set[str]
+    ) -> None:
+        if cursor.kind == clang.CursorKind.DECL_REF_EXPR and cursor.spelling:
+            name = cursor.spelling
+            if name and not name.startswith("__") and name not in seen:
+                ref = cursor.referenced
+                if ref is None or "FUNCTION" not in str(ref.kind):
+                    seen.add(name)
+                    names.append(name)
+        for child in cursor.get_children():
+            self._collect_refs(child, names, seen)
 
     def _get_return_expr_text(self, return_cursor: clang.Cursor) -> str:
         """Extract the return expression text from a RETURN_STMT cursor.
@@ -423,6 +452,7 @@ class ASTWalker:
                     func_name=func_name,
                     depth=func_depth,
                     condition_text=cond_text,
+                    cond_vars=self._get_condition_vars(cond),
                 ))
             # Recurse into then-body (children[1])
             if len(children) > 1:

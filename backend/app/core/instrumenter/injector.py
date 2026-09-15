@@ -92,9 +92,16 @@ def _trace_state(
 
 def _trace_branch(point: InjectionPoint) -> str:
     cond = point.condition_text.replace("\\", "\\\\").replace('"', '\\"')
+    ops_vars = list(getattr(point, "cond_vars", []))
+    if not ops_vars:
+        return (
+            f'__TRACE_BRANCH({point.line}, "{point.func_name}", {point.depth}, '
+            f'"{cond}", ({point.condition_text}));'
+        )
+    ops_args = ", ".join(f'"{v}", {v}' for v in ops_vars)
     return (
-        f'__TRACE_BRANCH({point.line}, "{point.func_name}", {point.depth}, '
-        f'"{cond}", ({point.condition_text}));'
+        f'__TRACE_BRANCH_OPS({point.line}, "{point.func_name}", {point.depth}, '
+        f'"{cond}", ({point.condition_text}), {ops_args});'
     )
 
 

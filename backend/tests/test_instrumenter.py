@@ -69,6 +69,29 @@ class TestASTWalker:
         result = walk(str(empty))
         assert result.injection_points == []
 
+    def test_state_injected_inside_while_body(self):
+        """Nested STATE: `int mid` line inside the while body needs a STATE point."""
+        result = walk(BSEARCH)
+        states = [
+            p for p in result.injection_points
+            if p.kind == InjectKind.STATE and p.func_name == "bsearch"
+        ]
+        state_lines = [p.line for p in states]
+        assert 8 in state_lines
+        assert len(state_lines) == len(set(state_lines))
+        mid_point = next(p for p in states if p.line == 8)
+        assert "mid" in mid_point.var_names
+
+    def test_state_injected_inside_if_branches(self):
+        """Nested STATE: statements inside if/else-if/else bodies need STATE points."""
+        result = walk(BSEARCH)
+        state_lines = {
+            p.line for p in result.injection_points
+            if p.kind == InjectKind.STATE and p.func_name == "bsearch"
+        }
+        assert 10 in state_lines
+        assert 11 in state_lines
+
 
 # ── scope_tracker tests ───────────────────────────────────────────────────────
 

@@ -331,7 +331,7 @@ class ASTWalker:
                         func_name=fn,
                         depth=fn_depth,
                     ))
-                self._walk_stmt(child, points, loop_counters, fn, fn_depth)
+                self._walk_stmt(child, points, loop_counters, fn, fn_depth, seen_lines)
 
             return  # Don't recurse further — _walk_stmt handles the body
 
@@ -346,6 +346,7 @@ class ASTWalker:
         loop_counters: dict[str, list[str]],
         func_name: str,
         func_depth: int,
+        seen: set[int] | None = None,
     ) -> None:
         """Walk a statement node inside a function body."""
         # Allow all DECL_STMT even if the cursor location is in a system header,
@@ -353,6 +354,13 @@ class ASTWalker:
         # vector<int> arr(m) due to libclang resolving the template location.
         if cursor.kind != clang.CursorKind.DECL_STMT and not self._is_user_code(cursor):
             return
+        # Never inject inside macro expansions (unreliable line numbers) or
+        # STL bodies (not user code — guarded above). Injected code needs no
+        # guard: the walk runs on pristine source before the injector edits it.
+        if self._is_macro_expanded(cursor):
+            return
+        if seen is None:
+            seen = set()
 
         kind = cursor.kind
 
@@ -380,15 +388,15 @@ class ASTWalker:
                 if any(tok in cond_text for tok in ("cin", "scanf", "getline")):
                     # Recurse into then/else bodies without adding BRANCH
                     if len(children) > 1:
-                        self._walk_stmt(children[1], points, loop_counters, func_name, func_depth)
+                        self._walk_stmt(children[1], points, loop_counters, func_name, func_depth, seen)
                     if len(children) > 2:
                         else_branch = children[2]
                         if else_branch.kind == clang.CursorKind.IF_STMT:
                             else_children = list(else_branch.get_children())
                             for ec in else_children[1:]:
-                                self._walk_stmt(ec, points, loop_counters, func_name, func_depth)
+                                self._walk_stmt(ec, points, loop_counters, func_name, func_depth, seen)
                         else:
-                            self._walk_stmt(else_branch, points, loop_counters, func_name, func_depth)
+                            self._walk_stmt(else_branch, points, loop_counters, func_name, func_depth, seen)
                     return
                 # Inject BRANCH for this if only.
                 # We do NOT inject for else-if — that would insert a statement
@@ -403,7 +411,7 @@ class ASTWalker:
                 ))
             # Recurse into then-body (children[1])
             if len(children) > 1:
-                self._walk_stmt(children[1], points, loop_counters, func_name, func_depth)
+                self._walk_stmt(children[1], points, loop_counters, func_name, func_depth, seen)
             # Recurse into else branch — but if it's another IF_STMT (else-if),
             # recurse into its bodies without injecting another BRANCH at the top.
             if len(children) > 2:
@@ -412,9 +420,9 @@ class ASTWalker:
                     # else-if: recurse into its then/else bodies only
                     else_children = list(else_branch.get_children())
                     for ec in else_children[1:]:
-                        self._walk_stmt(ec, points, loop_counters, func_name, func_depth)
+                        self._walk_stmt(ec, points, loop_counters, func_name, func_depth, seen)
                 else:
-                    self._walk_stmt(else_branch, points, loop_counters, func_name, func_depth)
+                    self._walk_stmt(else_branch, points, loop_counters, func_name, func_depth, seen)
             return
 
         # ── Switch statement → BRANCH per case ──────────────────────────────────
@@ -470,7 +478,7 @@ class ASTWalker:
                     ))
 
                     for stmt in body_stmts:
-                        self._walk_stmt(stmt, points, loop_counters, func_name, func_depth)
+                        self._walk_stmt(stmt, points, loop_counters, func_name, func_depth, seen)
 
                 elif child.kind == clang.CursorKind.DEFAULT_STMT:
                     label = f"true /* switch({cond_text}) == default */"
@@ -491,11 +499,11 @@ class ASTWalker:
                     ))
 
                     for stmt in body_stmts:
-                        self._walk_stmt(stmt, points, loop_counters, func_name, func_depth)
+                        self._walk_stmt(stmt, points, loop_counters, func_name, func_depth, seen)
 
                 else:
                     # Non-case statement inside switch body (declaration, etc.)
-                    self._walk_stmt(child, points, loop_counters, func_name, func_depth)
+                    self._walk_stmt(child, points, loop_counters, func_name, func_depth, seen)
 
             return
 
@@ -525,17 +533,41 @@ class ASTWalker:
                 ))
                 # Recurse into body statements
                 for child in body.get_children():
-                    self._walk_stmt(child, points, loop_counters, func_name, func_depth)
+                    self._walk_stmt(child, points, loop_counters, func_name, func_depth, seen)
+            elif body is not None:
+                self._walk_stmt(body, points, loop_counters, func_name, func_depth, seen)
             return
 
         # ── Compound statement → recurse ──────────────────────────────────────
         if kind == clang.CursorKind.COMPOUND_STMT:
             for child in cursor.get_children():
-                self._walk_stmt(child, points, loop_counters, func_name, func_depth)
+                self._walk_stmt(child, points, loop_counters, func_name, func_depth, seen)
             return
 
-        # Default: skip unhandled statement types (STATE is injected per-line
-        # by _walk_cursor, so we don't need catch-all STATE here).
+        # ── Leaf statement → STATE once per line ──────────────────────────────
+        # Containers above recurse without emitting; anything reaching here is
+        # a nested executable statement (decl, assignment, call) needing STATE.
+        # A declaration names its own vars: scope_tracker records visibility
+        # before the decl on the same line, so without this the STATE after
+        # `int mid = ...` would capture everything except mid (the mid bug).
+        # The injector merges var_names with scope vars (InjectionPoint mechanics).
+        var_names: list[str] = []
+        if kind == clang.CursorKind.DECL_STMT:
+            var_names = [
+                c.spelling for c in cursor.get_children()
+                if c.kind == clang.CursorKind.VAR_DECL and c.spelling
+            ]
+        line = cursor.location.line
+        if line and line not in seen:
+            seen.add(line)
+            points.append(InjectionPoint(
+                kind=InjectKind.STATE,
+                line=line,
+                col=1,
+                func_name=func_name,
+                depth=func_depth,
+                var_names=var_names,
+            ))
         return
 
 

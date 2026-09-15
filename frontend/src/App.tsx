@@ -17,13 +17,14 @@
  *   3. User scrubs through the trace.
  */
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useCFGStore } from "./store/cfgStore";
 import { useTraceStore } from "./store/traceStore";
 import { useUIStore } from "./store/uiStore";
 import { THEMES, applyTheme, currentTheme, type ThemeName } from "./theme";
 import { streamExecute } from "./utils/api";
 import type { StreamCallbacks } from "./utils/api";
+import { loadWasmToolchain, selectEngine } from "./utils/executionEngine";
 import { CodeEditor } from "./components/Editor/CodeEditor";
 import { InputPanel } from "./components/Editor/InputPanel";
 import { TestCaseManager } from "./components/Editor/TestCaseManager";
@@ -44,6 +45,10 @@ export default function App() {
   } = useUIStore();
   const { reset } = useUIStore();
   const [theme, setTheme] = useState<ThemeName>(() => currentTheme());
+  // Task 19: engine selection (D1 — browser-WASM killed, server primary).
+  // `!crossOriginIsolated` (SAB disabled) => automatic fallback flag to the
+  // server path, pinned as data attributes for tests and debugging.
+  const engineSel = useMemo(() => selectEngine(), []);
   const trace = useTraceStore((s) => s.trace);
   // Per-step stdout present → ProgramOutputBox owns output; else static banner.
   const hasPerStepStdout = trace.some(
@@ -58,6 +63,19 @@ export default function App() {
     uiStore.setStatus("executing");
     traceStore.reset();
     cfgStore.reset();
+
+    // Browser-WASM route (dead while D1 kill holds): lazy toolchain load
+    // surfaces a typed, retryable error panel instead of hanging.
+    if (engineSel.engine === "browser-wasm") {
+      loadWasmToolchain().then(
+        () => undefined,
+        (e: unknown) => {
+          traceStore.streamError();
+          uiStore.setError(e instanceof Error ? e.message : String(e));
+        },
+      );
+      return;
+    }
 
     let cfgReceived = false;
 
@@ -101,12 +119,18 @@ export default function App() {
   const isLoading = status === "executing";
 
   return (
-    <div className="flex flex-col h-screen bg-viz-body text-viz-ink">
+    <div
+      className="flex flex-col h-screen bg-viz-body text-viz-ink"
+      data-engine={engineSel.engine}
+      data-fallback={engineSel.fallback}
+      data-toolchain={engineSel.toolchainNote}
+    >
       {/* Header */}
       <header className="flex items-center justify-between px-4 py-2 bg-viz-body border-b border-viz-line shrink-0">
         <div className="flex items-center gap-3">
           <h1 className="text-sm font-semibold text-viz-ink">DSA Visualiser</h1>
           <span className="text-xs bg-viz-panel text-viz-ink/60 px-2 py-0.5 rounded font-mono">C++ · libclang</span>
+          <span data-testid="engine-badge" title={engineSel.crossOriginIsolated ? "cross-origin isolated (SAB available)" : "SAB disabled — server fallback active"} className="text-xs bg-viz-panel text-viz-ink/60 px-2 py-0.5 rounded font-mono">engine: {engineSel.engine}</span>
         </div>
         <div className="flex items-center gap-2">
           <select

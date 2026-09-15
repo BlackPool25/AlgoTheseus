@@ -79,7 +79,7 @@ def test_fork_bomb_contained_host_alive():
         "int main(){while(1){if(fork()==0){while(1){fork();}}} return 0;}\n"
     )
     start = time.monotonic()
-    r = _run(src)
+    _run(src)
     elapsed = time.monotonic() - start
     assert elapsed <= EXECUTION_TIMEOUT_SECONDS + 10
     # Host survived: we can still spawn processes.

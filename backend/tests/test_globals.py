@@ -34,14 +34,14 @@ def _compile_and_run(source: str, stdin: str = "") -> tuple[str, str, int]:
         binary = tmp_path / "prog"
         compile_result = subprocess.run(
             ["g++", "-O0", "-std=c++17", "-I", str(tmp_path), "-o", str(binary), str(src)],
-            capture_output=True, text=True,
+            capture_output=True, text=True, check=False,
         )
         if compile_result.returncode != 0:
             return "", compile_result.stderr, compile_result.returncode
 
         run_result = subprocess.run(
             [str(binary)],
-            input=stdin, capture_output=True, text=True, timeout=10,
+            input=stdin, capture_output=True, text=True, timeout=10, check=False,
         )
         return run_result.stdout, run_result.stderr, run_result.returncode
 

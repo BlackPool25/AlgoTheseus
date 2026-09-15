@@ -41,14 +41,14 @@ def _pipeline(name: str, timeout: int = 10):
         compile_result = subprocess.run(
             ["g++", "-O0", "-std=c++17", "-I", str(tmp_path),
              "-o", str(binary), str(tmp_path / "prog.cpp")],
-            capture_output=True, text=True, timeout=60,
+            capture_output=True, text=True, timeout=60, check=False,
         )
         assert compile_result.returncode == 0, (
             f"{name}: compile error:\n{compile_result.stderr}"
         )
         # Timeout-guard: a broken fixture must fail, never hang the suite.
         proc = subprocess.run(
-            [str(binary)], capture_output=True, text=True, timeout=timeout,
+            [str(binary)], capture_output=True, text=True, timeout=timeout, check=False,
         )
     assert proc.returncode == 0, f"{name}: nonzero exit:\n{proc.stderr}"
     raw = [ln[len("TRACE:"):] for ln in proc.stderr.splitlines()

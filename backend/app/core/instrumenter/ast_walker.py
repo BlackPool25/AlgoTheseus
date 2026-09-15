@@ -126,10 +126,14 @@ class ASTWalker:
         # Top-level TU declarations: user globals for the v2 STATE snapshot.
         global_vars: list[str] = []
         for child in tu.cursor.get_children():
-            if child.kind == clang.CursorKind.VAR_DECL and child.spelling:
-                if self._is_user_code(child) and not child.spelling.startswith("__"):
-                    if child.spelling not in global_vars:
-                        global_vars.append(child.spelling)
+            if (
+                child.kind == clang.CursorKind.VAR_DECL
+                and child.spelling
+                and self._is_user_code(child)
+                and not child.spelling.startswith("__")
+                and child.spelling not in global_vars
+            ):
+                global_vars.append(child.spelling)
 
         # First pass: collect all user-defined function names for depth tracking
         user_functions: set[str] = set()
@@ -150,9 +154,12 @@ class ASTWalker:
 
     def _collect_user_functions(self, cursor: clang.Cursor, result: set[str]) -> None:
         """Collect names of all user-defined functions."""
-        if cursor.kind in (clang.CursorKind.FUNCTION_DECL, clang.CursorKind.CXX_METHOD) and cursor.is_definition():
-            if self._is_user_code(cursor):
-                result.add(cursor.spelling)
+        if (
+            cursor.kind in (clang.CursorKind.FUNCTION_DECL, clang.CursorKind.CXX_METHOD)
+            and cursor.is_definition()
+            and self._is_user_code(cursor)
+        ):
+            result.add(cursor.spelling)
         for child in cursor.get_children():
             self._collect_user_functions(child, result)
 
@@ -245,7 +252,7 @@ class ASTWalker:
                 line = lines[start.line - 1]
                 return line[start.column - 1 : end.column - 1].strip()
             return f"line {start.line}"
-        except Exception:
+        except (OSError, ValueError, AttributeError, IndexError, TypeError):
             return "?"
 
     def _get_condition_vars(self, cond: clang.Cursor) -> list[str]:
@@ -254,7 +261,7 @@ class ASTWalker:
         seen: set[str] = set()
         try:
             self._collect_refs(cond, names, seen)
-        except Exception:
+        except (AttributeError, TypeError, RuntimeError, ValueError):
             return []
         return names[:8]
 
@@ -291,15 +298,14 @@ class ASTWalker:
                 if len(text) < 200 and "\n" not in text:
                     return text
             return ""
-        except Exception:
+        except (OSError, ValueError, AttributeError, IndexError, TypeError):
             return ""
 
     def _get_call_expr_name(self, cursor: clang.Cursor) -> str:
         """Best-effort callee name for C++ call expressions (incl. member calls)."""
         for child in cursor.get_children():
-            if child.kind in (clang.CursorKind.MEMBER_REF_EXPR, clang.CursorKind.DECL_REF_EXPR):
-                if child.spelling:
-                    return child.spelling
+            if child.kind in (clang.CursorKind.MEMBER_REF_EXPR, clang.CursorKind.DECL_REF_EXPR) and child.spelling:
+                return child.spelling
         return ""
 
     def _is_safe_return_expr(self, text: str) -> bool:

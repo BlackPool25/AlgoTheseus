@@ -215,7 +215,7 @@ class TestParseStdin:
     async def test_strips_prose_with_cin(self):
         """Code uses cin, input has prose → prose is stripped."""
         code = "int main() { int n; cin >> n; return 0; }"
-        cleaned, preview = await parse_stdin(code, "n: 42")
+        cleaned, _preview = await parse_stdin(code, "n: 42")
         assert cleaned == "42"
 
     async def test_empty_input_with_cin(self):

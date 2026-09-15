@@ -113,13 +113,13 @@ class TestStreamingResponseShape:
 
     async def test_streaming_each_line_is_valid_json(self, stream_app):
         """Every line in the streaming body should be valid JSON."""
-        async with AsyncClient(
-            transport=ASGITransport(app=stream_app), base_url="http://test"
-        ) as ac:
-            async with ac.stream("GET", "/stream-trace") as response:
-                chunks = []
-                async for chunk in response.aiter_bytes():
-                    chunks.append(chunk)
+        async with (
+            AsyncClient(transport=ASGITransport(app=stream_app), base_url="http://test") as ac,
+            ac.stream("GET", "/stream-trace") as response,
+        ):
+            chunks = []
+            async for chunk in response.aiter_bytes():
+                chunks.append(chunk)
 
         body = b"".join(chunks)
         lines = body.splitlines()
@@ -134,13 +134,13 @@ class TestStreamingResponseShape:
 
     async def test_streaming_events_in_order(self, stream_app):
         """Events should be received in the order they were yielded."""
-        async with AsyncClient(
-            transport=ASGITransport(app=stream_app), base_url="http://test"
-        ) as ac:
-            async with ac.stream("GET", "/stream-trace") as response:
-                chunks = []
-                async for chunk in response.aiter_bytes():
-                    chunks.append(chunk)
+        async with (
+            AsyncClient(transport=ASGITransport(app=stream_app), base_url="http://test") as ac,
+            ac.stream("GET", "/stream-trace") as response,
+        ):
+            chunks = []
+            async for chunk in response.aiter_bytes():
+                chunks.append(chunk)
 
         body = b"".join(chunks)
         lines = body.splitlines()
@@ -210,12 +210,10 @@ class TestProgressiveTraceParsing:
         for i in range(1, len(raw_lines) + 1):
             parsed = parse(raw_lines[:i])
             # Validate depth invariants after each prefix
-            depth = -1
             call_stack: list[str] = []
             for ev in parsed:
                 if ev.type == EventType.FUNC_ENTER:
                     assert ev.depth >= 0
-                    depth = ev.depth
                     call_stack.append(ev.func)
                 elif ev.type == EventType.FUNC_EXIT:
                     assert ev.depth >= 0

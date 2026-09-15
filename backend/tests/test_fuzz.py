@@ -160,9 +160,9 @@ def build_cases(seed: int = SEED) -> list[tuple[str, list[str]]]:
     mb_seg = "héllo wörld".encode()
     prefix = "\n".join(json.dumps(e) for e in ALIAS_EVENTS[:4]) + "\n"
     base = len(prefix.encode("utf-8"))
-    for off in range(0, len(mb_seg) + 2):
+    for off in range(len(mb_seg) + 2):
         cut_classes.append(base - 40 + off)
-    for i, cut in enumerate(sorted(set(c for c in cut_classes if 0 < c < len(raw)))):
+    for i, cut in enumerate(sorted({c for c in cut_classes if 0 < c < len(raw)})):
         frag = raw[:cut].decode("utf-8", errors="ignore")
         cases.append((f"truncate/{i}@{cut}", frag.split("\n")))
     # 6. Garbage injection: each garbage line alone + spliced into a stream.
@@ -193,7 +193,7 @@ def _shrink_and_fail(name: str, lines: list[str], exc: BaseException,
     for ln in lines:
         try:
             parse([ln])
-        except Exception:
+        except (ValueError, KeyError, TypeError, IndexError, AttributeError):
             minimal = [ln]
             break
     else:
@@ -203,7 +203,7 @@ def _shrink_and_fail(name: str, lines: list[str], exc: BaseException,
             try:
                 parse(half)
                 break  # half passes: keep the full set
-            except Exception:
+            except (ValueError, KeyError, TypeError, IndexError, AttributeError):
                 minimal = half
     pytest.fail(
         f"FUZZ CRASH seed={seed} case#{idx} ({name}): "

@@ -35,6 +35,7 @@ appends this output at end-of-file (struct types complete there).
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 from dataclasses import dataclass, field
@@ -42,6 +43,8 @@ from dataclasses import dataclass, field
 import clang.cindex as clang
 
 from app.core.instrumenter import _libclang_compat
+
+logger = logging.getLogger(__name__)
 
 _lib = _libclang_compat.ensure_libclang()
 
@@ -118,11 +121,11 @@ def collect_structs(source_path: str) -> list[StructDef]:
     try:
         index = clang.Index.create()
         tu = index.parse(source_path, args=["-std=c++17", "-O0"])
-    except Exception:
+    except (clang.TranslationUnitLoadError, RuntimeError, ValueError, OSError):
         return []
     try:
         return _collect_from_tu(tu, source_path)
-    except Exception:
+    except (AttributeError, TypeError, RuntimeError, ValueError):
         return []
 
 
@@ -140,11 +143,11 @@ def _collect_from_tu(tu: object, source_path: str) -> list[StructDef]:
                 try:
                     if _is_user_code(cursor, source_path) and cursor.spelling:
                         records.append(cursor)
-                except Exception:
-                    pass
+                except (AttributeError, TypeError, RuntimeError, ValueError):
+                    logger.debug("skipping struct cursor", exc_info=True)
             for child in cursor.get_children():
                 visit(child)
-        except Exception:
+        except (AttributeError, TypeError, RuntimeError, ValueError):
             return
 
     visit(tu.cursor)
@@ -154,7 +157,8 @@ def _collect_from_tu(tu: object, source_path: str) -> list[StructDef]:
     for cursor in records:
         try:
             struct_def = _struct_def(cursor, names, source_path)
-        except Exception:
+        except (AttributeError, TypeError, RuntimeError, ValueError):
+            logger.debug("skipping unresolvable struct", exc_info=True)
             continue
         if struct_def is not None:
             out.append(struct_def)
@@ -175,11 +179,11 @@ def _struct_def(
         try:
             if child.is_bitfield():
                 return None  # carve-out: cannot take address
-        except Exception:
+        except (AttributeError, TypeError, RuntimeError, ValueError):
             return None
         try:
             kind, target = _classify_field(child, names)
-        except Exception:
+        except (AttributeError, TypeError, RuntimeError, ValueError):
             return None
         fields.append(FieldDef(name=child.spelling, kind=kind, target=target))
     return StructDef(name=cursor.spelling, fields=fields)
@@ -191,7 +195,7 @@ def _classify_field(
     """Return (kind, target-struct-name) for a FIELD_DECL."""
     try:
         canon = field_cursor.type.get_canonical()
-    except Exception:
+    except (AttributeError, TypeError, RuntimeError, ValueError):
         raise ValueError("unresolvable type")
     # Union-typed field → skip whole struct (active-member ambiguity).
     try:
@@ -200,7 +204,7 @@ def _classify_field(
             raise ValueError("union field")
     except ValueError:
         raise
-    except Exception:
+    except (AttributeError, TypeError, RuntimeError):
         pass
     try:
         if canon.kind == clang.TypeKind.POINTER:
@@ -225,7 +229,7 @@ def _classify_field(
         return ("default", "")
     except ValueError:
         raise
-    except Exception:
+    except (AttributeError, TypeError, RuntimeError):
         raise ValueError("unclassifiable field")
 
 
@@ -252,7 +256,7 @@ def generate_serializers(source_path: str) -> str:
     """
     try:
         structs = collect_structs(source_path)
-    except Exception:
+    except (AttributeError, TypeError, RuntimeError, ValueError, OSError):
         structs = []
     if not structs:
         return "// serializer_gen: no emittable structs (manifest {\"structs\": []})\n"
@@ -272,14 +276,16 @@ def generate_serializers(source_path: str) -> str:
             parts.append(_emit_overloads(s))
             parts.append(_emit_vector_specs(s))
         return "\n".join(parts)
-    except Exception:
+    except (AttributeError, TypeError, RuntimeError, ValueError):
         return "// serializer_gen: codegen failed; falling back to $addr behavior\n"
 
 
 def _emit_struct(s: StructDef) -> str:
     lines = [
-        f"inline std::string __serialize_{s.name}(const {s.name}& obj, "
-        "std::set<void*>& visited, std::set<void*>& emitted, int depth) {",
+        (
+            f"inline std::string __serialize_{s.name}(const {s.name}& obj, "
+            "std::set<void*>& visited, std::set<void*>& emitted, int depth) {"
+        ),
         "    if (depth > 50) return \"{\\\"$depth_limit\\\":true}\";",
         "    void* addr = (void*)&obj;",
         "    int id = __heap_id_for(addr);",

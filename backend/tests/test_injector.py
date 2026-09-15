@@ -29,14 +29,14 @@ def _compile_and_run(source: str, stdin: str = "") -> tuple[str, str, int]:
         binary = tmp_path / "prog"
         compile_result = subprocess.run(
             ["g++", "-O0", "-std=c++17", "-I", str(tmp_path), "-o", str(binary), str(src)],
-            capture_output=True, text=True,
+            capture_output=True, text=True, check=False,
         )
         if compile_result.returncode != 0:
             return "", compile_result.stderr, compile_result.returncode
 
         run_result = subprocess.run(
             [str(binary)],
-            input=stdin, capture_output=True, text=True, timeout=5,
+            input=stdin, capture_output=True, text=True, timeout=5, check=False,
         )
         return run_result.stdout, run_result.stderr, run_result.returncode
 
@@ -46,7 +46,7 @@ class TestInjector:
         """Instrumenting simple_bsearch.cpp should produce compilable C++."""
         source = (FIXTURES / "simple_bsearch.cpp").read_text()
         instrumented = instrument(source, str(FIXTURES / "simple_bsearch.cpp"))
-        stdout, stderr, code = _compile_and_run(instrumented)
+        _stdout, stderr, code = _compile_and_run(instrumented)
         # Compile errors show up as non-zero exit with no TRACE: lines
         trace_lines = [l for l in stderr.splitlines() if l.startswith("TRACE:")]
         assert code == 0 or len(trace_lines) > 0, f"Compile/run failed:\n{stderr}"
@@ -55,7 +55,7 @@ class TestInjector:
         """Running the instrumented binary should produce TRACE: lines on stderr."""
         source = (FIXTURES / "simple_bsearch.cpp").read_text()
         instrumented = instrument(source, str(FIXTURES / "simple_bsearch.cpp"))
-        stdout, stderr, code = _compile_and_run(instrumented)
+        _stdout, stderr, _code = _compile_and_run(instrumented)
         trace_lines = [l for l in stderr.splitlines() if l.startswith("TRACE:")]
         assert len(trace_lines) > 0, "No TRACE: lines produced"
 
@@ -77,7 +77,7 @@ class TestInjector:
         """The program's own stdout should not be contaminated with TRACE: data."""
         source = (FIXTURES / "simple_bsearch.cpp").read_text()
         instrumented = instrument(source, str(FIXTURES / "simple_bsearch.cpp"))
-        stdout, stderr, _ = _compile_and_run(instrumented)
+        stdout, _stderr, _ = _compile_and_run(instrumented)
         # stdout should only contain the program's output (a number)
         assert "TRACE:" not in stdout
 

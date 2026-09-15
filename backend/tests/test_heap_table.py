@@ -16,6 +16,7 @@ current-step-only $ref resolution (dangling $ref -> "unknown", never raises).
 
 from __future__ import annotations
 
+import itertools
 import json
 import shutil
 import subprocess
@@ -47,10 +48,10 @@ def _instrument_compile_run(fixture: str) -> list[dict]:
         compile_result = subprocess.run(
             ["g++", "-O0", "-std=c++17", "-I", str(tmp_path),
              "-o", str(binary), str(prog)],
-            capture_output=True, text=True, timeout=30,
+            capture_output=True, text=True, timeout=30, check=False,
         )
         assert compile_result.returncode == 0, f"Compile error:\n{compile_result.stderr}"
-        run = subprocess.run([str(binary)], capture_output=True, text=True, timeout=10)
+        run = subprocess.run([str(binary)], capture_output=True, text=True, timeout=10, check=False)
     assert run.returncode == 0, f"nonzero exit:\n{run.stderr}"
     return [
         json.loads(line[len("TRACE:"):]) for line in run.stderr.splitlines()
@@ -99,7 +100,7 @@ def test_heap_table_contains_structs():
 
     # Stable ids: some $id survives across consecutive STATEs.
     ids_per_state = [set(t) for _, t in states if t]
-    assert any(a & b for a, b in zip(ids_per_state, ids_per_state[1:])), (
+    assert any(a & b for a, b in itertools.pairwise(ids_per_state)), (
         "no stable $id across consecutive steps"
     )
 

@@ -150,19 +150,20 @@ def instrument(source: str, source_path: str | None = None) -> str:
         The returned source has #include "tracer.h" at the top.
         The caller must ensure tracer.h is in the include path when compiling.
     """
-    _tmp = None
+    _tmp_name = None
     if source_path is None:
-        _tmp = tempfile.NamedTemporaryFile(suffix=".cpp", mode="w", delete=False)
-        _tmp.write(source)
-        _tmp.flush()
-        source_path = _tmp.name
+        with tempfile.NamedTemporaryFile(suffix=".cpp", mode="w", delete=False) as _tmp:
+            _tmp.write(source)
+            _tmp.flush()
+            _tmp_name = _tmp.name
+        source_path = _tmp_name
 
     try:
         walk_result = walk(source_path)
         scope_map = build_scope_map(source_path)
     finally:
-        if _tmp:
-            Path(_tmp.name).unlink(missing_ok=True)
+        if _tmp_name:
+            Path(_tmp_name).unlink(missing_ok=True)
 
     # Debug: write injection point counts per function
     try:
@@ -172,7 +173,7 @@ def instrument(source: str, source_path: str | None = None) -> str:
             counts[p.func_name][p.kind.name] = counts[p.func_name].get(p.kind.name, 0) + 1
         lines_debug = [f"{fn}: {counts[fn]}" for fn in sorted(counts.keys())]
         Path("/tmp/dsa_injection_debug.txt").write_text("\n".join(lines_debug), encoding="utf-8")
-    except Exception:
+    except (OSError, ValueError):
         logger.debug("Failed to write injection debug file", exc_info=True)
 
     lines = source.splitlines(keepends=True)
@@ -218,8 +219,8 @@ def instrument(source: str, source_path: str | None = None) -> str:
                 ret_temp_seq += 1
                 return name
 
-            def trace_exit_with(var_name: str) -> str:
-                return f'__TRACE_FUNC_EXIT({point.line}, "{point.func_name}", {point.depth}, ({var_name}));'
+            def trace_exit_with(var_name: str, _point: InjectionPoint = point) -> str:
+                return f'__TRACE_FUNC_EXIT({_point.line}, "{_point.func_name}", {_point.depth}, ({var_name}));'
 
             # Only inject when the line starts with 'return' to avoid breaking inline returns.
             if line_text.lstrip().startswith("return"):
@@ -228,11 +229,15 @@ def instrument(source: str, source_path: str | None = None) -> str:
                 while prev_idx >= 0 and not lines[prev_idx].strip():
                     prev_idx -= 1
                 prev_line = lines[prev_idx] if prev_idx >= 0 else ""
-                if prev_line.strip().startswith("if") and "{" not in prev_line and "else" not in prev_line:
-                    if prev_idx not in wrapped_if_lines:
-                        add_after(prev_idx + 1, "{")
-                        add_after(point.line, "}")
-                        wrapped_if_lines.add(prev_idx)
+                if (
+                    prev_line.strip().startswith("if")
+                    and "{" not in prev_line
+                    and "else" not in prev_line
+                    and prev_idx not in wrapped_if_lines
+                ):
+                    add_after(prev_idx + 1, "{")
+                    add_after(point.line, "}")
+                    wrapped_if_lines.add(prev_idx)
                 if ret_expr:
                     # For simple, side-effect-free expressions, skip the temp
                     # variable to avoid "crosses initialization" errors in
@@ -339,23 +344,24 @@ def instrument(source: str, source_path: str | None = None) -> str:
         # .cpp file so libclang can parse it. Best-effort: any failure here
         # degrades to the $addr fallback exactly as before.
         _gen_path = source_path
-        _gen_tmp = None
+        _gen_tmp_name = None
         try:
             if _gen_path is None or not Path(_gen_path).is_file():
-                _gen_tmp = tempfile.NamedTemporaryFile(
+                with tempfile.NamedTemporaryFile(
                     suffix=".cpp", mode="w", delete=False, encoding="utf-8"
-                )
-                _gen_tmp.write(source)
-                _gen_tmp.flush()
-                _gen_path = _gen_tmp.name
+                ) as _gen_tmp:
+                    _gen_tmp.write(source)
+                    _gen_tmp.flush()
+                    _gen_tmp_name = _gen_tmp.name
+                _gen_path = _gen_tmp_name
             output.append(_serializer_gen.generate_serializers(_gen_path))
         finally:
-            if _gen_tmp is not None:
+            if _gen_tmp_name is not None:
                 try:
-                    Path(_gen_tmp.name).unlink(missing_ok=True)
-                except Exception:
-                    pass
-    except Exception:
+                    Path(_gen_tmp_name).unlink(missing_ok=True)
+                except OSError:
+                    logger.debug("serializer_gen tmp cleanup failed", exc_info=True)
+    except (OSError, ValueError, RuntimeError):
         logger.debug("serializer_gen hookup skipped", exc_info=True)
 
     instrumented = "".join(output)

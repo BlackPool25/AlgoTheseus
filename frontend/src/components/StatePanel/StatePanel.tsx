@@ -6,14 +6,27 @@
  * Pure display component — reads from traceStore only.
  */
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useTraceStore } from "../../store/traceStore";
 import { CallStackView } from "./CallStackView";
 import { VariableRow } from "./VariableRow";
+import { buildFramesWithVars } from "./frameVars";
 
 export function StatePanel() {
-  const { trace, currentStep, currentEvent } = useTraceStore();
+  const { trace, currentStep, currentEvent, callStack } = useTraceStore();
   const [globalsOpen, setGlobalsOpen] = useState(true);
+
+  // T9 phase-2: per-frame var tables (frontend mirror of stack_to_render).
+  // Shown only when the stack holds 2+ frames; single-frame traces keep the
+  // legacy flat list unchanged (flat fallback path, never removed).
+  // All hooks stay above the !currentEvent early return (React #310).
+  const frames = useMemo(
+    () => buildFramesWithVars(trace, currentStep, callStack),
+    [trace, currentStep, callStack],
+  );
+  // Deepest frame first for display (current frame on top).
+  const framesDisplay = useMemo(() => [...frames].reverse(), [frames]);
+  const showFrameTables = frames.length >= 2;
 
   if (!currentEvent) {
     return (
@@ -106,15 +119,58 @@ export function StatePanel() {
             <span className="font-medium uppercase tracking-wide">Globals</span>
             <span className="font-mono text-zinc-600">({globalEntries.length})</span>
           </button>
-          {globalsOpen &&
-            globalEntries.map(([name, value]) => (
-              <VariableRow
-                key={`global:${name}`}
-                name={name}
-                value={value}
-                changed={false}
-              />
-            ))}
+          {globalsOpen && (
+            <div data-testid="frame-table" data-frame="globals">
+              {globalEntries.map(([name, value]) => (
+                <VariableRow
+                  key={`global:${name}`}
+                  name={name}
+                  value={value}
+                  changed={false}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Per-frame var tables (nested stacks only; flat list below is untouched) */}
+      {showFrameTables && (
+        <div className="border-b border-zinc-800">
+          {framesDisplay.map((frame) => {
+            const frameEntries = Object.entries(frame.vars);
+            return (
+              <div
+                key={`${frame.func}@${frame.depth}`}
+                data-testid="frame-table"
+                data-frame={`${frame.func}@${frame.depth}`}
+              >
+                <div className="px-3 py-1 flex items-center gap-1">
+                  <span className="text-[10px] font-medium text-zinc-500 uppercase tracking-wide">
+                    Frame
+                  </span>
+                  <span className="text-[11px] font-mono text-amber-400">
+                    {frame.func}()
+                  </span>
+                  <span className="text-[10px] text-zinc-600 ml-auto">
+                    depth {frame.depth}
+                  </span>
+                </div>
+                {frameEntries.length === 0 ? (
+                  <div className="px-3 py-1 text-xs text-zinc-600">No vars in frame</div>
+                ) : (
+                  frameEntries.map(([name, value]) => (
+                    <VariableRow
+                      key={`${frame.func}:${name}`}
+                      name={name}
+                      value={value}
+                      changed={false}
+                    />
+                  ))
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
 

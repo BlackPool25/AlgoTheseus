@@ -6,14 +6,15 @@
  * maintained *incrementally* during step-by-step navigation (O(1) per
  * step) instead of being rebuilt from scratch on every render.
  *
- * Compression groups consecutive STATE events whose compression identity
- * (vars, plus stdout/heap when present) is identical into a single display
- * group. Groups can be collapsed (prev/next skip
- * the group) or expanded (individual steps are shown).
+ * Compression groups consecutive steps whose *display* identity (live
+ * vars for `state`/`enter`, forward-filled snapshot for carried
+ * `iter`/`branch`/`exit`) is identical into a single display group.
+ * Groups can be collapsed (prev/next land on the group boundary, never
+ * skip over it) or expanded (individual steps are shown).
  */
 
 import { create } from "zustand";
-import type { TraceEvent } from "../types/trace";
+import { assertNever, type TraceEvent } from "../types/trace";
 import {
   findLastLiveSnapshot,
   frameKey,
@@ -121,19 +122,98 @@ function compressionKey(event: TraceEvent): string | null {
 }
 
 /**
+ * Display (filled) identity for one step — the single grouping scheme used
+ * by rebuildCompression (extended, not forked, from compressionKey).
+ *
+ * Live steps (`state` / `enter`) key on their own payload (vars, plus
+ * stdout/heap when present — a present stdout or heap value breaks the
+ * group, so growing output never hides). Carried steps (`iter` / `branch` /
+ * `exit`) are first-class groupable citizens per follow-up spec §(b)+§(e):
+ * they key on the forward-filled snapshot (`filledVars`, the last live
+ * payload strictly before this step in the same `func`+`depth` frame —
+ * same strictly-before convention as scopeDisplay), so a run of
+ * carried-identical snapshots groups into one "N identical steps" bundle.
+ *
+ * Two guards keep grouping honest:
+ * - Control-significant fields participate: `branch` adds condition+taken
+ *   (distinct outcomes never merge), `exit` adds return_val (distinct
+ *   returns never merge). `iter`'s counter is positional — the group span
+ *   k–m already conveys it — so alternating state/iter runs with identical
+ *   display vars collapse into one group.
+ * - The key is prefixed with the frame (`func@depth`), so groups never span
+ *   frames and a live step whose payload differs from the running key
+ *   breaks the run: grouping never merges across a live mutation.
+ * - Carried steps with no live predecessor (`filledVars === null`) render
+ *   blank and stay ungrouped (null key) — never merged with anything.
+ */
+function displayCompressionKey(
+  event: TraceEvent,
+  filledVars: Record<string, unknown> | null,
+): string | null {
+  const frame = frameKey(event.func, event.depth);
+  switch (event.type) {
+    case "state": {
+      const live = compressionKey(event);
+      return live === null ? null : frame + "\n" + live;
+    }
+    case "enter":
+      return frame + "\n" + JSON.stringify(event.params);
+    case "iter":
+      return filledVars === null ? null : frame + "\n" + JSON.stringify(filledVars);
+    case "branch":
+      return filledVars === null
+        ? null
+        : frame +
+            "\n" +
+            JSON.stringify(filledVars) +
+            "|branch:" +
+            event.condition +
+            ":" +
+            (event.taken ? "1" : "0");
+    case "exit":
+      return filledVars === null
+        ? null
+        : frame +
+            "\n" +
+            JSON.stringify(filledVars) +
+            "|return:" +
+            JSON.stringify(event.return_val);
+    default:
+      return assertNever(event);
+  }
+}
+
+/**
  * Scan the trace and produce a list of compressed-step groups.
  *
  * Two compression strategies:
  * 1. **Backend metadata** – if an event carries `_group_count` (>1) the
- *    backend already collapsed it; we use the metadata directly.
- * 2. **Frontend detection** – consecutive STATE events whose compression
- *    identity (vars, plus stdout/heap when present) serialises to the same
- *    string are grouped.
+ *    backend already collapsed it; we use the metadata directly (checked
+ *    first in both the outer and inner scan, so a metadata event is never
+ *    swallowed into a frontend-detected run).
+ * 2. **Frontend detection** – consecutive steps whose *display* identity
+ *    (displayCompressionKey: live payload for `state`/`enter`,
+ *    forward-filled snapshot for carried `iter`/`branch`/`exit`) serialises
+ *    to the same string are grouped. Only runs of length > 1 become groups;
+ *    every other step stays a singleton and remains individually reachable.
  *
- * Only STATE events are ever compressed.
+ * Forward-fill here is O(1) amortised (running last-live map per frame, no
+ * scan-back), so rebuild stays cheap on 10–100k-step traces (R7 p95 budget).
  */
 function rebuildCompression(trace: TraceEvent[]): CompressedStep[] {
   const groups: CompressedStep[] = [];
+
+  // Pass 1 — per-step display keys with running forward-fill.
+  const keys: Array<string | null> = [];
+  const lastLive = new Map<string, Record<string, unknown>>();
+  for (const event of trace) {
+    const frame = frameKey(event.func, event.depth);
+    keys.push(displayCompressionKey(event, lastLive.get(frame) ?? null));
+    const live = liveVarsOf(event);
+    if (live !== null) lastLive.set(frame, live);
+  }
+
+  // Pass 2 — group consecutive steps with equal non-null keys.
   let i = 0;
 
   while (i < trace.length) {
@@ -151,18 +231,20 @@ function rebuildCompression(trace: TraceEvent[]): CompressedStep[] {
       continue;
     }
 
-    // 2. Frontend-side detection (only for STATE events)
-    if (event.type !== "state") {
+    // 2. Frontend-side detection — run-length over display-identity keys.
+    // A null key (blank carried step with no live predecessor) never groups.
+    const key = keys[i];
+    if (key === null) {
       i++;
       continue;
     }
 
-    const key = compressionKey(event);
     let j = i + 1;
-    while (j < trace.length) {
-      const next = trace[j];
-      if (next.type !== "state") break;
-      if (compressionKey(next) !== key) break;
+    while (j < trace.length && keys[j] === key) {
+      // Backend metadata keeps priority: never swallow a metadata event
+      // into a frontend-detected run.
+      const upcoming = (trace[j] as unknown as Record<string, unknown>).group_count;
+      if (typeof upcoming === "number" && upcoming > 1) break;
       j++;
     }
 
@@ -216,15 +298,18 @@ interface TraceStore {
   loadTrace: (trace: TraceEvent[]) => void;
   /** Jump to a specific step (always works, no group skipping). */
   setStep: (n: number) => void;
-  /** Advance one step. Collapsed groups are *landed on* (group start
-   *  boundary, affordance visible), never skipped over; a second `next`
-   *  traverses past the group. Grouping semantics untouched (see
-   *  rebuildCompression). */
+  /** T14 boundary-landing contract (chosen alternative: enter-at-near-edge,
+   *  second press exits — symmetric for both directions):
+   *  `next` approaching a collapsed group from before lands ON the group
+   *  START (affordance visible); a `next` from at/inside the group exits
+   *  past its END. Interior steps are never silently skipped: the first
+   *  press always stops at the boundary, and expanding the group (or the
+   *  slider / setStep) reaches every raw index (R7 100% reachability).
+   *  Grouping semantics untouched (see rebuildCompression). */
   next: () => void;
-  /** Go back one step. Collapsed groups are *landed on* (group end
-   *  boundary, affordance visible), never skipped over; a second `prev`
-   *  traverses past the group. Grouping semantics untouched (see
-   *  rebuildCompression). */
+  /** Mirror of `next`: `prev` approaching a collapsed group from after
+   *  lands ON the group END; a `prev` from at/inside exits before its
+   *  START. Grouping semantics untouched (see rebuildCompression). */
   prev: () => void;
   /** Re-scan the trace and regenerate compressedSteps. */
   rebuildCompression: () => void;

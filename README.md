@@ -86,7 +86,7 @@ Paste any C++ interview problem, click **Run**, and scrub through every step of 
 > **Only Docker is required.** The sandbox image builds automatically on first run.
 
 ```bash
-git clone https://github.com/yourusername/AlgoTheseus.git
+git clone https://github.com/BlackPool25/AlgoTheseus.git
 cd AlgoTheseus
 docker compose up --build
 ```

@@ -51,15 +51,30 @@ type AnimPhase =
   | "pop-mark"    // top marked for removal
   | "pop-sink";   // bubble-down swaps in progress
 
+/** Timeout choreography derived during render; the effect only schedules it. */
+type AnimPlan =
+  | { kind: "none" }
+  | { kind: "push"; prev: unknown[]; curr: unknown[] }
+  | { kind: "pop"; prev: unknown[]; curr: unknown[] }
+  | { kind: "reorder"; curr: unknown[]; swaps: [number, number][] };
+
 interface HeapData {
   top: unknown;
   items: unknown[];
 }
 
 interface Props {
-  value: HeapData;
+  value: unknown;
   /** Indices that mutated this step (sift-swap pair) — flash both together. */
   changedIndices?: number[];
+}
+
+/** Parse the heap envelope at the boundary; non-heap values render fallback. */
+function asHeapData(value: unknown): HeapData | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  if (!Array.isArray(record.items)) return null;
+  return { top: record.top, items: record.items };
 }
 
 interface NodePos {
@@ -330,12 +345,14 @@ function HeapNodeSVG({
 // ── Main component ────────────────────────────────────────────────────────────
 
 export function HeapVisual({ value, changedIndices = [] }: Props) {
-  const items = value.items ?? [];
+  // Stable identity per value: the render-phase adjustment below keys off it.
+  const items = useMemo(() => asHeapData(value)?.items ?? [], [value]);
   const propFlash = new Set(changedIndices);
 
   // ── Animation state ──
-  const prevItemsRef = useRef<unknown[]>([]);
+  const [prevItems, setPrevItems] = useState<unknown[]>(items);
   const [animPhase, setAnimPhase] = useState<AnimPhase>("idle");
+  const [animPlan, setAnimPlan] = useState<AnimPlan>({ kind: "none" });
   const [swapHighlight, setSwapHighlight] = useState<Set<number>>(new Set());
   const [violations, setViolations] = useState<Set<number>>(new Set());
   const [appearingIndex, setAppearingIndex] = useState<number | null>(null);
@@ -344,133 +361,96 @@ export function HeapVisual({ value, changedIndices = [] }: Props) {
 
   const heapType = useMemo(() => detectHeapType(items), [items]);
 
-  // Detect operation and animate
-  useEffect(() => {
-    const prev = prevItemsRef.current;
-    prevItemsRef.current = items;
-
-    // Clear any pending timeouts from previous animation
-    timeoutsRef.current.forEach(clearTimeout);
-    timeoutsRef.current = [];
-
-    setAppearingIndex(null);
-    setDisappearingIndex(null);
+  // Derive the animation reset during render (previous-items adjustment):
+  // pure and batched, never a cascading effect. Timeout choreography for the
+  // resulting plan lives in the effect below, which sets state only inside
+  // timeout callbacks (async subscriptions).
+  if (prevItems !== items) {
+    const prev = prevItems;
+    setPrevItems(items);
     setSwapHighlight(new Set());
-
-    if (prev.length === 0 || items.length === 0) {
-      setAnimPhase("idle");
-      setViolations(new Set());
-      return;
-    }
-
-    // Compute violations for current state
-    const currViolations = findViolations(items, heapType);
-    setViolations(currViolations);
-
-    // --- Detect operation ---
+    setViolations(
+      prev.length === 0 || items.length === 0
+        ? new Set<number>()
+        : findViolations(items, heapType),
+    );
     if (items.length === prev.length + 1) {
       // PUSH
       setAnimPhase("push-appear");
-      const newIdx = items.length - 1;
-      setAppearingIndex(newIdx);
-
-      // Phase 1: new node appears (PHASE_MS)
-      const t1 = setTimeout(() => {
-        setAppearingIndex(null);
-
-        // Phase 2: bubble-up swaps
-        setAnimPhase("push-bubble");
-        animateBubbleUp(prev, items);
-
-        // After bubble-up, check remaining violations
-        const t3 = setTimeout(() => {
-          setAnimPhase("idle");
-          setSwapHighlight(new Set());
-          setViolations(findViolations(items, heapType));
-        }, SWAP_MS * 3);
-
-        timeoutsRef.current.push(t3);
-      }, PHASE_MS);
-      timeoutsRef.current.push(t1);
+      setAppearingIndex(items.length - 1);
+      setDisappearingIndex(null);
+      setAnimPlan({ kind: "push", prev, curr: items });
     } else if (items.length === prev.length - 1) {
       // POP
       setAnimPhase("pop-mark");
       setDisappearingIndex(-1); // special: top element removed
-
-      const t1 = setTimeout(() => {
-        setDisappearingIndex(null);
-        setAnimPhase("pop-sink");
-        animateBubbleDown(prev, items);
-
-        const t3 = setTimeout(() => {
-          setAnimPhase("idle");
-          setSwapHighlight(new Set());
-          setViolations(findViolations(items, heapType));
-        }, SWAP_MS * 3);
-        timeoutsRef.current.push(t3);
-      }, PHASE_MS);
-      timeoutsRef.current.push(t1);
-    } else if (items.length === prev.length) {
-      // REORDER (intermediate bubble-up/down step)
-      const swaps = detectSwapPairs(prev, items);
+      setAppearingIndex(null);
+      setAnimPlan({ kind: "pop", prev, curr: items });
+    } else {
+      // REORDER (intermediate bubble step) or unrelated shape change
+      const swaps =
+        items.length === prev.length ? detectSwapPairs(prev, items) : [];
+      setAppearingIndex(null);
+      setDisappearingIndex(null);
       if (swaps.length > 0) {
         setAnimPhase("push-bubble"); // reuse bubble phase for any swap
-        animateSwaps(swaps);
-
-        const t = setTimeout(() => {
-          setAnimPhase("idle");
-          setSwapHighlight(new Set());
-          setViolations(findViolations(items, heapType));
-        }, SWAP_MS * swaps.length + 100);
-        timeoutsRef.current.push(t);
+        setAnimPlan({ kind: "reorder", curr: items, swaps });
       } else {
         setAnimPhase("idle");
+        setAnimPlan({ kind: "none" });
       }
     }
+  }
 
-    // ── helpers ──
+  // Timeout choreography for the plan derived above: the effect body only
+  // clears pending timers and schedules new ones.
+  useEffect(() => {
+    timeoutsRef.current.forEach(clearTimeout);
+    timeoutsRef.current = [];
 
-    function animateSwaps(swaps: [number, number][]) {
+    const later = (ms: number, fn: () => void): void => {
+      timeoutsRef.current.push(setTimeout(fn, ms));
+    };
+    const settle = (curr: unknown[]): void => {
+      setAnimPhase("idle");
+      setSwapHighlight(new Set());
+      setViolations(findViolations(curr, heapType));
+    };
+    const playSwaps = (swaps: [number, number][]): void => {
       swaps.forEach(([i, j], idx) => {
-        const t = setTimeout(() => {
-          setSwapHighlight(new Set([i, j]));
-        }, idx * SWAP_MS);
-        timeoutsRef.current.push(t);
+        later(idx * SWAP_MS, () => setSwapHighlight(new Set([i, j])));
       });
+    };
 
-      const t = setTimeout(() => {
-        setSwapHighlight(new Set());
-      }, swaps.length * SWAP_MS + 50);
-      timeoutsRef.current.push(t);
+    if (animPlan.kind === "push") {
+      const { prev, curr } = animPlan;
+      later(PHASE_MS, () => {
+        setAppearingIndex(null);
+        // Phase 2: bubble-up swaps
+        setAnimPhase("push-bubble");
+        playSwaps(detectSwapPairs(prev, curr));
+        later(SWAP_MS * 3, () => settle(curr));
+      });
+    } else if (animPlan.kind === "pop") {
+      const { prev, curr } = animPlan;
+      later(PHASE_MS, () => {
+        setDisappearingIndex(null);
+        setAnimPhase("pop-sink");
+        // After pop, the last element was moved to root and sinks down
+        playSwaps(detectSwapPairs(prev, curr));
+        later(SWAP_MS * 3, () => settle(curr));
+      });
+    } else if (animPlan.kind === "reorder") {
+      const { curr, swaps } = animPlan;
+      playSwaps(swaps);
+      later(SWAP_MS * swaps.length + 100, () => settle(curr));
     }
 
-    function animateBubbleUp(prev: unknown[], curr: unknown[]) {
-      const swaps = detectSwapPairs(prev, curr);
-      swaps.forEach(([i, j], idx) => {
-        const t = setTimeout(() => {
-          setSwapHighlight(new Set([i, j]));
-        }, idx * SWAP_MS);
-        timeoutsRef.current.push(t);
-      });
-    }
-
-    function animateBubbleDown(prev: unknown[], curr: unknown[]) {
-      // After pop, the last element was moved to root and sinks down
-      const swaps = detectSwapPairs(prev, curr);
-      swaps.forEach(([i, j], idx) => {
-        const t = setTimeout(() => {
-          setSwapHighlight(new Set([i, j]));
-        }, idx * SWAP_MS);
-        timeoutsRef.current.push(t);
-      });
-    }
-
-    // Cleanup timeouts on unmount
+    // Cleanup timeouts on unmount or before the next plan schedules.
     return () => {
       timeoutsRef.current.forEach(clearTimeout);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items, heapType]);
+  }, [animPlan, heapType]);
 
   // ── Layout ──
   const { nodes, edges, width, height } = useMemo(() => computeLayout(items), [items]);

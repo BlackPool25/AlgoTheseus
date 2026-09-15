@@ -37,6 +37,13 @@ function asItems(value: unknown): unknown[] | null {
 
 export function StackVisual({ value, name, changedIndices = [] }: Props) {
   const items = asItems(value);
+  // Unconditional: hooks must run in the same order every render, even for
+  // the primitive-fallback path below (count 0 renders nothing virtualised).
+  const { parentRef, virtualizer } = useVirtualizedList({
+    count: items?.length ?? 0,
+    itemSize: ITEM_SIZE,
+    horizontal: false,
+  });
   if (!items) {
     return (
       <div className="flex flex-col gap-1">
@@ -48,12 +55,6 @@ export function StackVisual({ value, name, changedIndices = [] }: Props) {
     );
   }
   const changed = new Set(changedIndices);
-  const { parentRef, virtualizer } = useVirtualizedList({
-    count: items.length,
-    itemSize: ITEM_SIZE,
-    horizontal: false,
-  });
-
   function itemClass(i: number): string {
     const base = "px-2 py-1 border text-xs font-mono";
     if (changed.has(i)) return `${base} border-viz-flash bg-viz-flash/10 text-viz-flash`;

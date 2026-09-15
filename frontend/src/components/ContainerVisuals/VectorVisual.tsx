@@ -25,7 +25,15 @@ interface Props {
 const ITEM_SIZE = 34;
 
 export function VectorVisual({ value, name, highlightIndex, changedIndices = [] }: Props) {
-  if (!Array.isArray(value)) {
+  const items = Array.isArray(value) ? (value as unknown[]) : null;
+  // Unconditional: hooks must run in the same order every render, even for
+  // the primitive-fallback path below (count 0 renders nothing virtualised).
+  const { parentRef, virtualizer } = useVirtualizedList({
+    count: items?.length ?? 0,
+    itemSize: ITEM_SIZE,
+    horizontal: true,
+  });
+  if (!items) {
     return (
       <div className="flex flex-col gap-1">
         <div className="text-xs text-viz-ink/60">{name}: vector</div>
@@ -35,14 +43,7 @@ export function VectorVisual({ value, name, highlightIndex, changedIndices = [] 
       </div>
     );
   }
-  const items = value as unknown[];
   const changed = new Set(changedIndices);
-  const { parentRef, virtualizer } = useVirtualizedList({
-    count: items.length,
-    itemSize: ITEM_SIZE,
-    horizontal: true,
-  });
-
   /** Returns border/fill classes for an index that may be highlighted. */
   function boxClass(i: number): string {
     const base = "w-8 h-7 flex items-center justify-center text-xs font-mono truncate overflow-hidden border";

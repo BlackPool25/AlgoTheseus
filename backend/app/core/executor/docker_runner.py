@@ -20,6 +20,7 @@ container (running as root) can read the mounted files.
 from __future__ import annotations
 
 import asyncio
+import os
 import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -159,7 +160,11 @@ def _run_container_sync(cpp_source: str, stdin_data: str) -> RunResult:
 
 
 async def run_in_sandbox(cpp_source: str, stdin_data: str = "") -> RunResult:
-    """Async entry point — runs the blocking Docker work in a thread pool.
+    """Async entry point — runs the blocking sandbox work in a thread pool.
+
+    Dispatches on SANDBOX_MODE: "subprocess" uses the socketless
+    working-dir jail (subprocess_runner); anything else (default "docker")
+    keeps the Docker-DooD path for local dev.
 
     Args:
         cpp_source: Complete instrumented C++ source (already has #include "tracer.h").
@@ -168,4 +173,8 @@ async def run_in_sandbox(cpp_source: str, stdin_data: str = "") -> RunResult:
     Returns:
         RunResult with stdout, clean stderr, raw trace lines, and exit code.
     """
+    if os.environ.get("SANDBOX_MODE", "docker").strip().lower() == "subprocess":
+        from .subprocess_runner import _run_subprocess_sync
+
+        return await asyncio.to_thread(_run_subprocess_sync, cpp_source, stdin_data)
     return await asyncio.to_thread(_run_container_sync, cpp_source, stdin_data)

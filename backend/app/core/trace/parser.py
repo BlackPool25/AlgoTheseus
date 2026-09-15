@@ -110,6 +110,12 @@ def parse(raw_lines: list[str], compressed: bool = False) -> list[Any]:
     for event in events:
         event.step_desc = describe(event)
 
+    # T11b: per-step heap tables + per-$id change sets (pure, never raises).
+    # Only STATE events with $id-bearing values (or an explicit "h" key)
+    # gain heap/heap_diff; every other event keeps both as None so v1 and
+    # $id-less traces stay wire-identical to before.
+    _apply_heap_tables(events)
+
     if compressed:
         events = _compress_state_events(events)
 
@@ -159,6 +165,223 @@ def frames_at_step(events: list[Any]) -> list[list[StackFrame]]:
 def stack_to_render(events: list[Any], step: int) -> list[StackFrame]:
     """Live frames to render at a single step (slice of ``frames_at_step``)."""
     return frames_at_step(events)[step]
+
+
+def heap_at_step(events: list[Any]) -> list[dict[str, dict]]:
+    """Per-step heap tables, parallel to ``events`` (one entry per event).
+
+    Each STATE step maps ``str($id)`` to ``{"type", "fields", "refs",
+    "addr"}`` extracted from that step's own ``vars`` (current-step-only:
+    a ``$ref`` to an id absent from this step renders as ``"unknown"``,
+    never raises). Non-STATE steps yield ``{}``. A STATE carrying an
+    explicit ``heap`` (``"h"`` key) keeps it as-is.
+
+    Unchanged ``$id`` entries share storage with the previous STATE's
+    table (``cur[id] is prev[id]``), so long traces do not duplicate
+    identical objects step after step. Never raises: garbage payloads
+    yield ``{}`` for that step.
+    """
+    tables: list[dict[str, dict]] = []
+    prev: dict[str, dict] = {}
+    for event in events:
+        if event.type != EventType.STATE:
+            tables.append({})
+            continue
+        try:
+            heap = event.heap
+            base = dict(heap) if isinstance(heap, dict) else _extract_heap_table(event.vars)
+        except Exception:  # noqa: BLE001 — parse stays total on garbage
+            logger.warning("heap extraction failed; using empty table")
+            base = {}
+        cur = {k: prev[k] if k in prev and prev[k] == v else v for k, v in base.items()}
+        tables.append(cur)
+        prev = cur
+    return tables
+
+
+def heap_diff(prev: dict | None, cur: dict | None) -> dict[str, Any]:
+    """Prev-vs-current per-``$id`` change set for the frontend HeapPanel.
+
+    Returns ``{"added", "removed", "mutated", "changed_fields"}`` where
+    ``changed_fields`` maps each mutated id to its changed field names.
+    Generic over entry shapes (normalized or raw); never raises.
+    """
+    old = prev if isinstance(prev, dict) else {}
+    new = cur if isinstance(cur, dict) else {}
+    added = sorted((k for k in new if k not in old), key=_heap_id_key)
+    removed = sorted((k for k in old if k not in new), key=_heap_id_key)
+    mutated = sorted((k for k in new if k in old and old[k] != new[k]), key=_heap_id_key)
+    return {
+        "added": added,
+        "removed": removed,
+        "mutated": mutated,
+        "changed_fields": {k: _changed_keys(old[k], new[k]) for k in mutated},
+    }
+
+
+def heap_changes(events: list[Any]) -> list[dict[str, Any]]:
+    """Per-step ``heap_diff`` against the previous STATE's table.
+
+    Parallel to ``events``; non-STATE steps yield an empty change set.
+    The first STATE lists all its ids as added. Never raises.
+    """
+    tables = heap_at_step(events)
+    out: list[dict[str, Any]] = []
+    prev: dict[str, dict] = {}
+    for event, table in zip(events, tables):
+        if event.type == EventType.STATE:
+            out.append(heap_diff(prev, table))
+            prev = table
+        else:
+            out.append(heap_diff({}, {}))
+    return out
+
+
+def _apply_heap_tables(events: list[Any]) -> None:
+    """Attach ``heap`` + ``heap_diff`` to STATE events in place.
+
+    ``heap`` is filled only when the step's table is non-empty (an
+    explicit ``"h"`` key is left untouched); ``heap_diff`` only when the
+    table or the change set is non-empty. ``$id``-less traces therefore
+    keep both fields None — byte-identical wire output.
+    """
+    tables = heap_at_step(events)
+    prev: dict[str, dict] = {}
+    for event, table in zip(events, tables):
+        if event.type != EventType.STATE:
+            continue
+        diff = heap_diff(prev, table)
+        prev = table
+        if event.heap is None and table:
+            event.heap = table
+        if event.heap is not None and (
+            table or diff["added"] or diff["removed"] or diff["mutated"]
+        ):
+            event.heap_diff = diff
+
+
+def _heap_id_key(k: Any) -> tuple[int, Any]:
+    try:
+        return (0, int(k))
+    except (TypeError, ValueError):
+        return (1, str(k))
+
+
+def _changed_keys(old: Any, new: Any) -> list[str]:
+    """Field names differing between two heap entries (never raises)."""
+    if isinstance(old, dict) and isinstance(new, dict):
+        if "fields" in old or "fields" in new or "refs" in old or "refs" in new:
+            merged = {
+                **(old.get("fields") if isinstance(old.get("fields"), dict) else {}),
+                **(old.get("refs") if isinstance(old.get("refs"), dict) else {}),
+                **(new.get("fields") if isinstance(new.get("fields"), dict) else {}),
+                **(new.get("refs") if isinstance(new.get("refs"), dict) else {}),
+            }
+            return sorted((k for k in merged if _field_val(old, k) != _field_val(new, k)),
+                          key=str)
+        keys = set(old) | set(new)
+        return sorted((str(k) for k in keys if old.get(k) != new.get(k)), key=str)
+    return ["$value"]
+
+
+def _field_val(entry: dict, key: str) -> Any:
+    fields = entry.get("fields")
+    if isinstance(fields, dict) and key in fields:
+        return fields[key]
+    refs = entry.get("refs")
+    if isinstance(refs, dict) and key in refs:
+        return refs[key]
+    return None
+
+
+def _extract_heap_table(vars: dict | None) -> dict[str, dict]:
+    """Collect ``$id`` objects from STATE vars into a heap table.
+
+    Vars-only on purpose: the ``g`` pack is change-deduped (absent most
+    steps), so scanning it would churn ids in and out of the table.
+    Nested first-sighting objects register their own entries while the
+    parent records a ref; ``$ref``/``$cycle``/``null`` pointer fields
+    become refs; scalars stay in fields. ``$addr``-only or malformed
+    values are ignored verbatim — never raise.
+    """
+    table: dict[str, dict] = {}
+    try:
+        if isinstance(vars, dict):
+            for value in vars.values():
+                _walk_heap_value(value, table)
+        for entry in table.values():
+            refs = entry.get("refs")
+            if not isinstance(refs, dict):
+                continue
+            for name, target in list(refs.items()):
+                if isinstance(target, list):
+                    refs[name] = [t if t == "unknown" or t in table else "unknown"
+                                  for t in target]
+                elif target != "unknown" and target not in table:
+                    refs[name] = "unknown"
+    except Exception:  # noqa: BLE001 — garbage heap payloads yield partial table
+        logger.warning("heap walk hit unexpected payload; keeping partial table")
+    return table
+
+
+def _walk_heap_value(value: Any, table: dict[str, dict]) -> Any:
+    """Walk one value; return ("id", key) / ("ref", key|"unknown") /
+    ("list", items) / ("scalar", value). Registers ``$id`` objects."""
+    if isinstance(value, dict):
+        id_ = value.get("$id")
+        if isinstance(id_, int) and not isinstance(id_, bool):
+            key = str(id_)
+            if key not in table:
+                table[key] = {}  # placeholder: breaks $cycle recursion
+                table[key] = _build_heap_entry(value, table)
+            return ("id", id_)
+        ref = value.get("$ref")
+        if isinstance(ref, int) and not isinstance(ref, bool):
+            return ("ref", str(ref))
+        if "$ref" in value:
+            return ("ref", "unknown")
+        return ("scalar", value)
+    if isinstance(value, list):
+        return ("list", [_walk_heap_value(v, table) for v in value])
+    return ("scalar", value)
+
+
+def _norm_heap_item(walked: tuple, raw: Any) -> Any:
+    """Normalize one element of a mixed list into a refs entry."""
+    kind, payload = walked
+    if kind == "id" or (kind == "ref" and payload != "unknown"):
+        return int(payload)
+    if kind == "ref":
+        return "unknown"
+    return "unknown" if isinstance(raw, (dict, list)) else raw
+
+
+def _build_heap_entry(obj: dict, table: dict[str, dict]) -> dict:
+    """Split one ``$id`` object into type/fields/refs (+addr)."""
+    fields: dict[str, Any] = {}
+    refs: dict[str, Any] = {}
+    for name, val in obj.items():
+        if name in ("$id", "$addr"):
+            continue
+        kind, payload = _walk_heap_value(val, table)
+        if kind == "id":
+            refs[name] = payload
+        elif kind == "ref":
+            refs[name] = int(payload) if payload != "unknown" else "unknown"
+        elif kind == "list":
+            if all(p[0] == "scalar" for p in payload):
+                fields[name] = val
+            else:
+                refs[name] = [_norm_heap_item(p, v) for (p, v) in zip(payload, val)]
+        else:
+            fields[name] = val
+    addr = obj.get("$addr")
+    return {
+        "type": "container" if "items" in obj else "struct",
+        "fields": fields,
+        "refs": refs,
+        "addr": addr if isinstance(addr, str) else None,
+    }
 
 
 def _cap_stdout(text: str) -> tuple[str, bool]:

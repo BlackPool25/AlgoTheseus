@@ -34,6 +34,7 @@ interface TreePos {
   x: number;
   y: number;
   label: string;
+  cycle?: boolean;
   left?: TreePos;
   right?: TreePos;
 }
@@ -46,8 +47,11 @@ function buildTreeLayout(
   depth = 0,
   offset = 0
 ): TreePos | undefined {
-  if (!node || (node as { $cycle?: boolean }).$cycle || (node as { $depth_limit?: boolean }).$depth_limit) {
+  if (!node || (node as { $depth_limit?: boolean }).$depth_limit) {
     return undefined;
+  }
+  if ((node as { $cycle?: boolean }).$cycle) {
+    return { x: offset * 50, y: depth * 60, label: "↩", cycle: true };
   }
   const label = String(node[labelField] ?? "?");
   const left = buildTreeLayout(node[leftField] as StructNode | null, labelField, leftField, rightField, depth + 1, offset - 1);
@@ -56,11 +60,11 @@ function buildTreeLayout(
 }
 
 function TreeSVG({ root }: { root: TreePos }) {
-  const nodes: { x: number; y: number; label: string }[] = [];
+  const nodes: { x: number; y: number; label: string; cycle: boolean }[] = [];
   const edges: { x1: number; y1: number; x2: number; y2: number }[] = [];
 
   function collect(n: TreePos) {
-    nodes.push({ x: n.x, y: n.y, label: n.label });
+    nodes.push({ x: n.x, y: n.y, label: n.label, cycle: n.cycle === true });
     if (n.left) {
       edges.push({ x1: n.x, y1: n.y, x2: n.left.x, y2: n.left.y });
       collect(n.left);
@@ -90,21 +94,26 @@ function TreeSVG({ root }: { root: TreePos }) {
           key={i}
           x1={tx(e.x1)} y1={ty(e.y1)}
           x2={tx(e.x2)} y2={ty(e.y2)}
-          stroke="#52525b" strokeWidth={1.5}
+          stroke="var(--viz-panel-border)" strokeWidth={1.5}
           markerEnd="url(#arrow)"
         />
       ))}
       <defs>
         <marker id="arrow" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
-          <path d="M0,0 L0,6 L6,3 z" fill="#52525b" />
+          <path d="M0,0 L0,6 L6,3 z" fill="var(--viz-panel-border)" />
         </marker>
       </defs>
       {nodes.map((n, i) => (
-        <g key={i} transform={`translate(${tx(n.x)},${ty(n.y)})`}>
-          <circle r={16} fill="#1c1917" stroke="#78716c" strokeWidth={1.5} />
-          <text textAnchor="middle" dominantBaseline="middle" fill="#e7e5e4" fontSize={10} fontFamily="monospace">
+        <g key={i} transform={`translate(${tx(n.x)},${ty(n.y)})`} data-testid="struct-node" data-label={n.label} data-cycle={n.cycle ? "true" : "false"}>
+          <circle r={16} fill="var(--viz-panel-bg)" stroke={n.cycle ? "var(--viz-exception)" : "var(--viz-panel-border)"} strokeWidth={1.5} />
+          <text textAnchor="middle" dominantBaseline="middle" fill="var(--viz-body-text)" fontSize={10} fontFamily="monospace">
             {n.label.length > 4 ? n.label.slice(0, 4) : n.label}
           </text>
+          {n.cycle && (
+            <text textAnchor="middle" dominantBaseline="middle" y={-24} fontSize={9} fontFamily="monospace" fill="var(--viz-exception)">
+              $cycle
+            </text>
+          )}
         </g>
       ))}
     </svg>
@@ -118,19 +127,19 @@ function LinkedListSVG({ nodes }: { nodes: string[] }) {
   return (
     <svg width={W} height={50}>
       {nodes.map((label, i) => (
-        <g key={i} transform={`translate(${i * 60 + 10}, 10)`}>
-          <rect width={40} height={30} rx={3} fill="#1c1917" stroke="#78716c" strokeWidth={1.5} />
-          <text x={20} y={19} textAnchor="middle" fill="#e7e5e4" fontSize={10} fontFamily="monospace">
+        <g key={i} transform={`translate(${i * 60 + 10}, 10)`} data-testid="struct-node" data-label={label} data-cycle="false">
+          <rect width={40} height={30} rx={3} fill="var(--viz-panel-bg)" stroke="var(--viz-panel-border)" strokeWidth={1.5} />
+          <text x={20} y={19} textAnchor="middle" fill="var(--viz-body-text)" fontSize={10} fontFamily="monospace">
             {label.length > 4 ? label.slice(0, 4) : label}
           </text>
           {i < nodes.length - 1 && (
-            <line x1={40} y1={15} x2={60} y2={15} stroke="#52525b" strokeWidth={1.5} markerEnd="url(#arrow2)" />
+            <line x1={40} y1={15} x2={60} y2={15} stroke="var(--viz-panel-border)" strokeWidth={1.5} markerEnd="url(#arrow2)" />
           )}
         </g>
       ))}
       <defs>
         <marker id="arrow2" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
-          <path d="M0,0 L0,6 L6,3 z" fill="#52525b" />
+          <path d="M0,0 L0,6 L6,3 z" fill="var(--viz-panel-border)" />
         </marker>
       </defs>
     </svg>

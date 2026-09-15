@@ -56,7 +56,11 @@ MultiStructureAdapter.displayName = "MultiStructureAdapter";
 // Used for "struct" (when no schema is available), "primitive", and "unknown".
 
 function PrimitiveFallback({ value }: { value: unknown }): React.ReactElement {
-  return <span className="break-all">{renderCellValue(value)}</span>;
+  return (
+    <span data-testid="primitive-fallback" className="break-all">
+      {renderCellValue(value)}
+    </span>
+  );
 }
 
 // ── Registry ────────────────────────────────────────────────────────────────

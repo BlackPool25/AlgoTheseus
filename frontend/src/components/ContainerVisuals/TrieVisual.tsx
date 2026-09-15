@@ -25,6 +25,25 @@ export interface TrieVisualProps {
   name?: string;
   /** Characters to highlight along the active path (e.g. "cat" highlights c→a→t) */
   highlight?: string;
+  /** Node ids created this step (path ids) — creation flash, never whole-tree. */
+  createdIds?: string[];
+}
+
+/** Path-id set of every node in a serialized trie (for step diffing). */
+export function trieNodeIds(value: Record<string, unknown> | null | undefined): Set<string> {
+  const out = new Set<string>();
+  if (!value || typeof value !== "object") return out;
+  const rawRoot = (value._type === "trie" && value.root
+    ? (value.root as Record<string, unknown>)
+    : value) as Record<string, unknown>;
+  const norm = normalizeNode(rawRoot as TrieNodeData, "", 0);
+  if (!norm) return out;
+  const walk = (n: LayoutNode): void => {
+    out.add(n.id);
+    for (const c of n.children) walk(c);
+  };
+  walk(norm);
+  return out;
 }
 
 // ── Internal types ───────────────────────────────────────────────────────────
@@ -63,6 +82,7 @@ interface Edge {
 }
 
 interface RenderNode {
+  id: string;
   x: number; y: number;
   char: string;
   isRoot: boolean;
@@ -240,27 +260,29 @@ function TrieNodeSVG({
   node,
   isHighlighted,
   index,
+  created,
 }: {
   node: RenderNode;
   isHighlighted: boolean;
   index: number;
+  created: boolean;
 }) {
   const fill = node.isEnd && !node.isRoot
-    ? "#1e3a5f"               // blue-900 for word-end
-    : "#1c1917";               // zinc-900 default
+    ? "var(--viz-panel-bg)"
+    : "var(--viz-panel-bg)";
   const stroke = node.isRoot
-    ? "#a78bfa"               // violet-400 for root
+    ? "var(--viz-accent)"
     : isHighlighted
-      ? "var(--viz-flash, #f59e0b)"   // highlight — mutation-flash token
+      ? "var(--viz-flash)"
       : node.isEnd
-        ? "#3b82f6"           // blue-500 for word-end
-        : "#78716c";           // zinc-500 default
+        ? "var(--viz-alias-edge)"
+        : "var(--viz-panel-border)";
   const strokeW = isHighlighted || node.isRoot ? 2 : 1.5;
   const textFill = node.isRoot
-    ? "#a78bfa"
+    ? "var(--viz-accent)"
     : isHighlighted
-      ? "#fbbf24"
-      : "#e7e5e4";
+      ? "var(--viz-flash)"
+      : "var(--viz-body-text)";
 
   // Slightly larger root node
   const r = node.isRoot ? 20 : NODE_R;
@@ -271,11 +293,14 @@ function TrieNodeSVG({
       style={{
         animation: `trie-node-appear 0.3s ease-out ${index * 0.04}s both`,
       }}
+      data-testid="trie-node"
+      data-terminal={node.isEnd && !node.isRoot ? "true" : "false"}
+      data-flash={created ? "true" : "false"}
     >
       <circle
         r={r}
-        strokeWidth={strokeW}
-        style={{ fill, stroke }}
+        strokeWidth={created ? 2.5 : strokeW}
+        style={{ fill, stroke: created ? "var(--viz-flash)" : stroke }}
       />
       <text
         textAnchor="middle"
@@ -286,6 +311,28 @@ function TrieNodeSVG({
       >
         {node.char.length > 3 ? node.char.slice(0, 3) : node.char}
       </text>
+      {/* Terminal badge: word-end marker (render-spec §2 trie idiom) */}
+      {node.isEnd && !node.isRoot && (
+        <g>
+          <circle
+            cx={r - 4}
+            cy={-r + 4}
+            r={6}
+            style={{ fill: "var(--viz-alias-edge)" }}
+          />
+          <text
+            x={r - 4}
+            y={-r + 4}
+            textAnchor="middle"
+            dominantBaseline="central"
+            fontSize={8}
+            fontFamily="monospace"
+            style={{ fill: "var(--viz-body-bg)", pointerEvents: "none" }}
+          >
+            ✓
+          </text>
+        </g>
+      )}
       {/* Collapse badge */}
       {node.collapsed && node.overflowCount > 0 && (
         <g>
@@ -295,9 +342,9 @@ function TrieNodeSVG({
             width={28}
             height={16}
             rx={3}
-            stroke="#52525b"
+            stroke="var(--viz-panel-border)"
             strokeWidth={1}
-            style={{ fill: "var(--viz-panel-bg, #27272a)" }}
+            style={{ fill: "var(--viz-panel-bg)" }}
           />
           <text
             x={r + 18}
@@ -305,7 +352,7 @@ function TrieNodeSVG({
             textAnchor="middle"
             fontSize={8}
             fontFamily="monospace"
-            style={{ fill: "var(--viz-alias-edge, #a1a1aa)" }}
+            style={{ fill: "var(--viz-alias-edge)" }}
           >
             +{node.overflowCount > 99 ? "99+" : node.overflowCount}
           </text>
@@ -337,7 +384,7 @@ function TrieEdgeSVG({
         x1={edge.x1} y1={edge.y1}
         x2={edge.x2} y2={edge.y2}
         strokeWidth={isHighlighted ? 2 : 1.5}
-        style={{ stroke: isHighlighted ? "var(--viz-flash, #f59e0b)" : "#52525b" }}
+        style={{ stroke: isHighlighted ? "var(--viz-flash)" : "var(--viz-panel-border)" }}
       />
       {/* Edge label background */}
       <rect
@@ -347,7 +394,7 @@ function TrieEdgeSVG({
         height={14}
         rx={2}
         opacity={0.85}
-        style={{ fill: "var(--viz-body-bg, #18181b)" }}
+        style={{ fill: "var(--viz-body-bg)" }}
       />
       <text
         x={midX}
@@ -356,7 +403,7 @@ function TrieEdgeSVG({
         dominantBaseline="middle"
         fontSize={9}
         fontFamily="monospace"
-        style={{ pointerEvents: "none", fill: isHighlighted ? "#fbbf24" : "var(--viz-alias-edge, #a1a1aa)" }}
+        style={{ pointerEvents: "none", fill: isHighlighted ? "var(--viz-flash)" : "var(--viz-alias-edge)" }}
       >
         {edge.label}
       </text>
@@ -366,8 +413,9 @@ function TrieEdgeSVG({
 
 // ── Main component ───────────────────────────────────────────────────────────
 
-export function TrieVisual({ value, name, highlight }: TrieVisualProps) {
+export function TrieVisual({ value, name, highlight, createdIds = [] }: TrieVisualProps) {
   const svgRef = useRef<SVGSVGElement>(null);
+  const created = new Set(createdIds);
 
   const {
     root,
@@ -409,6 +457,7 @@ export function TrieVisual({ value, name, highlight }: TrieVisualProps) {
     ) {
       const isHL = highlightSet.has(n.id);
       nodesAcc.push({
+        id: n.id,
         x: n.x,
         y: n.y,
         char: n.isRoot ? "root" : n.char,
@@ -509,6 +558,7 @@ export function TrieVisual({ value, name, highlight }: TrieVisualProps) {
               node={node}
               isHighlighted={node.highlighted}
               index={i}
+              created={created.has(node.id)}
             />
           ))}
         </svg>

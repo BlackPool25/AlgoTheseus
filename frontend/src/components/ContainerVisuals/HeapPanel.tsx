@@ -135,7 +135,7 @@ export function HeapPanel({ heap, heapDiff, vars }: Props) {
         <span className="font-medium uppercase tracking-wide">Heap</span>
         <span className="font-mono text-viz-ink/60">({ids.length})</span>
         {mutatedSet.size > 0 && (
-          <span className="font-mono text-[10px]" style={{ color: "var(--viz-flash, #f59e0b)" }}>
+          <span className="font-mono text-[10px]" style={{ color: "var(--viz-flash)" }}>
             · {mutatedSet.size} changed
           </span>
         )}
@@ -166,8 +166,8 @@ export function HeapPanel({ heap, heapDiff, vars }: Props) {
                   onMouseLeave={() => setHoveredId((cur) => (cur === id ? null : cur))}
                   className="rounded border px-2 py-1 font-mono text-[11px]"
                   style={{
-                    borderColor: flashed ? "var(--viz-flash, #f59e0b)" : highlighted ? "var(--viz-alias-edge, #a1a1aa)" : "var(--viz-panel-border, #3f3f46)",
-                    backgroundColor: flashed ? "rgba(245, 158, 11, 0.12)" : "var(--viz-panel-bg, #27272a)",
+                    borderColor: flashed ? "var(--viz-flash)" : highlighted ? "var(--viz-alias-edge)" : "var(--viz-panel-border)",
+                    backgroundColor: flashed ? "rgba(245, 158, 11, 0.12)" : "var(--viz-panel-bg)",
                     boxShadow: flashed ? "0 0 6px rgba(245, 158, 11, 0.4)" : undefined,
                   }}
                 >
@@ -191,7 +191,7 @@ export function HeapPanel({ heap, heapDiff, vars }: Props) {
                       key={k}
                       data-changed-field={changed?.has(k) ? "true" : "false"}
                       className="flex gap-1"
-                      style={changed?.has(k) ? { color: "var(--viz-flash, #f59e0b)" } : undefined}
+                      style={changed?.has(k) ? { color: "var(--viz-flash)" } : undefined}
                     >
                       <span className="text-viz-ink/60">{k}</span>
                       <span className="text-viz-ink">= {fmtScalar(v)}</span>
@@ -205,7 +205,7 @@ export function HeapPanel({ heap, heapDiff, vars }: Props) {
                         key={k}
                         data-alias-highlight={inboundHit ? "true" : "false"}
                         className="flex gap-1"
-                        style={inboundHit ? { color: "var(--viz-alias-edge, #a1a1aa)" } : undefined}
+                        style={inboundHit ? { color: "var(--viz-alias-edge)" } : undefined}
                       >
                         <span className="text-viz-ink/60">{k}</span>
                         <span className="text-viz-ink">→ {targets.length > 0 ? targets.map((t) => `#${t}`).join(", ") : "unknown"}</span>
@@ -220,7 +220,7 @@ export function HeapPanel({ heap, heapDiff, vars }: Props) {
                     data-alias-highlight={hoveredId === id ? "true" : "false"}
                     className="font-mono text-[10px] px-2 py-0.5"
                     style={{
-                      color: "var(--viz-alias-edge, #a1a1aa)",
+                      color: "var(--viz-alias-edge)",
                       fontWeight: hoveredId === id ? 700 : 400,
                     }}
                   >

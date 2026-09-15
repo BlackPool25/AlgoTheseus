@@ -257,6 +257,10 @@ export function DPTableVisual({ value, name }: Props) {
     return (
       <div
         className={cellClass}
+        data-testid="dp-cell"
+        data-pos={`${r},${c}`}
+        data-current={isCurrent ? "true" : "false"}
+        data-dep={isDep ? "true" : "false"}
         onMouseEnter={() => handleCellHover(r, c)}
         onMouseLeave={handleCellLeave}
         title={`[${r}][${c}] = ${val}${isCurrent && formula ? `\n${formula}` : ""}`}
@@ -327,17 +331,18 @@ export function DPTableVisual({ value, name }: Props) {
                     refY="3"
                     orient="auto"
                   >
-                    <path d="M0,0 L0,6 L6,3 z" fill="#3b82f6" />
+                    <path d="M0,0 L0,6 L6,3 z" fill="var(--viz-alias-edge)" />
                   </marker>
                 </defs>
                 {arrows.map((a, i) => (
                   <line
                     key={i}
+                    data-testid="dp-arrow"
                     x1={a.x1}
                     y1={a.y1}
                     x2={a.x2}
                     y2={a.y2}
-                    stroke="#3b82f6"
+                    stroke="var(--viz-alias-edge)"
                     strokeWidth={1.5}
                     strokeDasharray="3 2"
                     markerEnd="url(#dp-arrow)"
@@ -449,17 +454,18 @@ export function DPTableVisual({ value, name }: Props) {
                   refY="3"
                   orient="auto"
                 >
-                  <path d="M0,0 L0,6 L6,3 z" fill="#3b82f6" />
+                  <path d="M0,0 L0,6 L6,3 z" fill="var(--viz-alias-edge)" />
                 </marker>
               </defs>
               {arrows.map((a, i) => (
                 <line
                   key={i}
+                  data-testid="dp-arrow"
                   x1={a.x1}
                   y1={a.y1}
                   x2={a.x2}
                   y2={a.y2}
-                  stroke="#3b82f6"
+                  stroke="var(--viz-alias-edge)"
                   strokeWidth={1.5}
                   strokeDasharray="3 2"
                   markerEnd="url(#dp-arrow-v)"

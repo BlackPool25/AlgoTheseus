@@ -63,6 +63,9 @@ class StateEvent(_Base):
     step_desc: str | None = Field(default=None, alias="sd")
     prev_line: int | None = Field(default=None, alias="pl")
     heap: dict[str, Any] | None = Field(default=None, alias="h")
+    # T11b additive-only: prev-vs-current per-$id change set for this step
+    # (added/removed/mutated ids + changed fields); absent → None.
+    heap_diff: dict[str, Any] | None = Field(default=None, alias="hd")
 
 
 class BranchEvent(_Base):

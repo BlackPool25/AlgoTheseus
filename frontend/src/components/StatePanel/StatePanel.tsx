@@ -10,6 +10,8 @@ import { useMemo, useState } from "react";
 import { useTraceStore } from "../../store/traceStore";
 import { CallStackView } from "./CallStackView";
 import { VariableRow } from "./VariableRow";
+import { HeapPanel } from "../ContainerVisuals/HeapPanel";
+import type { HeapDiffShape } from "../ContainerVisuals/HeapPanel";
 import { buildFramesWithVars } from "./frameVars";
 
 export function StatePanel() {
@@ -69,6 +71,20 @@ export function StatePanel() {
     typeof currentEvent.globals === "object"
       ? Object.entries(currentEvent.globals)
       : [];
+
+  // T12 HeapPanel: per-step heap table + per-$id diff. Tolerates the
+  // non-streaming alias keys ("h"/"hd") — the NDJSON stream carries the
+  // python names, which api.ts passes through by reference. Heap-less
+  // traces keep both null so the panel stays hidden (legacy fallback).
+  const rawEvent = currentEvent as unknown as Record<string, unknown>;
+  const heap =
+    currentEvent.type === "state"
+      ? ((currentEvent.heap ?? rawEvent.h) as Record<string, unknown> | null | undefined)
+      : null;
+  const heapDiff =
+    currentEvent.type === "state"
+      ? ((currentEvent.heap_diff ?? rawEvent.hd) as HeapDiffShape | null | undefined)
+      : null;
 
   // ── Highlight index mapping ─────────────────────────────────────────
   // For binary search / divide-and-conquer patterns: if the current state
@@ -189,10 +205,16 @@ export function StatePanel() {
                 JSON.stringify(prevVars[name]) !== JSON.stringify(value)
               }
               highlightIndex={highlightMap[name]}
+              heap={heap}
+              heapDiff={heapDiff}
+              prevValue={name in prevVars ? prevVars[name] : undefined}
             />
           ))
         )}
       </div>
+
+      {/* T12 HeapPanel (R6 lazy/opt-in: collapsed by default; hidden when heap-less) */}
+      <HeapPanel heap={heap} heapDiff={heapDiff} vars={vars} />
 
       {/* Event type badge */}
       <div className="px-3 py-2 border-t border-zinc-800">

@@ -38,6 +38,12 @@ export interface MockStateEvent {
   stdout_truncated?: boolean;
   prev_line?: number | null;
   heap?: Record<string, unknown> | null;
+  heap_diff?: {
+    added: string[];
+    removed: string[];
+    mutated: string[];
+    changed_fields: Record<string, string[]>;
+  } | null;
 }
 
 export interface MockBranchEvent {
@@ -310,10 +316,73 @@ export function createHeapDriftNDJSON(): string {
 }
 
 /**
- * NDJSON for T10 failure path: trace events stream, then the connection
- * drops BEFORE the final cfg line. The app must land in an error state
- * with a visible banner — never hang on "Running…".
+ * NDJSON for T12 HeapPanel: linked list 1→2→3 across three STATE steps.
+ * Heap tables mirror live backend output byte-for-byte (verified via
+ * parse() probe: refs are STRINGS matching table keys, scalar `next: null`
+ * lands in fields, changed_fields names real fields like ["val"]).
+ *
+ * Step 1: creation — all three ids added.
+ * Step 2: single-field mutation (id "2" val 2→20) — ONLY "2" flashes.
+ * Step 3: alias var `alias: {$ref: 2}` (N-inbound on "2" → alias connector)
+ *   + self-cycle on "3" (`refs.next === "3"` → $cycle badge).
  */
+export function createHeapPanelNDJSON(): string {
+  const n = (id: number, addr: string, val: number, next: unknown) => ({
+    $id: id,
+    $addr: addr,
+    val,
+    next,
+  });
+  const e = (
+    type: string,
+    fields: Record<string, unknown>,
+    refs: Record<string, unknown>,
+    addr: string,
+  ) => ({ type, fields, refs, addr });
+
+  const head1 = n(1, "0x100", 1, n(2, "0x200", 2, n(3, "0x300", 3, null)));
+  const head2 = n(1, "0x100", 1, n(2, "0x200", 20, n(3, "0x300", 3, null)));
+  // Step 3 head is value-identical to step 2 (cycle/alias live in heap only,
+  // exactly like the backend where the table is the source of truth).
+  const head3 = n(1, "0x100", 1, n(2, "0x200", 20, n(3, "0x300", 3, null)));
+
+  const heap1 = {
+    "1": e("struct", { val: 1 }, { next: "2" }, "0x100"),
+    "2": e("struct", { val: 2 }, { next: "3" }, "0x200"),
+    "3": e("struct", { val: 3, next: null }, {}, "0x300"),
+  };
+  const heap2 = {
+    "1": e("struct", { val: 1 }, { next: "2" }, "0x100"),
+    "2": e("struct", { val: 20 }, { next: "3" }, "0x200"),
+    "3": e("struct", { val: 3, next: null }, {}, "0x300"),
+  };
+  const heap3 = {
+    "1": e("struct", { val: 1 }, { next: "2" }, "0x100"),
+    "2": e("struct", { val: 20 }, { next: "3" }, "0x200"),
+    "3": e("struct", { val: 3 }, { next: "3" }, "0x300"),
+  };
+
+  const events: MockTraceEvent[] = [
+    { type: "enter", line: 1, func: "main", depth: 1, params: {} },
+    {
+      type: "state", line: 2, func: "main", depth: 1,
+      vars: { head: head1 }, heap: heap1,
+      heap_diff: { added: ["1", "2", "3"], removed: [], mutated: [], changed_fields: {} },
+    },
+    {
+      type: "state", line: 3, func: "main", depth: 1,
+      vars: { head: head2 }, heap: heap2,
+      heap_diff: { added: [], removed: [], mutated: ["2"], changed_fields: { "2": ["val"] } },
+    },
+    {
+      type: "state", line: 4, func: "main", depth: 1,
+      vars: { head: head3, alias: { $ref: 2 } }, heap: heap3,
+      heap_diff: { added: [], removed: [], mutated: ["3"], changed_fields: { "3": ["next"] } },
+    },
+    { type: "exit", line: 5, func: "main", depth: 1, return_val: 0 },
+  ];
+  return buildNDJSON(events, { stdout: "", total_steps: events.length });
+}
 export function createDroppedStreamNDJSON(): string {
   const events: MockTraceEvent[] = [
     { type: "enter", line: 1, func: "main", depth: 1, params: {}, step_desc: "call main()" },
@@ -324,4 +393,24 @@ export function createDroppedStreamNDJSON(): string {
     },
   ];
   return buildNDJSON(events, { stdout: "partial\n" }, true);
+}
+
+/**
+ * NDJSON for T12 GridVisual wiring: one cell mutates between steps, proving
+ * the previously-dead changingCells/highlightedCells props take effect.
+ */
+export function createGridMutationNDJSON(): string {
+  const events: MockTraceEvent[] = [
+    { type: "enter", line: 1, func: "main", depth: 1, params: {} },
+    {
+      type: "state", line: 2, func: "main", depth: 1,
+      vars: { board: [[1, 2], [3, 4]] },
+    },
+    {
+      type: "state", line: 3, func: "main", depth: 1,
+      vars: { board: [[1, 9], [3, 4]] },
+    },
+    { type: "exit", line: 4, func: "main", depth: 1, return_val: 0 },
+  ];
+  return buildNDJSON(events, { stdout: "", total_steps: events.length });
 }

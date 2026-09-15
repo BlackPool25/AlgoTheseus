@@ -326,7 +326,8 @@ def _extract_heap_table(vars: dict | None) -> dict[str, dict]:
 
 def _walk_heap_value(value: Any, table: dict[str, dict]) -> Any:
     """Walk one value; return ("id", key) / ("ref", key|"unknown") /
-    ("list", items) / ("scalar", value). Registers ``$id`` objects."""
+    ("list", items) / ("scalar", value). Registers ``$id`` objects.
+    Key payloads are always STRINGS matching the table keys."""
     if isinstance(value, dict):
         id_ = value.get("$id")
         if isinstance(id_, int) and not isinstance(id_, bool):
@@ -334,7 +335,7 @@ def _walk_heap_value(value: Any, table: dict[str, dict]) -> Any:
             if key not in table:
                 table[key] = {}  # placeholder: breaks $cycle recursion
                 table[key] = _build_heap_entry(value, table)
-            return ("id", id_)
+            return ("id", key)
         ref = value.get("$ref")
         if isinstance(ref, int) and not isinstance(ref, bool):
             return ("ref", str(ref))
@@ -349,15 +350,19 @@ def _walk_heap_value(value: Any, table: dict[str, dict]) -> Any:
 def _norm_heap_item(walked: tuple, raw: Any) -> Any:
     """Normalize one element of a mixed list into a refs entry."""
     kind, payload = walked
-    if kind == "id" or (kind == "ref" and payload != "unknown"):
-        return int(payload)
+    if kind in ("id", "ref") and payload != "unknown":
+        return payload
     if kind == "ref":
         return "unknown"
     return "unknown" if isinstance(raw, (dict, list)) else raw
 
 
 def _build_heap_entry(obj: dict, table: dict[str, dict]) -> dict:
-    """Split one ``$id`` object into type/fields/refs (+addr)."""
+    """Split one ``$id`` object into type/fields/refs (+addr).
+
+    Contract (locked for todo 17 HeapPanel): refs values are STRINGS
+    matching this step's table keys, or "unknown"; container items
+    lists hold the same."""
     fields: dict[str, Any] = {}
     refs: dict[str, Any] = {}
     for name, val in obj.items():
@@ -367,7 +372,7 @@ def _build_heap_entry(obj: dict, table: dict[str, dict]) -> dict:
         if kind == "id":
             refs[name] = payload
         elif kind == "ref":
-            refs[name] = int(payload) if payload != "unknown" else "unknown"
+            refs[name] = payload
         elif kind == "list":
             if all(p[0] == "scalar" for p in payload):
                 fields[name] = val

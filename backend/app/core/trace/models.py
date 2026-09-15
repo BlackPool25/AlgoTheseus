@@ -88,6 +88,20 @@ TraceEvent = Annotated[
 ]
 
 
+class StackFrame(BaseModel):
+    """One live call-stack frame reconstructed by the parser (never on the wire).
+
+    ``frame_id`` is a per-parse monotonic counter, unique even across
+    recursive re-entries of the same function. ``vars`` is the frame's
+    latest merged locals snapshot (STATE vars merged into ENTER params).
+    """
+
+    func: str
+    frame_id: int
+    depth: int
+    vars: dict[str, Any] = Field(default_factory=dict)
+
+
 # ── CFG models ────────────────────────────────────────────────────────────────
 
 class CFGNodeType(str, Enum):

@@ -29,6 +29,7 @@ from .models import (
     FuncEnterEvent,
     FuncExitEvent,
     LoopIterEvent,
+    StackFrame,
     StateEvent,
     TraceEvent,
 )
@@ -98,6 +99,51 @@ def parse(raw_lines: list[str], compressed: bool = False) -> list[Any]:
         events = _compress_state_events(events)
 
     return events
+
+
+def frames_at_step(events: list[Any]) -> list[list[StackFrame]]:
+    """Reconstruct the live call-stack at every step.
+
+    Returns a parallel array (one entry per event): each entry is the list
+    of live ``StackFrame`` snapshots *after* applying that step's event.
+    Parent frames keep their vars untouched while a child runs; a child's
+    FUNC_EXIT pops it (post-pop snapshot). An EXIT with no matching frame
+    (e.g. a user ``exit()`` call) leaves the stack unchanged — never raises.
+    """
+    frames: list[list[StackFrame]] = []
+    stack: list[StackFrame] = []
+    next_id = 0
+
+    for event in events:
+        if event.type == EventType.FUNC_ENTER:
+            stack.append(StackFrame(
+                func=event.func,
+                frame_id=next_id,
+                depth=len(stack),
+                vars=dict(getattr(event, "params", None) or {}),
+            ))
+            next_id += 1
+        elif event.type == EventType.FUNC_EXIT:
+            if stack and stack[-1].func == event.func:
+                stack.pop()
+            elif any(f.func == event.func for f in stack):
+                # Truncate to the nearest matching frame (drop it and above).
+                idx = max(i for i, f in enumerate(stack) if f.func == event.func)
+                del stack[idx:]
+            # else: unbalanced exit — leave the stack unchanged.
+        elif event.type == EventType.STATE and stack:
+            stack[-1].vars.update(event.vars or {})
+
+        frames.append([StackFrame(
+            func=f.func, frame_id=f.frame_id, depth=f.depth, vars=dict(f.vars),
+        ) for f in stack])
+
+    return frames
+
+
+def stack_to_render(events: list[Any], step: int) -> list[StackFrame]:
+    """Live frames to render at a single step (slice of ``frames_at_step``)."""
+    return frames_at_step(events)[step]
 
 
 def _compress_state_events(events: list[Any]) -> list[Any]:

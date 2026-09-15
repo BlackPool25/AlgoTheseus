@@ -6,12 +6,14 @@
  * Pure display component — reads from traceStore only.
  */
 
+import { useState } from "react";
 import { useTraceStore } from "../../store/traceStore";
 import { CallStackView } from "./CallStackView";
 import { VariableRow } from "./VariableRow";
 
 export function StatePanel() {
   const { trace, currentStep, currentEvent } = useTraceStore();
+  const [globalsOpen, setGlobalsOpen] = useState(true);
 
   if (!currentEvent) {
     return (
@@ -40,6 +42,21 @@ export function StatePanel() {
 
   const entries = Object.entries(vars);
 
+  // v2 additive-only: short one-liner for this step; absent on v1 traces
+  const stepDesc =
+    typeof currentEvent.step_desc === "string" &&
+    currentEvent.step_desc.length > 0
+      ? currentEvent.step_desc
+      : null;
+
+  // v2 additive-only: globals captured at this step; absent/null on v1 traces
+  const globalEntries =
+    currentEvent.type === "state" &&
+    currentEvent.globals != null &&
+    typeof currentEvent.globals === "object"
+      ? Object.entries(currentEvent.globals)
+      : [];
+
   // ── Highlight index mapping ─────────────────────────────────────────
   // For binary search / divide-and-conquer patterns: if the current state
   // has scalar index variables (mid, lo, hi), find the corresponding array
@@ -67,6 +84,39 @@ export function StatePanel() {
           <span className="text-xs font-mono text-zinc-300">{currentEvent.func}()</span>
         </div>
       </div>
+
+      {/* Step description header (v2 only — absent on v1 traces) */}
+      {stepDesc != null && (
+        <div className="px-3 py-1.5 border-b border-zinc-800">
+          <span data-testid="step-desc-header" className="text-xs font-mono text-zinc-300">
+            {stepDesc}
+          </span>
+        </div>
+      )}
+
+      {/* Globals section (v2 only — collapsible, above frame vars) */}
+      {globalEntries.length > 0 && (
+        <div data-testid="globals-section" className="border-b border-zinc-800">
+          <button
+            onClick={() => setGlobalsOpen((v) => !v)}
+            className="w-full flex items-center gap-1 px-3 py-1.5 text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+            aria-expanded={globalsOpen}
+          >
+            <span className="font-mono">{globalsOpen ? "▾" : "▸"}</span>
+            <span className="font-medium uppercase tracking-wide">Globals</span>
+            <span className="font-mono text-zinc-600">({globalEntries.length})</span>
+          </button>
+          {globalsOpen &&
+            globalEntries.map(([name, value]) => (
+              <VariableRow
+                key={`global:${name}`}
+                name={name}
+                value={value}
+                changed={false}
+              />
+            ))}
+        </div>
+      )}
 
       {/* Variable list */}
       <div className="flex-1 overflow-y-auto">

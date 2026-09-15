@@ -13,6 +13,7 @@ export interface MockFuncEnterEvent {
   func: string;
   depth: number;
   params: Record<string, unknown>;
+  step_desc?: string | null;
 }
 
 export interface MockFuncExitEvent {
@@ -21,6 +22,7 @@ export interface MockFuncExitEvent {
   func: string;
   depth: number;
   return_val: unknown;
+  step_desc?: string | null;
 }
 
 export interface MockStateEvent {
@@ -29,6 +31,8 @@ export interface MockStateEvent {
   func: string;
   depth: number;
   vars: Record<string, unknown>;
+  step_desc?: string | null;
+  globals?: Record<string, unknown> | null;
 }
 
 export interface MockBranchEvent {
@@ -38,6 +42,7 @@ export interface MockBranchEvent {
   depth: number;
   condition: string;
   taken: boolean;
+  step_desc?: string | null;
 }
 
 export type MockTraceEvent =
@@ -195,4 +200,24 @@ export function createCompileErrorNDJSON(): string {
     type: "error",
     compile_error: "test.cpp:12: error: expected ';'",
   }) + "\n";
+}
+
+/**
+ * NDJSON with v2 `step_desc` on every event + `globals` on state events.
+ * Step-0 description is "call main()" for the header assertion.
+ */
+export function createStepDescNDJSON(): string {
+  const events: MockTraceEvent[] = [
+    { type: "enter", line: 1, func: "main", depth: 1, params: {}, step_desc: "call main()" },
+    {
+      type: "state", line: 2, func: "main", depth: 1,
+      vars: { x: 2 }, globals: { g: 1 }, step_desc: "assign x = 2",
+    },
+    {
+      type: "branch", line: 3, func: "main", depth: 1,
+      condition: "x > 0", taken: true, step_desc: "branch taken: x > 0",
+    },
+    { type: "exit", line: 4, func: "main", depth: 1, return_val: 15, step_desc: "return 15" },
+  ];
+  return buildNDJSON(events, { stdout: "", total_steps: events.length });
 }

@@ -48,7 +48,7 @@ export interface DPTableMeta {
 }
 
 interface Props {
-  value: DPTableMeta | number[][] | number[];
+  value: unknown;
   name: string;
 }
 

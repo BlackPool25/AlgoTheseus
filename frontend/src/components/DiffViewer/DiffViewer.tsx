@@ -70,14 +70,11 @@ export function DiffViewer({ results }: DiffViewerProps) {
   const [activeIdx, setActiveIdx] = useState(0);
   const [expanded, setExpanded] = useState(true);
 
-  // Clamp active index when results change
-  useEffect(() => {
-    if (activeIdx >= results.length) {
-      setActiveIdx(Math.max(0, results.length - 1));
-    }
-  }, [results.length, activeIdx]);
+  // Clamp the active index during render (derived state) — no effect needed.
+  const safeIdx =
+    results.length === 0 ? 0 : Math.min(activeIdx, results.length - 1);
 
-  const active = results[activeIdx];
+  const active = results[safeIdx];
 
   // ── Keyboard navigation ────────────────────────────────────
   const handleKeyDown = useCallback(
@@ -172,7 +169,7 @@ export function DiffViewer({ results }: DiffViewerProps) {
           {/* Navigation */}
           <div className="flex items-center gap-2">
             <span className="text-xs text-viz-ink/60 font-mono">
-              {activeIdx + 1}/{results.length}
+              {safeIdx + 1}/{results.length}
             </span>
             <button
               onClick={() =>

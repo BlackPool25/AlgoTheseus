@@ -22,6 +22,9 @@ export const DEFAULT_THEME: ThemeName = "zinc-dark";
 
 const STORAGE_KEY = "algo-theseus-theme";
 
+/** Pre-rename key (AlgoTheseus was DSA Visualiser): ported once, then dropped. */
+const LEGACY_STORAGE_KEY = "dsa-viz-theme";
+
 export function isThemeName(value: string): value is ThemeName {
   return (THEMES as readonly string[]).includes(value);
 }
@@ -48,6 +51,15 @@ export function initTheme(): ThemeName {
   let stored: string | null = null;
   try {
     stored = localStorage.getItem(STORAGE_KEY);
+    if (stored === null) {
+      // One-time rename port: adopt the legacy value (validated downstream,
+      // unknown values fall back to default with a warning), then drop it.
+      const legacy = localStorage.getItem(LEGACY_STORAGE_KEY);
+      if (legacy !== null) {
+        stored = legacy;
+        localStorage.removeItem(LEGACY_STORAGE_KEY);
+      }
+    }
   } catch {
     stored = null;
   }

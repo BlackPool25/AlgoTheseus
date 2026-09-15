@@ -20,8 +20,8 @@ import { useVirtualizedList } from "../../hooks/useVirtualizedList";
 // ── Types ────────────────────────────────────────────────────────────────────
 
 interface GridVisualProps {
-  /** 2D numeric array — the grid data */
-  value: number[][];
+  /** 2D numeric array — the grid data (validated at the boundary; other shapes render empty) */
+  value: unknown;
   /** Variable name shown in the header */
   name: string;
   /** Cells currently being filled (BFS frontier) — triggers wave animation */

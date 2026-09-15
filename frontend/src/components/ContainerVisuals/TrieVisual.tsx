@@ -24,8 +24,8 @@ import {
 // ── Public types ─────────────────────────────────────────────────────────────
 
 export interface TrieVisualProps {
-  /** Serialized trie data — either the root node or { _type:"trie", root:… } */
-  value: Record<string, unknown>;
+  /** Serialized trie data — root node or { _type:"trie", root:… } (validated at the boundary; other shapes render empty) */
+  value: unknown;
   /** Variable name shown in the header */
   name?: string;
   /** Characters to highlight along the active path (e.g. "cat" highlights c→a→t) */
@@ -304,11 +304,17 @@ export function TrieVisual({ value, name, highlight, createdIds = [] }: TrieVisu
     svgHeight,
     nodeCount,
   } = useMemo(() => {
-    // Parse input — support both { _type:"trie", root:{…} } and bare root node
+    // Parse input — support both { _type:"trie", root:{…} } and bare root node.
+    // Non-object values fall through to the empty render below.
+    const record: Record<string, unknown> =
+      value && typeof value === "object" && !Array.isArray(value)
+        ? (value as Record<string, unknown>)
+        : {};
+    const wrapped = record._type === "trie" ? record.root : null;
     const rawRoot: Record<string, unknown> =
-      (value._type === "trie" && value.root
-        ? (value.root as Record<string, unknown>)
-        : value) ?? {};
+      wrapped && typeof wrapped === "object" && !Array.isArray(wrapped)
+        ? (wrapped as Record<string, unknown>)
+        : record;
 
     const norm = normalizeNode(rawRoot, "", 0);
     if (!norm) {

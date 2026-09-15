@@ -32,6 +32,14 @@ function asEntries(value: unknown): [string, unknown][] | null {
 
 export function MapVisual({ value, name, changedKeys = [] }: Props) {
   const entries = asEntries(value);
+  // Unconditional: hooks must run in the same order every render, even for
+  // the primitive-fallback path below (count 0 renders nothing virtualised).
+  const { parentRef, virtualizer } = useVirtualizedList({
+    count: entries?.length ?? 0,
+    itemSize: ITEM_SIZE,
+    horizontal: false,
+  });
+  const changed = new Set(changedKeys);
   if (!entries) {
     return (
       <div className="flex flex-col gap-1">
@@ -44,13 +52,6 @@ export function MapVisual({ value, name, changedKeys = [] }: Props) {
       </div>
     );
   }
-  const changed = new Set(changedKeys);
-  const { parentRef, virtualizer } = useVirtualizedList({
-    count: entries.length,
-    itemSize: ITEM_SIZE,
-    horizontal: false,
-  });
-
   function rowAttrs(k: string) {
     return {
       "data-testid": "map-row",

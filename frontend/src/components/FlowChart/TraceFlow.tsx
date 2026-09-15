@@ -206,10 +206,22 @@ export function TraceFlow() {
         flowNodes={flowNodes}
       />
       <Background color="var(--viz-panel-bg)" gap={16} />
+      {/* MiniMap legibility: node fills use the body-bg/body-text contrast
+          pair (guaranteed contrast in every palette) with accent for the
+          active node; the viewport mask is a color-mix veil derived from the
+          theme bg so it never renders as a hardcoded black box. */}
       <MiniMap
-        nodeColor={(node) => (node.data?.isActive ? 'var(--viz-accent)' : 'var(--viz-panel-border)')}
-        maskColor="rgba(0,0,0,0.7)"
-        style={{ background: 'var(--viz-body-bg)' }}
+        nodeColor={(node) =>
+          node.data?.isActive
+            ? "var(--viz-accent)"
+            : "var(--viz-body-text)"
+        }
+        maskColor="color-mix(in srgb, var(--viz-body-bg) 62%, transparent)"
+        style={{
+          background: "var(--viz-panel-bg)",
+          border: "1px solid var(--viz-panel-border)",
+          borderRadius: 8,
+        }}
         pannable
         zoomable
       />

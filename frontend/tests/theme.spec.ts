@@ -92,6 +92,54 @@ test.describe("Theme switcher", () => {
     expect(warnings.some((w) => w.includes("bogus-theme"))).toBe(true);
   });
 
+  test("legacy dsa-viz-theme key migrates to algo-theseus-theme on startup", async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      localStorage.removeItem("algo-theseus-theme");
+      localStorage.setItem("dsa-viz-theme", "nord");
+    });
+    await page.goto("/");
+    await expect(page.getByRole("button", { name: /^Run$/ })).toBeVisible();
+    expect(await themeOf(page)).toBe("nord");
+    await expect(page.getByLabel("Theme")).toHaveValue("nord");
+    expect(
+      await page.evaluate(() => localStorage.getItem("algo-theseus-theme")),
+    ).toBe("nord");
+    expect(
+      await page.evaluate(() => localStorage.getItem("dsa-viz-theme")),
+    ).toBeNull();
+  });
+
+  test("unknown legacy value falls back to default, never unstyled", async ({
+    page,
+  }) => {
+    const warnings: string[] = [];
+    page.on("console", (msg) => {
+      if (msg.type() === "warning") warnings.push(msg.text());
+    });
+    await page.addInitScript(() => {
+      localStorage.removeItem("algo-theseus-theme");
+      localStorage.setItem("dsa-viz-theme", "bogus-legacy");
+    });
+    await page.goto("/");
+    await expect(page.getByRole("button", { name: /^Run$/ })).toBeVisible();
+    expect(await themeOf(page)).toBe("zinc-dark");
+    expect(warnings.some((w) => w.includes("bogus-legacy"))).toBe(true);
+  });
+
+  test("missing keys entirely default to zinc-dark with no crash", async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      localStorage.removeItem("algo-theseus-theme");
+      localStorage.removeItem("dsa-viz-theme");
+    });
+    await page.goto("/");
+    await expect(page.getByRole("button", { name: /^Run$/ })).toBeVisible();
+    expect(await themeOf(page)).toBe("zinc-dark");
+  });
+
   test("light theme visibly re-skins the app shell and editor", async ({
     page,
   }) => {

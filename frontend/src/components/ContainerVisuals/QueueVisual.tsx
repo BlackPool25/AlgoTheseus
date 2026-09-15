@@ -37,6 +37,13 @@ function asItems(value: unknown): unknown[] | null {
 
 export function QueueVisual({ value, changedIndices = [] }: Props) {
   const items = asItems(value);
+  // Unconditional: hooks must run in the same order every render, even for
+  // the primitive-fallback path below (count 0 renders nothing virtualised).
+  const { parentRef, virtualizer } = useVirtualizedList({
+    count: items?.length ?? 0,
+    itemSize: ITEM_SIZE,
+    horizontal: true,
+  });
   if (!items) {
     return (
       <div className="flex flex-col gap-1">
@@ -47,12 +54,6 @@ export function QueueVisual({ value, changedIndices = [] }: Props) {
     );
   }
   const changed = new Set(changedIndices);
-  const { parentRef, virtualizer } = useVirtualizedList({
-    count: items.length,
-    itemSize: ITEM_SIZE,
-    horizontal: true,
-  });
-
   function itemClass(i: number): string {
     const base = "flex items-center justify-center min-w-[32px] h-7 px-1.5 border text-[10px] font-mono shrink-0";
     if (changed.has(i)) return `${base} border-viz-flash bg-viz-flash/10 text-viz-flash`;

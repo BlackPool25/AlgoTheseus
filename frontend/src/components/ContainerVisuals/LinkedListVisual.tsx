@@ -11,7 +11,7 @@
  *   - 500-node soft limit with truncation warning
  */
 
-import { useMemo, useRef, useEffect, useState } from "react";
+import { useMemo, useEffect, useState } from "react";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -182,22 +182,22 @@ export function LinkedListVisual({ value, name, currentAddr }: Props) {
   const isDoubly = useMemo(() => hasPrevField(value), [value]);
 
   // ── Animation state ──────────────────────────────────────────────────────
+  /** Serialised ids of the last-diffed list (previous-value adjustment). */
+  const currSerialised = flat.map((n) => n.id).join(",");
+  const [prevSerialised, setPrevSerialised] = useState(currSerialised);
   /** Nodes currently in the render list (keeps exiting nodes alive). */
-  const [renderList, setRenderList] = useState<FlatNode[]>([]);
+  const [renderList, setRenderList] = useState<FlatNode[]>(flat);
   /** IDs of nodes currently playing the exit animation. */
   const [exitingIds, setExitingIds] = useState<Set<string>>(new Set());
   /** IDs of nodes that should render with opacity:0 on the next frame. */
   const [enteringIds, setEnteringIds] = useState<Set<string>>(new Set());
 
-  const prevSerialised = useRef("");
-
-  // Diff incoming flat list vs current render list
-  useEffect(() => {
-    injectAnimStyle();
-
-    const currSerialised = flat.map((n) => n.id).join(",");
-    if (currSerialised === prevSerialised.current) return; // no structural change
-    prevSerialised.current = currSerialised;
+  // Diff the incoming list against the render list during render (previous
+  // serialised adjustment): pure derivation, never a cascading effect.
+  // Delayed commits (exit-animation settle, enter-flag clear) live in the
+  // effects below, which set state only inside async callbacks.
+  if (prevSerialised !== currSerialised) {
+    setPrevSerialised(currSerialised);
 
     const currMap = new Map(flat.map((n) => [n.id, n]));
     const prevMap = new Map(renderList.map((n) => [n.id, n]));
@@ -209,40 +209,41 @@ export function LinkedListVisual({ value, name, currentAddr }: Props) {
     for (const id of currMap.keys()) if (!prevMap.has(id)) entering.add(id);
 
     if (exiting.size > 0) {
-      // Keep exiting nodes temporarily
+      // Keep exiting nodes temporarily; the settle effect below commits flat.
       setExitingIds(exiting);
       setRenderList(
         renderList
           .filter((n) => !exiting.has(n.id))
           .concat(flat.filter((n) => !prevMap.has(n.id))),
       );
-
-      const timer = setTimeout(() => {
-        setRenderList(flat);
-        setExitingIds(new Set());
-      }, 300);
-      return () => clearTimeout(timer);
-    }
-
-    // No exiting nodes — just update
-    setRenderList(flat);
-
-    if (entering.size > 0) {
-      setEnteringIds(entering);
-      const raf = requestAnimationFrame(() => setEnteringIds(new Set()));
-      return () => cancelAnimationFrame(raf);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [flat]);
-
-  // Initial render
-  useEffect(() => {
-    if (renderList.length === 0 && flat.length > 0) {
+    } else {
       setRenderList(flat);
-      prevSerialised.current = flat.map((n) => n.id).join(",");
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [flat]);
+    setEnteringIds(entering);
+  }
+
+  // One-time keyframe injection (DOM setup only, never sets state).
+  useEffect(() => {
+    injectAnimStyle();
+  }, []);
+
+  // Settle an in-flight exit animation: hold exiting nodes 300ms, then
+  // commit the new list. State changes run inside the timeout (async).
+  useEffect(() => {
+    if (exitingIds.size === 0) return;
+    const timer = setTimeout(() => {
+      setRenderList(flat);
+      setExitingIds(new Set());
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [exitingIds, flat]);
+
+  // Clear the enter flag on the next frame so the slide-in plays once.
+  useEffect(() => {
+    if (enteringIds.size === 0) return;
+    const raf = requestAnimationFrame(() => setEnteringIds(new Set()));
+    return () => cancelAnimationFrame(raf);
+  }, [enteringIds]);
 
   const svgW = Math.max(
     60,

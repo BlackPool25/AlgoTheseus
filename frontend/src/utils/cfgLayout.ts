@@ -114,6 +114,11 @@ export function layoutCFG(
       type: n.type,
       // Dagre gives center position; React Flow wants top-left
       position: { x: pos.x - w / 2, y: pos.y - NODE_HEIGHT / 2 },
+      // Seed the store with the dagre estimates React Flow needs for the
+      // MiniMap/edges until the ResizeObserver measures the real DOM nodes.
+      // Without these the MiniMap renders an empty (near-black) box.
+      initialWidth: w,
+      initialHeight: NODE_HEIGHT,
       data: {
         label: n.label,
         lines: n.lines,

@@ -170,10 +170,13 @@ export function MultiStructureSyncView({
   );
   const [flexRatios, setFlexRatios] = useState<number[]>(initRatios);
 
-  // Keep ratios in sync when the number of structures changes
-  useEffect(() => {
+  // Reset ratios when the number of structures changes (render-phase
+  // adjustment, not an effect — user resizes must survive other re-renders).
+  const [prevCount, setPrevCount] = useState(count);
+  if (prevCount !== count) {
+    setPrevCount(count);
     setFlexRatios(initRatios);
-  }, [initRatios]);
+  }
 
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -266,13 +269,15 @@ export function MultiStructureSyncView({
     setConnectorLines(lines);
   }, [connections]);
 
-  // Initial computation + ResizeObserver for layout changes
+  // Connector geometry is measured from the DOM: subscribe with
+  // ResizeObserver, whose initial fire paints the first lines. The compute
+  // call stays inside the observer callback (async subscription) so the
+  // effect body itself never sets state synchronously.
   useEffect(() => {
-    computeConnectors();
     const el = containerRef.current;
     if (!el) return;
 
-    const observer = new ResizeObserver(computeConnectors);
+    const observer = new ResizeObserver(() => computeConnectors());
     observer.observe(el);
     return () => observer.disconnect();
   }, [computeConnectors]);

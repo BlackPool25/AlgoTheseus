@@ -144,7 +144,7 @@ def test_jail_dir_cleaned_up():
 
 
 def test_stdout_byte_cap_bounds_output_flood():
-    src = "#include <cstdio>\nint main(){for(long i=0;i<60000L;i++) std::puts(\"0123456789abcdef\"); return 0;}\n"
+    src = "#include <cstdio>\nint main(){for(long i=0;i<100000L;i++) std::puts(\"0123456789abcdef\"); return 0;}\n"
     start = time.monotonic()
     r = _run(src)
     elapsed = time.monotonic() - start

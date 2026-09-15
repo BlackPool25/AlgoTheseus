@@ -11,13 +11,19 @@
 
 import { useMemo } from "react";
 import { useTraceStore } from "../../store/traceStore";
+import { buildFramesWithVars } from "./frameVars";
 
 export function CallStackView() {
   const callStack = useTraceStore((s) => s.callStack);
+  const trace = useTraceStore((s) => s.trace);
+  const currentStep = useTraceStore((s) => s.currentStep);
 
   // callStack is stored in chronological order (deepest call last).
   // Reverse for display so the most recent call is at the top.
-  const frames = useMemo(() => [...callStack].reverse(), [callStack]);
+  const frames = useMemo(
+    () => buildFramesWithVars(trace, currentStep, callStack).reverse(),
+    [trace, currentStep, callStack],
+  );
 
   if (frames.length === 0) return null;
 
@@ -33,26 +39,40 @@ export function CallStackView() {
         {frames.map((frame, i) => (
           <div
             key={i}
-            className={`flex items-center gap-2 px-3 py-1 border-b border-zinc-800/50 ${
+            className={`flex flex-col px-3 py-1 border-b border-zinc-800/50 ${
               i === 0 ? "bg-zinc-800/40" : ""
             }`}
           >
-            {/* Depth indicator */}
-            <div
-              className="w-4 h-4 rounded-sm flex items-center justify-center text-[9px] font-mono shrink-0"
-              style={{
-                background: `hsl(${200 + frame.depth * 30}, 60%, 25%)`,
-                color: `hsl(${200 + frame.depth * 30}, 80%, 70%)`,
-              }}
-            >
-              {frame.depth}
+            <div className="flex items-center gap-2">
+              {/* Depth indicator */}
+              <div
+                className="w-4 h-4 rounded-sm flex items-center justify-center text-[9px] font-mono shrink-0"
+                style={{
+                  background: `hsl(${200 + frame.depth * 30}, 60%, 25%)`,
+                  color: `hsl(${200 + frame.depth * 30}, 80%, 70%)`,
+                }}
+              >
+                {frame.depth}
+              </div>
+              <span className="text-[11px] font-mono text-zinc-300 truncate">
+                {frame.func}()
+              </span>
+              <span className="text-[10px] text-zinc-600 ml-auto shrink-0">
+                :{frame.line}
+              </span>
             </div>
-            <span className="text-[11px] font-mono text-zinc-300 truncate">
-              {frame.func}()
-            </span>
-            <span className="text-[10px] text-zinc-600 ml-auto shrink-0">
-              :{frame.line}
-            </span>
+            {Object.keys(frame.vars).length > 0 && (
+              <div className="flex flex-wrap gap-1 mt-0.5 ml-6">
+                {Object.keys(frame.vars).map((name) => (
+                  <span
+                    key={name}
+                    className="text-[10px] font-mono text-zinc-500 bg-zinc-800/60 rounded px-1"
+                  >
+                    {name}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
         ))}
       </div>

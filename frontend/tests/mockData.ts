@@ -23,6 +23,7 @@ export interface MockFuncExitEvent {
   depth: number;
   return_val: unknown;
   step_desc?: string | null;
+  return_line?: number | null;
 }
 
 export interface MockStateEvent {
@@ -33,6 +34,8 @@ export interface MockStateEvent {
   vars: Record<string, unknown>;
   step_desc?: string | null;
   globals?: Record<string, unknown> | null;
+  stdout?: string | null;
+  prev_line?: number | null;
 }
 
 export interface MockBranchEvent {
@@ -220,4 +223,31 @@ export function createStepDescNDJSON(): string {
     { type: "exit", line: 4, func: "main", depth: 1, return_val: 15, step_desc: "return 15" },
   ];
   return buildNDJSON(events, { stdout: "", total_steps: events.length });
+}
+
+/**
+ * NDJSON for T9 phase-2: nested call (main → helper) with per-step
+ * cumulative `stdout` + `prev_line` on states + `return_line` on exit.
+ * At steps 3-4 the call stack holds 2 frames; stdout grows "a" → "a b" → "a b c".
+ */
+export function createFrameStdoutNDJSON(): string {
+  const events: MockTraceEvent[] = [
+    { type: "enter", line: 1, func: "main", depth: 1, params: {}, step_desc: "call main()" },
+    {
+      type: "state", line: 2, func: "main", depth: 1,
+      vars: { x: 1 }, stdout: "a\n", prev_line: 1, step_desc: "assign x = 1",
+    },
+    { type: "enter", line: 3, func: "helper", depth: 2, params: { n: 5 }, step_desc: "call helper(n=5)" },
+    {
+      type: "state", line: 4, func: "helper", depth: 2,
+      vars: { y: 10 }, stdout: "a\nb\n", prev_line: 3, step_desc: "assign y = 10",
+    },
+    {
+      type: "state", line: 5, func: "helper", depth: 2,
+      vars: { y: 11 }, stdout: "a\nb\nc\n", prev_line: 4, step_desc: "assign y = 11",
+    },
+    { type: "exit", line: 5, func: "helper", depth: 2, return_val: 11, return_line: 3, step_desc: "return 11" },
+    { type: "exit", line: 6, func: "main", depth: 1, return_val: 0, step_desc: "return 0" },
+  ];
+  return buildNDJSON(events, { stdout: "a\nb\nc\n", total_steps: events.length });
 }

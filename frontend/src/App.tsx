@@ -27,6 +27,7 @@ import { InputPanel } from "./components/Editor/InputPanel";
 import { TestCaseManager } from "./components/Editor/TestCaseManager";
 import { TraceScrubber } from "./components/Scrubber/TraceScrubber";
 import { StatePanel } from "./components/StatePanel/StatePanel";
+import { ProgramOutputBox } from "./components/ProgramOutputBox";
 import { TraceFlow } from "./components/FlowChart/TraceFlow";
 
 export default function App() {
@@ -40,6 +41,11 @@ export default function App() {
     runtimeError,
   } = useUIStore();
   const { reset } = useUIStore();
+  const trace = useTraceStore((s) => s.trace);
+  // Per-step stdout present → ProgramOutputBox owns output; else static banner.
+  const hasPerStepStdout = trace.some(
+    (e) => e.type === "state" && typeof e.stdout === "string",
+  );
 
   async function handleExecute() {
     const uiStore = useUIStore.getState();
@@ -141,11 +147,16 @@ export default function App() {
         </div>
       )}
 
-      {/* Stdout banner */}
-      {stdout && status === "done" && (
-        <div className="px-4 py-2 bg-zinc-900 border-t border-zinc-800 text-xs text-zinc-300 font-mono">
-          <span className="text-zinc-500 mr-2">stdout:</span>{stdout.trim()}
-        </div>
+      {/* Stdout banner (retired when per-step stdout present) */}
+      {hasPerStepStdout ? (
+        <ProgramOutputBox />
+      ) : (
+        stdout &&
+        status === "done" && (
+          <div className="px-4 py-2 bg-zinc-900 border-t border-zinc-800 text-xs text-zinc-300 font-mono">
+            <span className="text-zinc-500 mr-2">stdout:</span>{stdout.trim()}
+          </div>
+        )
       )}
 
       {/* Scrubber */}

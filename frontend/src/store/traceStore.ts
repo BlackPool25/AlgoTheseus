@@ -248,6 +248,7 @@ export const useTraceStore = create<TraceStore>((set, get) => ({
       // Set currentStep to 0 and currentEvent if not yet set (streaming never positioned)
       currentStep: 0,
       currentEvent: trace[0] ?? null,
+      callStack: rebuildCallStack(trace, 0),
     });
   },
 

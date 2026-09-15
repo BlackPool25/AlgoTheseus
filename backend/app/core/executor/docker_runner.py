@@ -130,7 +130,7 @@ def _run_container_sync(cpp_source: str, stdin_data: str) -> RunResult:
             result = container.wait(timeout=EXECUTION_TIMEOUT_SECONDS)
             exit_code = result["StatusCode"]
             timed_out = False
-        except Exception:
+        except (docker.errors.DockerException, OSError):
             container.kill()
             timed_out = True
             exit_code = -1

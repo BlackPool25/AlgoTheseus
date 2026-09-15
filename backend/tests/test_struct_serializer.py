@@ -33,11 +33,11 @@ def _compile_and_run_extra(source: str, timeout: int = 5) -> subprocess.Complete
         binary = tmp_path / "prog"
         compile_result = subprocess.run(
             ["g++", "-O0", "-std=c++17", "-I", str(tmp_path), "-o", str(binary), str(src)],
-            capture_output=True, text=True, timeout=30,
+            capture_output=True, text=True, timeout=30, check=False,
         )
         assert compile_result.returncode == 0, f"Compile error:\n{compile_result.stderr}"
         return subprocess.run(
-            [str(binary)], capture_output=True, text=True, timeout=timeout,
+            [str(binary)], capture_output=True, text=True, timeout=timeout, check=False,
         )
 
 
@@ -173,10 +173,10 @@ def test_instrumented_fixture_trace_carries_id_ref_addr():
         compile_result = subprocess.run(
             ["g++", "-O0", "-std=c++17", "-I", str(tmp_path),
              "-o", str(binary), str(src)],
-            capture_output=True, text=True, timeout=30,
+            capture_output=True, text=True, timeout=30, check=False,
         )
         assert compile_result.returncode == 0, f"Compile error:\n{compile_result.stderr}"
-        run = subprocess.run([str(binary)], capture_output=True, text=True, timeout=10)
+        run = subprocess.run([str(binary)], capture_output=True, text=True, timeout=10, check=False)
     assert run.returncode == 0, f"nonzero exit:\n{run.stderr}"
     trace_vals = [
         json.loads(line[len("TRACE:"):]) for line in run.stderr.splitlines()

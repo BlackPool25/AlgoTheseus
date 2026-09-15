@@ -21,7 +21,6 @@ from app.core.trace.parser import parse
 
 BACKEND = Path(__file__).parent.parent
 TRACER_H = BACKEND / "app" / "core" / "instrumenter" / "tracer.h"
-FIXTURE = Path(__file__).parent / "fixtures" / "print_loop.cpp"
 
 EXPECTED_OUTPUT = "".join(
     f"cout:{i}\nprintf:{i}\n" for i in range(5)
@@ -109,7 +108,6 @@ class TestIncrementalAccumulation:
 
 def _instrumented_source() -> str:
     """Hand-instrumented print_loop body (injector lane untouched)."""
-    body = FIXTURE.read_text(encoding="utf-8")
     # Strip includes/main wrapper; reuse only the loop print statements.
     return (
         '#include <cstdio>\n#include <iostream>\n#include "tracer.h"\n'
@@ -140,7 +138,7 @@ def _run_gcc_local(src: str, workdir: Path) -> tuple[str, list[str]]:
         check=True, capture_output=True, text=True, timeout=120,
     )
     proc = subprocess.run(
-        [str(workdir / "prog")], capture_output=True, text=True, timeout=30,
+        [str(workdir / "prog")], capture_output=True, text=True, timeout=30, check=False,
     )
     trace = [
         ln[len("TRACE:"):] for ln in proc.stderr.splitlines()

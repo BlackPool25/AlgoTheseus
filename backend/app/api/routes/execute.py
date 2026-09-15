@@ -51,6 +51,7 @@ from collections.abc import AsyncGenerator
 from dataclasses import dataclass
 from pathlib import Path
 
+import docker.errors
 from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -188,7 +189,7 @@ async def _resolve(req: ExecuteRequest, kind: str) -> _Resolved:
     else:
         try:
             instrumented = instrument(req.code)
-        except Exception as e:
+        except (RuntimeError, ValueError, OSError) as e:
             return _Resolved(
                 cleaned_stdin=cleaned_stdin, instrumentation_error=str(e)
             )
@@ -213,7 +214,7 @@ async def _resolve(req: ExecuteRequest, kind: str) -> _Resolved:
     _log_cold_miss_once()
     try:
         run_result = await run_in_sandbox(instrumented, cleaned_stdin)
-    except Exception as e:
+    except (RuntimeError, OSError, docker.errors.DockerException) as e:
         return _Resolved(
             cleaned_stdin=cleaned_stdin,
             instrumented=instrumented,

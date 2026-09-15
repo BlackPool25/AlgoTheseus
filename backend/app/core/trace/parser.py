@@ -145,9 +145,8 @@ def _apply_gutter_lines(events: list[Any]) -> None:
             elif any(f == event.func for f, _ in enter_stack):
                 cut = max(i for i, (f, _) in enumerate(enter_stack) if f == event.func)
                 del enter_stack[cut:]
-        elif event.type == EventType.STATE:
-            if event.prev_line is None:
-                event.prev_line = prev
+        elif event.type == EventType.STATE and event.prev_line is None:
+            event.prev_line = prev
         prev = event.line
 
 
@@ -398,9 +397,7 @@ def _build_heap_entry(obj: dict, table: dict[str, dict]) -> dict:
         if name in ("$id", "$addr"):
             continue
         kind, payload = _walk_heap_value(val, table)
-        if kind == "id":
-            refs[name] = payload
-        elif kind == "ref":
+        if kind == "id" or kind == "ref":
             refs[name] = payload
         elif kind == "list":
             if all(p[0] == "scalar" for p in payload):

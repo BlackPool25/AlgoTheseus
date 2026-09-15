@@ -24,6 +24,10 @@ MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
 MAX_FILES = 50
 ALLOWED_EXTENSIONS = {".txt", ".in", ".out", ".ans"}
 
+# Module-level File() default (B008: no calls in argument defaults).
+# Same object FastAPI would build at decoration time — shared on purpose.
+_FILES_PARAM = File(..., description="Test case files (.txt, .in, .out, .ans)")
+
 PREVIEW_MAX_CHARS = 200
 
 
@@ -60,7 +64,7 @@ def _make_preview(content: bytes) -> str:
 
 
 @router.post("")
-async def upload_testcases(files: list[UploadFile] = File(..., description="Test case files (.txt, .in, .out, .ans)")) -> dict:
+async def upload_testcases(files: list[UploadFile] = _FILES_PARAM) -> dict:
     """Upload test case files (input + expected output).
 
     Accepts up to **50 files** (10 MB each) with extensions

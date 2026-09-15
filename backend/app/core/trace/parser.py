@@ -90,8 +90,7 @@ def parse(raw_lines: list[str], compressed: bool = False) -> list[Any]:
         else:
             event.depth = len(call_stack) - 1 if call_stack else 0
 
-    # Synthesize per-step explanations (pure, never raises). Iter events carry
-    # theirs via __pydantic_extra__ (no declared field) into model_dump().
+    # Synthesize per-step explanations (pure, never raises).
     for event in events:
         event.step_desc = describe(event)
 

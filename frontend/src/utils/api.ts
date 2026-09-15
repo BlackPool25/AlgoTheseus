@@ -4,6 +4,8 @@
  * Endpoints:
  *   POST /execute            — trace + CFG (JSON or NDJSON streaming)
  *   POST /upload-testcases   — test case file upload
+ *   POST /jobs               — async submit (prod path, avoids LB timeouts)
+ *   GET  /jobs/{id}          — poll async job to completion
  *
  * Streaming:
  *   When ``compressed=true`` is sent the backend responds with
@@ -11,6 +13,12 @@
  *   helper parses the newline-delimited JSON stream and dispatches
  *   each chunk to the appropriate callback.  An ``AbortController``
  *   is returned so the caller can cancel the in-flight request.
+ *
+ * Async jobs (Cloud Run production):
+ *   ``submitJob()`` + ``pollJob()`` (or the combined
+ *   ``executeViaJobs()`` with sync ``POST /execute`` fallback) is the
+ *   prod path.  Local compose keeps using sync ``POST /execute`` /
+ *   ``streamExecute()`` directly.
  */
 
 import type { CFGEdge, CFGNode } from "../types/cfg";
@@ -211,4 +219,134 @@ export const api = {
     }
     return postFormData<UploadTestcasesResponse>("/upload-testcases", formData);
   },
+
+  submitJob: (req: ExecuteRequest) => submitJob(req),
+  pollJob: (jobId: string, opts?: PollOptions) => pollJob(jobId, opts),
+  /** Prod path: async /jobs with sync /execute fallback. */
+  executeViaJobs: (req: ExecuteRequest, opts?: PollOptions) =>
+    executeViaJobs(req, opts),
 };
+
+// ── Async job polling (Cloud Run prod path) ────────────────────────────────
+
+/** Response from POST /jobs. Accepts both `job_id` and `id` shapes. */
+export interface SubmitJobResponse {
+  job_id: string;
+}
+
+/** Discriminated job state returned by GET /jobs/{id}. */
+export type JobStatus =
+  | { status: "pending" }
+  | { status: "running" }
+  | { status: "completed"; result: ExecuteResponse }
+  | { status: "failed"; error: string };
+
+export interface PollOptions {
+  /** Per-poll interval in ms. Default 1000. */
+  intervalMs?: number;
+  /** Overall timeout in ms. Default 60000. */
+  timeoutMs?: number;
+  /** External abort signal; polling stops and throws on abort. */
+  signal?: AbortSignal;
+}
+
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new DOMException("Aborted", "AbortError"));
+      return;
+    }
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    const onAbort = (): void => {
+      clearTimeout(timer);
+      reject(new DOMException("Aborted", "AbortError"));
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
+/**
+ * Submit code for async execution. Prod path for Cloud Run, where sync
+ * POST /execute can hit LB/proxy timeouts under load.
+ */
+export async function submitJob(req: ExecuteRequest): Promise<string> {
+  const res = await fetch(`${BASE_URL}/jobs`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(req),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`API /jobs failed (${res.status}): ${text}`);
+  }
+  const data: SubmitJobResponse & { id?: string } =
+    (await res.json()) as SubmitJobResponse & { id?: string };
+  const jobId = data.job_id ?? data.id;
+  if (!jobId) throw new Error("API /jobs returned no job id");
+  return jobId;
+}
+
+function parseJobStatus(data: unknown): JobStatus {
+  // Tolerate backends that use `state` instead of `status`.
+  const record = data as Record<string, unknown>;
+  if (typeof record["status"] !== "string" && typeof record["state"] === "string") {
+    return { ...record, status: record["state"] } as JobStatus;
+  }
+  return data as JobStatus;
+}
+
+/**
+ * Poll GET /jobs/{id} until terminal state. 1s interval, 60s cap.
+ * Throws on timeout, failure state, HTTP error, or abort.
+ */
+export async function pollJob(
+  jobId: string,
+  opts: PollOptions = {},
+): Promise<ExecuteResponse> {
+  const intervalMs = opts.intervalMs ?? 1000;
+  const timeoutMs = opts.timeoutMs ?? 60000;
+  const deadline = Date.now() + timeoutMs;
+
+  for (;;) {
+    if (opts.signal?.aborted) {
+      throw new DOMException("Aborted", "AbortError");
+    }
+    const res = await fetch(`${BASE_URL}/jobs/${encodeURIComponent(jobId)}`, {
+      signal: opts.signal,
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`API /jobs/${jobId} failed (${res.status}): ${text}`);
+    }
+    const job = parseJobStatus((await res.json()) as JobStatus);
+
+    if (job.status === "completed") return job.result;
+    if (job.status === "failed") {
+      throw new Error(`Job ${jobId} failed: ${job.error}`);
+    }
+    if (Date.now() + intervalMs > deadline) {
+      throw new Error(`Job ${jobId} timed out after ${timeoutMs}ms`);
+    }
+    await sleep(intervalMs, opts.signal);
+  }
+}
+
+/**
+ * Prod execution path: submit async job and poll; fall back to sync
+ * POST /execute when /jobs is unavailable (local compose).
+ */
+export async function executeViaJobs(
+  req: ExecuteRequest,
+  opts: PollOptions = {},
+): Promise<ExecuteResponse> {
+  try {
+    const jobId = await submitJob(req);
+    return await pollJob(jobId, opts);
+  } catch (e) {
+    if (e instanceof DOMException && e.name === "AbortError") throw e;
+    return post<ExecuteResponse>("/execute", req);
+  }
+}

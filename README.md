@@ -12,6 +12,10 @@
 </p>
 
 <p align="center">
+  <strong>Live site:</strong> <a href="https://www.example.com">https://www.example.com</a>
+</p>
+
+<p align="center">
   <a href="#features">Features</a> •
   <a href="#quick-start">Quick Start</a> •
   <a href="#usage">Usage</a> •

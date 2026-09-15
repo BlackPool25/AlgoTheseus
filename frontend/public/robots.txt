@@ -1,3 +1,27 @@
+# PLACEHOLDER DOMAIN: https://www.example.com is not real. Replace with the
+# real production origin before launch (same placeholder as sitemap.xml,
+# index.html OG/canonical tags, _redirects, and VITE_SITE_URL).
 User-agent: *
 Allow: /
-Sitemap: /sitemap.xml
+
+# AI-crawler stance: training-data crawlers are disallowed site-wide, while
+# general search crawlers remain allowed above. Adjust per-crawler if a vendor
+# requires more granular rules.
+User-agent: GPTBot
+Disallow: /
+User-agent: ChatGPT-User
+Disallow: /
+User-agent: Google-Extended
+Disallow: /
+User-agent: anthropic-ai
+Disallow: /
+User-agent: ClaudeBot
+Disallow: /
+User-agent: CCBot
+Disallow: /
+User-agent: PerplexityBot
+Disallow: /
+User-agent: Bytespider
+Disallow: /
+
+Sitemap: https://www.example.com/sitemap.xml

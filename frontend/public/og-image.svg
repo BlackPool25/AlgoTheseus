@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <rect width="1200" height="630" fill="#0f172a"/>
+  <circle cx="1050" cy="90" r="280" fill="#1e293b"/>
+  <circle cx="120" cy="560" r="220" fill="#1e293b"/>
+  <path d="M120 500 V200 a60 60 0 0 1 60-60 h240 a60 60 0 0 1 60 60 v300" fill="none" stroke="#f59e0b" stroke-width="36" stroke-linecap="round"/>
+  <path d="M200 500 V280 a32 32 0 0 1 32-32 h96 a32 32 0 0 1 32 32 v220" fill="none" stroke="#38bdf8" stroke-width="28" stroke-linecap="round"/>
+  <circle cx="280" cy="500" r="26" fill="#f59e0b"/>
+  <text x="560" y="270" font-family="system-ui, sans-serif" font-size="92" font-weight="800" fill="#f8fafc">AlgoTheseus</text>
+  <text x="560" y="360" font-family="system-ui, sans-serif" font-size="44" fill="#94a3b8">See How Algorithms Think</text>
+  <text x="560" y="430" font-family="system-ui, sans-serif" font-size="32" fill="#38bdf8">live traces &#183; control-flow graphs &#183; container visuals</text>
+</svg>

@@ -2,25 +2,48 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+      Absolute SEO URLs use the %VITE_SITE_URL% build placeholder (no trailing
+      slash), e.g. VITE_SITE_URL=https://www.example.com — see
+      .env.production.example. PLACEHOLDER DOMAIN: https://www.example.com is
+      not real; replace it before launch. Vite replaces %VITE_SITE_URL% at
+      build time; if the var is unset the literal token ships, so production
+      builds MUST set VITE_SITE_URL (CI fails closed — grep dist/index.html
+      for "%VITE_" after build).
+    -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.svg" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <meta name="theme-color" content="#0f172a" />
+    <meta name="robots" content="index, follow" />
     <meta
       name="description"
       content="AlgoTheseus — visualize C++ algorithms step by step: live variable traces, control-flow graphs, and container visuals in the browser."
     />
+    <link rel="canonical" href="%VITE_SITE_URL%/" />
     <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="AlgoTheseus" />
     <meta property="og:title" content="AlgoTheseus — See How Algorithms Think" />
     <meta
       property="og:description"
       content="Step through C++ execution with live traces, control-flow graphs, and container visualizations."
     />
-    <meta property="og:url" content="/" />
-    <meta name="twitter:card" content="summary" />
+    <meta property="og:url" content="%VITE_SITE_URL%/" />
+    <meta property="og:image" content="%VITE_SITE_URL%/og-image.svg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta
+      property="og:image:alt"
+      content="AlgoTheseus — See How Algorithms Think"
+    />
+    <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="AlgoTheseus — See How Algorithms Think" />
     <meta
       name="twitter:description"
       content="Step through C++ execution with live traces, control-flow graphs, and container visualizations."
     />
+    <meta name="twitter:image" content="%VITE_SITE_URL%/og-image.svg" />
     <title>AlgoTheseus — See How Algorithms Think</title>
   </head>
   <body>

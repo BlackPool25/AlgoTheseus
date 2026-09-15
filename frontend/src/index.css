@@ -203,3 +203,52 @@ body {
 .gutter-next-chip {
   color: var(--viz-gutter-next, #e93f34);
 }
+
+/* Skeleton shimmer (perf track): pure-CSS pulse via theme tokens, no deps. */
+@keyframes at-skeleton-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+
+.at-skeleton-line,
+.at-skeleton-block {
+  border-radius: 4px;
+  background: var(--viz-panel-bg);
+  border: 1px solid var(--viz-panel-border);
+  animation: at-skeleton-pulse 1.4s ease-in-out infinite;
+}
+
+.at-skeleton-stem {
+  width: 2px;
+  height: 18px;
+  margin: 0 auto;
+  background: var(--viz-panel-border);
+  animation: at-skeleton-pulse 1.4s ease-in-out infinite;
+}
+
+/* CLS layout-shift guards: reserve boxes so late trace data / lazy chunks
+   hydrate into fixed space instead of pushing layout. Min-heights only —
+   finished-pane dimensions are unchanged once real content mounts. */
+.at-reserve-editor {
+  min-height: 200px;
+}
+
+.at-reserve-cfg {
+  min-height: 320px;
+}
+
+.at-reserve-scrubber {
+  min-height: 56px;
+}
+
+.at-reserve-state {
+  min-height: 240px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .at-skeleton-line,
+  .at-skeleton-block,
+  .at-skeleton-stem {
+    animation: none;
+  }
+}

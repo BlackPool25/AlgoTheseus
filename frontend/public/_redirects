@@ -1,0 +1,13 @@
+# Cloudflare Pages redirects for AlgoTheseus (primary host).
+# PLACEHOLDER DOMAIN: replace https://www.example.com (and apex https://example.com)
+# with the real production domain before launch. Same placeholder is used in
+# index.html OG/canonical tags, public/sitemap.xml, public/robots.txt,
+# public/site.webmanifest, and .env.production.example (VITE_SITE_URL).
+# Keep the Netlify mirror equivalent in /netlify.toml [[redirects]] (sibling track).
+
+# Apex -> www canonical (301). Edit domain when the real domain is known.
+https://example.com/* https://www.example.com/:splat 301!
+
+# SPA fallback — serve index.html for all frontend routes (assume
+# /privacy /terms /contact exist; sibling track owns routes).
+/* /index.html 200

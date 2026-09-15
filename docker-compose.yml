@@ -9,6 +9,11 @@ services:
       dockerfile: Dockerfile
     container_name: algo-theseus-backend
     # ports: no host exposure — backend is reached via internal Docker DNS through nginx proxy
+    # DooD fix: the mounted docker.sock is root:<docker-gid> 0660, and the
+    # image runs as non-root appuser (Cloud Run least-privilege). Without this
+    # the SDK dies with PermissionError(13) on API-version fetch.
+    group_add:
+      - "970"
     environment:
       # docker = local-dev DooD path (default); subprocess = socketless
       # single-container jail (no socket mount needed in that mode).

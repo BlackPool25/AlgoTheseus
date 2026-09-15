@@ -17,7 +17,7 @@
  *   3. User scrubs through the trace.
  */
 
-import { useMemo, useRef, useState } from "react";
+import { Suspense, lazy, useMemo, useRef, useState } from "react";
 import { useCFGStore } from "./store/cfgStore";
 import { useTraceStore } from "./store/traceStore";
 import { useUIStore } from "./store/uiStore";
@@ -25,14 +25,31 @@ import { THEMES, applyTheme, currentTheme, type ThemeName } from "./theme";
 import { streamExecute } from "./utils/api";
 import type { StreamCallbacks } from "./utils/api";
 import { loadWasmToolchain, selectEngine } from "./utils/executionEngine";
-import { CodeEditor } from "./components/Editor/CodeEditor";
 import { InputPanel } from "./components/Editor/InputPanel";
 import { TestCaseManager } from "./components/Editor/TestCaseManager";
 import { TraceScrubber } from "./components/Scrubber/TraceScrubber";
-import { StatePanel } from "./components/StatePanel/StatePanel";
 import { ProgramOutputBox } from "./components/ProgramOutputBox";
-import { TraceFlow } from "./components/FlowChart/TraceFlow";
 import { Splitter } from "./components/Layout/Splitter";
+import {
+  CfgSkeleton,
+  EditorSkeleton,
+  StatePanelSkeleton,
+} from "./components/Loading/Skeletons";
+
+// Render prioritization (perf track): Monaco is the heaviest chunk and
+// React Flow + state panel pull in large graphs, so all three split out.
+// Critical-first order stays: header (eager) -> editor shell (Suspense)
+// -> scrubber (eager, tiny) -> heavy visuals (Suspense).
+const CodeEditor = lazy(() =>
+  import("./components/Editor/CodeEditor").then((m) => ({ default: m.CodeEditor })),
+);
+const TraceFlow = lazy(() =>
+  import("./components/FlowChart/TraceFlow").then((m) => ({ default: m.TraceFlow })),
+);
+const StatePanel = lazy(() =>
+  import("./components/StatePanel/StatePanel").then((m) => ({ default: m.StatePanel })),
+);
+import { Footer } from "./components/Layout/Footer";
 
 const MIN_EDITOR_W = 320;
 const MIN_CFG_W = 320;
@@ -215,8 +232,10 @@ export default function App() {
           className="flex flex-col shrink-0 min-w-0 overflow-hidden"
           style={{ width: leftW ?? "45%" }}
         >
-          <div className="flex-1 min-h-0 overflow-hidden">
-            <CodeEditor />
+          <div className="flex-1 min-h-0 overflow-hidden at-reserve-editor">
+            <Suspense fallback={<EditorSkeleton />}>
+              <CodeEditor />
+            </Suspense>
           </div>
           <Splitter direction="horizontal" onDrag={dragInput} label="Resize input area" />
           <div
@@ -237,16 +256,20 @@ export default function App() {
         {/* Right panel: CFG + state */}
         <div className="flex flex-1 min-w-0 overflow-hidden">
           {/* CFG */}
-          <div className="flex-1 min-w-0 overflow-hidden">
-            <TraceFlow />
+          <div className="flex-1 min-w-0 overflow-hidden at-reserve-cfg">
+            <Suspense fallback={<CfgSkeleton />}>
+              <TraceFlow />
+            </Suspense>
           </div>
           <Splitter direction="vertical" onDrag={dragState} label="Resize state panel" />
           {/* State panel */}
           <div
-            className="shrink-0 overflow-hidden border-l border-viz-line"
+            className="shrink-0 overflow-hidden border-l border-viz-line at-reserve-state"
             style={{ width: stateW ?? 260 }}
           >
-            <StatePanel />
+            <Suspense fallback={<StatePanelSkeleton />}>
+              <StatePanel />
+            </Suspense>
           </div>
         </div>
       </div>
@@ -270,8 +293,13 @@ export default function App() {
         )
       )}
 
-      {/* Scrubber */}
-      <TraceScrubber />
+      {/* Scrubber — reserved box so late trace data never pushes layout */}
+      <div className="at-reserve-scrubber shrink-0">
+        <TraceScrubber />
+      </div>
+
+      {/* Persistent legal footer (all routes) */}
+      <Footer />
     </div>
   );
 }

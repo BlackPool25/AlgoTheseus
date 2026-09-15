@@ -1,0 +1,23 @@
+{
+  "name": "AlgoTheseus — See How Algorithms Think",
+  "short_name": "AlgoTheseus",
+  "description": "Visualize C++ algorithms step by step: live variable traces, control-flow graphs, and container visuals in the browser.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/apple-touch-icon.svg",
+      "sizes": "180x180",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

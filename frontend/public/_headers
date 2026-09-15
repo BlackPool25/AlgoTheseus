@@ -1,6 +1,27 @@
-# Static-host headers (task 19): COOP/COEP pair for the future browser-WASM
+# Static-host headers: COOP/COEP pair for the future browser-WASM
 # path (SharedArrayBuffer toolchain). App routes to the server path when SAB
 # is disabled. Cloudflare Pages / Netlify `_headers` format.
+#
+# PLACEHOLDER: https://api.example.com below stands for the Cloud Run API
+# origin. Replace it with the real origin (same value as VITE_API_URL in
+# .env.production) in this file AND in connect-src when the API hostname
+# is known.
+#
+# CSP IS REPORT-ONLY ON PURPOSE. Monaco + WASM need blob: workers,
+# 'unsafe-inline' styles, and 'wasm-unsafe-eval'; an untested enforcing CSP
+# breaks the editor. HOW TO ENFORCE AFTER TESTING:
+#   1. Deploy with this Report-Only header, exercise the app (load editor,
+#      run a trace, hit the API), collect violation reports in DevTools
+#      console (no report-uri configured — add one if you want server reports).
+#   2. Fix any violations by tightening/loosening the allowlist below.
+#   3. Only then rename Content-Security-Policy-Report-Only to
+#      Content-Security-Policy (keep everything else identical) and redeploy.
 /*
   Cross-Origin-Opener-Policy: same-origin
   Cross-Origin-Embedder-Policy: require-corp
+  Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
+  X-Frame-Options: DENY
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=(), accelerometer=(), gyroscope=(), magnetometer=()
+  Content-Security-Policy-Report-Only: default-src 'self'; script-src 'self' blob: 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; worker-src 'self' blob:; font-src 'self' data:; img-src 'self' data: blob:; connect-src 'self' https://api.example.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests

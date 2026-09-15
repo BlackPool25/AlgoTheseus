@@ -11,7 +11,7 @@
  * boundary (never skip over it); the slider reaches every raw step.
  */
 
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useTraceNavigation } from "../../hooks/useTraceNavigation";
 import { useUIStore } from "../../store/uiStore";
 import { useTraceStore } from "../../store/traceStore";
@@ -40,6 +40,27 @@ export function TraceScrubber() {
   const toggleExpand = useTraceStore((s) => s.toggleExpand);
 
   const sliderRef = useRef<HTMLInputElement>(null);
+  // RAF-throttle slider updates (INP budget): coalesce the high-frequency
+  // input events of a drag into one setStep per animation frame.
+  const pendingStepRef = useRef<number | null>(null);
+  const rafIdRef = useRef<number>(0);
+
+  useEffect(() => {
+    return () => {
+      if (rafIdRef.current !== 0) cancelAnimationFrame(rafIdRef.current);
+    };
+  }, []);
+
+  const handleSliderChange = (value: number): void => {
+    pendingStepRef.current = value;
+    if (rafIdRef.current !== 0) return;
+    rafIdRef.current = requestAnimationFrame(() => {
+      rafIdRef.current = 0;
+      const pending = pendingStepRef.current;
+      pendingStepRef.current = null;
+      if (pending !== null) setStep(pending);
+    });
+  };
 
   // Find the compressed group the user is currently inside (if any, and if collapsed)
   const activeGroup = groupAtStep(compressedSteps, expandedGroups, currentStep);
@@ -110,7 +131,7 @@ export function TraceScrubber() {
             min={0}
             max={totalSteps - 1}
             value={currentStep}
-            onChange={(e) => setStep(Number(e.target.value))}
+            onChange={(e) => handleSliderChange(Number(e.target.value))}
             className="w-full accent-amber-400 h-1"
             aria-label="Trace step"
           />

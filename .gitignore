@@ -22,6 +22,7 @@ Thumbs.db
 # Tooling
 .omo/
 .codegraph/
+.serena/
 
 # Environment
 .env

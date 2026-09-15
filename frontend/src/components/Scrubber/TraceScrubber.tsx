@@ -6,8 +6,9 @@
  * Shows a truncation warning if the trace was cut.
  *
  * Compressed-step groups (consecutive STATE events with identical vars) are
- * displayed as "Steps X-Y / Z (×N identical)".  Click the ⇕ button to expand
- * or collapse the group.  When collapsed, prev/next skip the entire group.
+ * displayed as "Steps X-Y / Z (N identical steps)".  Click the ⇕ button to expand
+ * or collapse the group.  When collapsed, prev/next land on the group
+ * boundary (never skip over it); the slider reaches every raw step.
  */
 
 import { useMemo, useRef } from "react";
@@ -50,7 +51,7 @@ export function TraceScrubber() {
       activeGroup.startStep === activeGroup.endStep
         ? `Step ${activeGroup.startStep + 1}`
         : `Steps ${activeGroup.startStep + 1}–${activeGroup.endStep + 1}`;
-    return `${prefix} / ${totalSteps} (×${activeGroup.count} identical) — ${rawLabel.split("—")[1]?.trim() ?? ""}`;
+    return `${prefix} / ${totalSteps} (${activeGroup.count} identical steps) — ${rawLabel.split("—")[1]?.trim() ?? ""}`;
   }, [activeGroup, rawLabel, totalSteps]);
 
   // Build a "track map" — fraction of total steps each compressed group occupies

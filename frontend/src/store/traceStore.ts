@@ -175,9 +175,15 @@ interface TraceStore {
   loadTrace: (trace: TraceEvent[]) => void;
   /** Jump to a specific step (always works, no group skipping). */
   setStep: (n: number) => void;
-  /** Advance one step, skipping collapsed compressed groups. */
+  /** Advance one step. Collapsed groups are *landed on* (group start
+   *  boundary, affordance visible), never skipped over; a second `next`
+   *  traverses past the group. Grouping semantics untouched (see
+   *  rebuildCompression). */
   next: () => void;
-  /** Go back one step, skipping collapsed compressed groups. */
+  /** Go back one step. Collapsed groups are *landed on* (group end
+   *  boundary, affordance visible), never skipped over; a second `prev`
+   *  traverses past the group. Grouping semantics untouched (see
+   *  rebuildCompression). */
   prev: () => void;
   /** Re-scan the trace and regenerate compressedSteps. */
   rebuildCompression: () => void;
@@ -295,10 +301,13 @@ export const useTraceStore = create<TraceStore>((set, get) => ({
 
     let nextStep = currentStep + 1;
 
-    // Skip collapsed compressed groups
+    // Land on collapsed-group boundaries instead of skipping over them:
+    // approaching from before the group lands on its start (affordance
+    // visible); already at/inside lands past the group end.
     const group = groupContaining(compressedSteps, nextStep, expandedGroups);
     if (group) {
-      nextStep = group.endStep + 1;
+      nextStep =
+        currentStep < group.startStep ? group.startStep : group.endStep + 1;
     }
 
     if (nextStep >= trace.length) return;
@@ -322,10 +331,13 @@ export const useTraceStore = create<TraceStore>((set, get) => ({
 
     let prevStep = currentStep - 1;
 
-    // Skip collapsed compressed groups
+    // Land on collapsed-group boundaries instead of skipping over them:
+    // approaching from after the group lands on its end (affordance
+    // visible); already at/inside lands before the group start.
     const group = groupContaining(compressedSteps, prevStep, expandedGroups);
     if (group) {
-      prevStep = group.startStep - 1;
+      prevStep =
+        currentStep > group.endStep ? group.endStep : group.startStep - 1;
     }
 
     if (prevStep < 0) return;

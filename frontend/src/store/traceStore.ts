@@ -6,8 +6,9 @@
  * maintained *incrementally* during step-by-step navigation (O(1) per
  * step) instead of being rebuilt from scratch on every render.
  *
- * Compression groups consecutive STATE events whose `vars` are identical
- * into a single display group.  Groups can be collapsed (prev/next skip
+ * Compression groups consecutive STATE events whose compression identity
+ * (vars, plus stdout/heap when present) is identical into a single display
+ * group. Groups can be collapsed (prev/next skip
  * the group) or expanded (individual steps are shown).
  */
 
@@ -76,10 +77,18 @@ function rebuildCallStack(
   return stack;
 }
 
-/** Serialise event.vars to a stable JSON string for comparison. */
-function varsKey(event: TraceEvent): string | null {
+/** Compression identity for a STATE event: vars plus stdout/heap when present.
+
+Only STATE events are ever compressed. Absent stdout/heap keep the key
+identical to the vars-only form, so v1 traces group exactly as before. A
+present stdout or heap value breaks the group — vars-equality alone would
+merge steps whose output or heap differ and hide growing stdout. */
+function compressionKey(event: TraceEvent): string | null {
   if (event.type !== "state") return null;
-  return JSON.stringify(event.vars);
+  let key = JSON.stringify(event.vars);
+  if (typeof event.stdout === "string") key += "\nstdout:" + event.stdout;
+  if (event.heap != null) key += "\nheap:" + JSON.stringify(event.heap);
+  return key;
 }
 
 /**
@@ -88,8 +97,9 @@ function varsKey(event: TraceEvent): string | null {
  * Two compression strategies:
  * 1. **Backend metadata** – if an event carries `_group_count` (>1) the
  *    backend already collapsed it; we use the metadata directly.
- * 2. **Frontend detection** – consecutive STATE events whose `vars`
- *    serialise to the same string are grouped.
+ * 2. **Frontend detection** – consecutive STATE events whose compression
+ *    identity (vars, plus stdout/heap when present) serialises to the same
+ *    string are grouped.
  *
  * Only STATE events are ever compressed.
  */
@@ -118,12 +128,12 @@ function rebuildCompression(trace: TraceEvent[]): CompressedStep[] {
       continue;
     }
 
-    const key = varsKey(event);
+    const key = compressionKey(event);
     let j = i + 1;
     while (j < trace.length) {
       const next = trace[j];
       if (next.type !== "state") break;
-      if (varsKey(next) !== key) break;
+      if (compressionKey(next) !== key) break;
       j++;
     }
 

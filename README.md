@@ -238,7 +238,7 @@ backend/
 │   └── models/
 │       ├── request.py                # API request schemas
 │       └── response.py               # API response schemas
-├── tests/                            # 100+ pytest tests
+├── tests/                            # 252 pytest tests
 │   ├── test_serializers.py
 │   ├── test_stdin_parser.py
 │   ├── test_api_endpoints.py
@@ -258,7 +258,7 @@ frontend/
 │   ├── store/                        # Zustand (traceStore, cfgStore, uiStore)
 │   ├── hooks/                        # useContainerType, useTraceNavigation
 │   └── utils/                        # API client, CFG layout
-├── tests/                            # Playwright visual regression (18 tests)
+├── tests/                            # Playwright suite (96 tests)
 └── playwright.config.ts
 ```
 
@@ -331,11 +331,11 @@ Files: input1.in, expected1.out, input2.in, expected2.out
 ## Testing
 
 ```bash
-# Backend tests (100+)
+# Backend tests (252)
 cd backend
 uv run pytest tests/ -v
 
-# Frontend visual regression tests (18)
+# Frontend tests (96)
 cd frontend
 npx playwright test
 

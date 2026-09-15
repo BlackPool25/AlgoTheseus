@@ -88,11 +88,36 @@ def test_heap_table_contains_structs():
                 else:
                     assert target == "unknown" or target in table, (id_, entry)
 
+    # Live-fixture edge proof (Atlas QA): this fixture emits only full
+    # in-step objects, so NO ref may dangle — every target is a table key.
+    for _, table in non_empty:
+        for id_, entry in table.items():
+            for target in entry["refs"].values():
+                targets = target if isinstance(target, list) else [target]
+                for t in targets:
+                    assert t in table, (id_, entry)  # never "unknown" here
+
     # Stable ids: some $id survives across consecutive STATEs.
     ids_per_state = [set(t) for _, t in states if t]
     assert any(a & b for a, b in zip(ids_per_state, ids_per_state[1:])), (
         "no stable $id across consecutive steps"
     )
+
+
+def test_in_step_ref_resolves_to_child_key():
+    """Given a parent with a PRESENT child id / When extracted /
+    Then the ref equals the child's (string) table key — never "unknown"."""
+    lines = _raw([
+        {"t": "state", "l": 1, "f": "main", "d": 0,
+         "v": {"root": _node(1, 1, left=_node(2, 2), right=None),
+               "alias": {"$ref": 1}}},
+    ])
+    events = parse(lines)
+    table = heap_at_step(events)[0]
+    assert set(table) == {"1", "2"}
+    assert table["1"]["refs"]["left"] == "2"
+    assert isinstance(table["1"]["refs"]["left"], str)
+    assert table["1"]["fields"]["right"] is None  # null stays a scalar field
 
 
 def test_heap_dedup_same_object_across_steps():

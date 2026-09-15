@@ -16,6 +16,7 @@ from slowapi.errors import RateLimitExceeded
 
 from app.api.routes.execute import batch_router
 from app.api.routes.execute import router as execute_router
+from app.api.routes.jobs import router as jobs_router
 from app.api.routes.upload import router as upload_router
 from app.core.rate_limit import limiter
 
@@ -38,6 +39,7 @@ app.add_middleware(
 
 app.include_router(execute_router, prefix="/execute", tags=["execute"])
 app.include_router(batch_router, prefix="/execute-batch", tags=["execute"])
+app.include_router(jobs_router, prefix="/jobs", tags=["jobs"])
 app.include_router(upload_router, prefix="/upload-testcases", tags=["upload"])
 
 # Tiered per-IP limits (todo 23): exempt health, 429 + Retry-After via

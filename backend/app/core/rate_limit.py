@@ -58,3 +58,21 @@ limiter = Limiter(key_func=client_key, headers_enabled=True, retry_after="intege
 
 EXECUTE_LIMIT = "30/minute"
 EXECUTE_BATCH_LIMIT = "5/minute"
+JOBS_LIMIT = "30/minute"
+
+
+def redis_limiter_available() -> bool:
+    """Hook for a future Redis-backed limiter — in-memory counters for now.
+
+    Returns True when REDIS_URL is set AND the ``redis`` package imports,
+    signalling a shared limiter could be wired here. Current behaviour is
+    unchanged (single-instance slowapi counters); callers keep using the
+    module-level ``limiter``.
+    """
+    if not os.getenv("REDIS_URL", "").strip():
+        return False
+    try:
+        import redis  # noqa: F401
+    except Exception:
+        return False
+    return True

@@ -72,6 +72,11 @@ COPY app/ ./app/
 ENV SANDBOX_MODE=subprocess \
     CACHE_DIR=/tmp/algo-theseus-cache
 
+# Cloud Run: least privilege — non-root at runtime. Compose unaffected
+# (same paths; /tmp stays world-writable; default CMD unchanged below).
+RUN useradd -r -u 10001 appuser && chown -R appuser /app
+USER appuser
+
 EXPOSE 8000
 
 # $PORT binding (Render/SnapDeploy inject PORT; default 8000 local).

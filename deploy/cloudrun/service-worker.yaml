@@ -1,0 +1,60 @@
+# =============================================================================
+# AlgoTheseus — Cloud Run worker service (serving.knative.dev/v1)
+# =============================================================================
+# Same image as the API; entrypoint overridden to the worker command.
+# NOTE: app.worker does not exist yet — this service is the reservation for it.
+# Until then, deploy API only. When the worker lands (`python -m app.worker`),
+# this file applies as-is. Alternative: ship the worker as a Cloud Run *job*
+# or Cloud Tasks handler instead of a always-scales-to-zero service.
+# Apply: gcloud run services replace deploy/cloudrun/service-worker.yaml --region=$REGION
+# =============================================================================
+
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: algo-theseus-worker
+  annotations:
+    run.googleapis.com/ingress: internal # queue-driven only; no public traffic
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/minScale: "0" # scale on queue depth, not traffic
+        autoscaling.knative.dev/maxScale: "20"
+        run.googleapis.com/cpu-throttling: "false"
+        run.googleapis.com/startup-cpu-boost: "true"
+    spec:
+      containerConcurrency: 1 # MUST stay 1: one execution at a time per instance
+      timeoutSeconds: 900 # long compilations / batch fan-out
+      containers:
+        - image: _IMAGE # same Artifact Registry image as service-api.yaml
+          name: worker
+          command:
+            - /app/.venv/bin/python
+          args:
+            - -m
+            - app.worker
+          env:
+            - name: SANDBOX_MODE
+              value: subprocess
+            - name: CACHE_DIR
+              value: /tmp/algo-theseus-cache # ephemeral per instance
+            - name: MAX_BATCH_SANDBOXES
+              value: "2"
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: algo-theseus-redis-url
+                  key: latest
+          resources:
+            limits:
+              cpu: "2"
+              memory: 4Gi
+          startupProbe:
+            httpGet:
+              path: /health
+            periodSeconds: 10
+            failureThreshold: 12
+  traffic:
+    - percent: 100
+      latestRevision: true

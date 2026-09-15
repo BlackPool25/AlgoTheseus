@@ -1,0 +1,60 @@
+# =============================================================================
+# AlgoTheseus — Cloud Run API service (serving.knative.dev/v1)
+# =============================================================================
+# Apply:   gcloud run services replace deploy/cloudrun/service-api.yaml --region=$REGION
+# Dry-run: gcloud run services replace deploy/cloudrun/service-api.yaml --region=$REGION --dry-run
+# Image placeholder _IMAGE is rewritten by deploy.sh / cloudbuild substitutions.
+# =============================================================================
+
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: algo-theseus-api
+  annotations:
+    run.googleapis.com/ingress: all
+    # run.googleapis.com/execution-environment: gen2  # uncomment for faster
+    # g++ subprocess cold starts (gen1 gVisor fork/exec is slower); gen2 costs the same.
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/minScale: "0" # scale-to-zero: the upgrade over free-tier sleep
+        autoscaling.knative.dev/maxScale: "10"
+        run.googleapis.com/cpu-throttling: "false" # keep CPU during g++ jail + streaming
+        run.googleapis.com/startup-cpu-boost: "true" # blunt cold starts (~60s SnapDeploy / ~1min Render)
+    spec:
+      containerConcurrency: 15 # 10-20 band; single uvicorn worker, in-memory rate limits assume few instances
+      timeoutSeconds: 300
+      containers:
+        - image: _IMAGE
+          name: api
+          ports:
+            - containerPort: 8000 # Cloud Run injects $PORT; image honors ${PORT:-8000}
+          env:
+            - name: SANDBOX_MODE
+              value: subprocess
+            - name: CACHE_DIR
+              value: /tmp/algo-theseus-cache # ephemeral: restart wipes it, cold MISS expected
+            - name: MAX_BATCH_SANDBOXES
+              value: "2"
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: algo-theseus-redis-url
+                  key: latest
+          resources:
+            limits:
+              cpu: "2"
+              memory: 2Gi
+          startupProbe:
+            httpGet:
+              path: /health
+            periodSeconds: 5
+            failureThreshold: 12
+          livenessProbe:
+            httpGet:
+              path: /health
+            periodSeconds: 30
+  traffic:
+    - percent: 100
+      latestRevision: true

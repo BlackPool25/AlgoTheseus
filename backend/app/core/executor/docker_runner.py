@@ -135,8 +135,8 @@ def _run_container_sync(cpp_source: str, stdin_data: str) -> RunResult:
             timed_out = True
             exit_code = -1
 
-        stdout_bytes = container.logs(stdout=True, stderr=False)
-        stderr_bytes = container.logs(stdout=False, stderr=True)
+        stdout_bytes = container.logs(stdout=True, stderr=False)[:1_000_000]
+        stderr_bytes = container.logs(stdout=False, stderr=True)[:1_000_000]
         container.remove(force=True)
 
         stdout = stdout_bytes.decode("utf-8", errors="replace")

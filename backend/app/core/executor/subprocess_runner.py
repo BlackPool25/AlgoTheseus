@@ -82,14 +82,18 @@ def _resolve_nobody() -> tuple[int, int]:
         return _NOBODY_UID, _NOBODY_GID
 
 
-def _nproc_limit_for(uid: int) -> int:
-    """pids_limit approximation: current per-uid process count + headroom.
+def _nproc_limit_for(uid: int, fixed: bool) -> int:
+    """pids_limit approximation.
 
-    A flat 64 breaks the jail whenever the uid already runs more tasks
-    (g++ itself spawns cc1plus; RLIMIT_NPROC counts threads, not processes).
-    Headroom keeps fork-bombs bounded while letting the legitimate process
-    tree spawn. Never raises.
+    fixed=True (jailed run as dropped-`nobody` uid): flat _RLIMIT_NPROC —
+    that uid owns ~no other tasks, so a small cap bounds fork bombs with
+    no headroom inflation.
+    fixed=False (compile as the current uid): current per-uid thread count
+    + headroom, since RLIMIT_NPROC counts threads and g++ itself spawns
+    cc1plus — a flat 64 starves the compiler on a busy box. Never raises.
     """
+    if fixed:
+        return _RLIMIT_NPROC
     try:
         n = 0
         for pid in os.listdir("/proc"):
@@ -106,7 +110,7 @@ def _nproc_limit_for(uid: int) -> int:
         return 4096
 
 
-def _apply_limits(as_bytes: int, uid: int) -> None:
+def _apply_limits(as_bytes: int, uid: int, drop_privs: bool) -> None:
     """Best-effort rlimits for the jail child. Never raises."""
     import resource
 
@@ -114,7 +118,7 @@ def _apply_limits(as_bytes: int, uid: int) -> None:
         (resource.RLIMIT_CPU, (EXECUTION_TIMEOUT_SECONDS,) * 2),
         (resource.RLIMIT_AS, (as_bytes, as_bytes)),
         (resource.RLIMIT_FSIZE, (_RLIMIT_FSIZE, _RLIMIT_FSIZE)),
-        (resource.RLIMIT_NPROC, (_nproc_limit_for(uid),) * 2),
+        (resource.RLIMIT_NPROC, (_nproc_limit_for(uid, drop_privs),) * 2),
     ):
         try:
             resource.setrlimit(args[0], args[1])
@@ -144,7 +148,7 @@ def _run_guarded(
     """Run argv under rlimits; return (exit_code, timed_out). Files bound output."""
 
     def _preexec() -> None:
-        _apply_limits(as_bytes, os.getuid())
+        _apply_limits(as_bytes, os.getuid(), drop_privs)
         if drop_privs:
             _drop_privileges()
 
@@ -170,11 +174,23 @@ def _run_guarded(
         try:
             return proc.wait(timeout=EXECUTION_TIMEOUT_SECONDS), False
         except subprocess.TimeoutExpired:
+            for _ in range(3):
+                try:
+                    os.killpg(proc.pid, signal.SIGKILL)
+                except Exception:  # noqa: BLE001, S110 — child may have exited mid-kill
+                    pass
+                try:
+                    return proc.wait(timeout=5), True
+                except subprocess.TimeoutExpired:
+                    continue
             try:
                 os.killpg(proc.pid, signal.SIGKILL)
-            except Exception:  # noqa: BLE001, S110 — child may have exited mid-kill
+            except Exception:  # noqa: BLE001, S110
                 pass
-            proc.wait()
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                pass
             return -1, True
 
 
@@ -204,7 +220,7 @@ def _run_subprocess_sync(cpp_source: str, stdin_data: str = "") -> RunResult:
         prog = jail / "prog"
         compile_out, compile_err = jail / "cout.bin", jail / "cerr.bin"
         code, compile_timed_out = _run_guarded(
-            ["g++", "-O0", "-g", "-std=c++17", "-I", str(jail), "-o", str(prog), str(jail / "prog.cpp")],
+            ["g++", "-O0", "-g", "-std=c++17", "-ftemplate-depth=100", "-I", str(jail), "-o", str(prog), str(jail / "prog.cpp")],
             cwd=jail,
             stdin_path=None,
             stdout_path=compile_out,

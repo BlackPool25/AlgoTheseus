@@ -98,6 +98,14 @@ class TestConcurrentLoad:
         variants = [LOAD_CODE.replace("bsearch(arr, 7)", f"bsearch(arr, {k})") for k in range(8)]
         assert len(set(variants)) == 8
         xff = "10.30.1.1"
+        # OOM-hardening: max 4 concurrent sandboxes (mirrors /execute-batch
+        # cap). All 8 still submitted and equality-asserted, just gated.
+        _sem = asyncio.Semaphore(4)
+
+        async def _gated(code: str):
+            async with _sem:
+                return await _post(ac, code, LOAD_STDIN, xff)
+
         async with AsyncClient(
             transport=ASGITransport(app=app), base_url="http://test"
         ) as ac:
@@ -106,7 +114,7 @@ class TestConcurrentLoad:
             # concurrent request HIT the serial-warmed cache and prove
             # nothing about sandbox concurrency.
             results = await asyncio.gather(
-                *[_post(ac, code, LOAD_STDIN, xff) for code in variants]
+                *[_gated(code) for code in variants]
             )
 
             serials = []

@@ -19,6 +19,7 @@ import type { ContainerKind } from "../../hooks/useContainerType";
 import { VISUAL_REGISTRY } from "./registry";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { StructGraphVisual, type RenderAs } from "./StructGraphVisual";
+import { useTraceStore } from "../../store/traceStore";
 
 // ── Public types ─────────────────────────────────────────────────────────────
 
@@ -86,6 +87,35 @@ function renderFallback(value: unknown): string {
 }
 
 // ── Structure content dispatch ──────────────────────────────────────────────
+
+/** Mutated $ids at the current step (cross-view flash sync source). */
+function useMutatedIds(): Set<string> {
+  const currentEvent = useTraceStore((s) => s.currentEvent);
+  return useMemo(() => {
+    if (!currentEvent || currentEvent.type !== "state") return new Set<string>();
+    const diff = (currentEvent as unknown as Record<string, unknown>).heap_diff as
+      | { mutated?: unknown }
+      | null
+      | undefined;
+    const mutated = Array.isArray(diff?.mutated) ? diff.mutated : [];
+    return new Set(mutated.map(String));
+  }, [currentEvent]);
+}
+
+/** True when the value embeds any of the mutated $ids. */
+function embedsMutatedId(value: unknown, mutated: Set<string>): boolean {
+  if (mutated.size === 0 || value === null || value === undefined) return false;
+  let json: string;
+  try {
+    json = JSON.stringify(value) ?? "";
+  } catch {
+    return false;
+  }
+  for (const id of mutated) {
+    if (json.includes(`"$id":${id}`)) return true;
+  }
+  return false;
+}
 
 function renderStructureContent(def: StructureDef): React.ReactNode {
   const { name, value, kind, label, structMeta } = def;
@@ -192,6 +222,13 @@ export function MultiStructureSyncView({
     [flexRatios],
   );
 
+  /* ── Cross-view $id flash sync (T12) ─────────────────────────────── */
+  const mutatedIds = useMutatedIds();
+  const flashFor = useCallback(
+    (value: unknown) => embedsMutatedId(value, mutatedIds),
+    [mutatedIds],
+  );
+
   /* ── Connector lines ──────────────────────────────────────────── */
   const [connectorLines, setConnectorLines] = useState<ConnectorLine[]>([]);
 
@@ -280,7 +317,13 @@ export function MultiStructureSyncView({
                 {/* Panel body */}
                 <div
                   data-structure-name={def.name}
-                  className="border border-zinc-700/50 rounded bg-zinc-900/30 overflow-hidden mx-px"
+                  data-mutated-flash={flashFor(def.value) ? "true" : "false"}
+                  className="border rounded bg-zinc-900/30 overflow-hidden mx-px"
+                  style={{
+                    borderColor: flashFor(def.value)
+                      ? "var(--viz-flash, #f59e0b)"
+                      : "rgba(63, 63, 70, 0.5)",
+                  }}
                 >
                   <div className="flex items-center justify-between px-2 py-1 border-b border-zinc-800 bg-zinc-900/60">
                     <span className="text-[10px] font-mono text-zinc-400 truncate">
@@ -314,7 +357,13 @@ export function MultiStructureSyncView({
               <div
                 key={def.name}
                 data-structure-name={def.name}
-                className="border border-zinc-700/50 rounded bg-zinc-900/30 overflow-hidden"
+                data-mutated-flash={flashFor(def.value) ? "true" : "false"}
+                className="border rounded bg-zinc-900/30 overflow-hidden"
+                style={{
+                  borderColor: flashFor(def.value)
+                    ? "var(--viz-flash, #f59e0b)"
+                    : "rgba(63, 63, 70, 0.5)",
+                }}
               >
                 <div className="flex items-center justify-between px-2 py-1 border-b border-zinc-800 bg-zinc-900/60">
                   <span className="text-[10px] font-mono text-zinc-400 truncate">
@@ -334,7 +383,13 @@ export function MultiStructureSyncView({
           /* Single panel */
           <div
             data-structure-name={structures[0].name}
-            className="border border-zinc-700/50 rounded bg-zinc-900/30 overflow-hidden"
+            data-mutated-flash={flashFor(structures[0].value) ? "true" : "false"}
+            className="border rounded bg-zinc-900/30 overflow-hidden"
+            style={{
+              borderColor: flashFor(structures[0].value)
+                ? "var(--viz-flash, #f59e0b)"
+                : "rgba(63, 63, 70, 0.5)",
+            }}
           >
             <div className="flex items-center justify-between px-2 py-1 border-b border-zinc-800 bg-zinc-900/60">
               <span className="text-[10px] font-mono text-zinc-400">

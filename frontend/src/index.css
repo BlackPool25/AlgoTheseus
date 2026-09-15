@@ -9,6 +9,9 @@
   --viz-gutter-prev: #c9e6ca;
   --viz-gutter-next: #e93f34;
   --viz-exception: #ef4444;
+  /* Per-object mutation flash + alias connectors (docs/theme-tokens.md §4.1). */
+  --viz-flash: #f59e0b;
+  --viz-alias-edge: #a1a1aa;
 }
 
 body {

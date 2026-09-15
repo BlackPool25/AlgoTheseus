@@ -33,6 +33,13 @@ export interface FuncExitEvent extends BaseEvent {
   return_line?: number | null;
 }
 
+export interface HeapDiff {
+  added: string[];
+  removed: string[];
+  mutated: string[];
+  changed_fields: Record<string, string[]>;
+}
+
 export interface StateEvent extends BaseEvent {
   type: "state";
   vars: Record<string, unknown>;
@@ -43,6 +50,7 @@ export interface StateEvent extends BaseEvent {
   step_desc?: string | null;
   prev_line?: number | null;
   heap?: Record<string, unknown> | null;
+  heap_diff?: HeapDiff | null;
 }
 
 export interface BranchEvent extends BaseEvent {

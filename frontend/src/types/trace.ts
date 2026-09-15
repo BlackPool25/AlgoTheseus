@@ -57,6 +57,8 @@ export interface BranchEvent extends BaseEvent {
 export interface LoopIterEvent extends BaseEvent {
   type: "iter";
   iteration: number;
+  // v2 additive-only
+  step_desc?: string | null;
 }
 
 /** Discriminated union — use `event.type` as the discriminant. */

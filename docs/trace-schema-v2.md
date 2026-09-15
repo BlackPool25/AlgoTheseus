@@ -19,7 +19,7 @@ Wire aliases stay short-key style (`t`/`l`/`f`/`d` + per-event keys) to match
 | `stdout` | `o` | STATE | `str \| None` | `None` |
 | `stdout_truncated` | `o_tr` | STATE | `bool` | `False` |
 | `globals` | `g` | STATE | `dict[str, Any] \| None` | `None` |
-| `step_desc` | `sd` | STATE/BRANCH/ENTER/EXIT | `str \| None` | `None` |
+| `step_desc` | `sd` | STATE/BRANCH/ENTER/EXIT/ITER | `str \| None` | `None` |
 | `prev_line` | `pl` | STATE | `int \| None` | `None` |
 | `ops` | `op` | BRANCH | `list[str] \| None` | `None` |
 | `return_line` | `rl` | EXIT | `int \| None` | `None` |
@@ -63,6 +63,10 @@ Wire aliases stay short-key style (`t`/`l`/`f`/`d` + per-event keys) to match
 - `step_desc` (`sd`): one-line description (e.g. `"return 0"`).
 - `return_line` (`rl`): source line of the `return` statement that produced
   this exit (vs `line`, which is the function-entry line echo).
+
+### ITER (+`step_desc`)
+
+- `step_desc` (`sd`): one-line description (e.g. `"iter 3 at line 7"`).
 
 ## Per-step `heap` table + `$id`/`$ref` section
 

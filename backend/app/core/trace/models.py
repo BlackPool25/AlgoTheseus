@@ -77,6 +77,8 @@ class BranchEvent(_Base):
 class LoopIterEvent(_Base):
     type: Literal[EventType.LOOP_ITER] = Field(alias="t")
     iteration: int = Field(alias="it")
+    # v2 additive-only
+    step_desc: str | None = Field(default=None, alias="sd")
 
 
 # Discriminated union — use type: Annotated[..., Field(discriminator="type")]

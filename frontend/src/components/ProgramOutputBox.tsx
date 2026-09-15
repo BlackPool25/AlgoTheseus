@@ -28,11 +28,11 @@ export function ProgramOutputBox() {
   return (
     <div
       data-testid="program-output"
-      className="px-4 py-2 bg-zinc-900 border-t border-zinc-800 text-xs text-zinc-300 font-mono whitespace-pre-wrap max-h-32 overflow-y-auto"
+      className="px-4 py-2 bg-viz-body border-t border-viz-line text-xs text-viz-ink font-mono whitespace-pre-wrap max-h-32 overflow-y-auto"
     >
-      <span className="text-zinc-500 mr-2">program output:</span>
+      <span className="text-viz-ink/60 mr-2">program output:</span>
       {stdout.trim() === "" ? (
-        <span className="text-zinc-600">(no output yet)</span>
+        <span className="text-viz-ink/60">(no output yet)</span>
       ) : (
         stdout.trim()
       )}

@@ -466,8 +466,8 @@ export function TrieVisual({ value, name, highlight }: TrieVisualProps) {
   if (!root) {
     return (
       <div className="flex flex-col gap-1">
-        {name && <div className="text-xs text-zinc-500">{name}: trie</div>}
-        <span className="text-[10px] text-zinc-600">null / empty</span>
+        {name && <div className="text-xs text-viz-ink/60">{name}: trie</div>}
+        <span className="text-[10px] text-viz-ink/60">null / empty</span>
       </div>
     );
   }
@@ -477,9 +477,9 @@ export function TrieVisual({ value, name, highlight }: TrieVisualProps) {
       {/* Header */}
       <div className="flex items-center gap-2">
         {name && (
-          <span className="text-xs text-zinc-500">{name}: trie</span>
+          <span className="text-xs text-viz-ink/60">{name}: trie</span>
         )}
-        <span className="text-[10px] text-zinc-600">
+        <span className="text-[10px] text-viz-ink/60">
           {nodeCount} node{nodeCount !== 1 ? "s" : ""}
         </span>
       </div>

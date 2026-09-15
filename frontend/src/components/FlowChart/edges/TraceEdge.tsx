@@ -57,7 +57,7 @@ export function TraceEdge({
               transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
               pointerEvents: "all",
             }}
-            className="text-[10px] px-1 rounded bg-zinc-900 text-zinc-400 border border-zinc-700"
+            className="text-[10px] px-1 rounded bg-viz-body text-viz-ink/60 border border-viz-line"
           >
             {String(label)}
           </div>

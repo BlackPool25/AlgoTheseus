@@ -125,15 +125,15 @@ export function HeapPanel({ heap, heapDiff, vars }: Props) {
   if (ids.length === 0) return null;
 
   return (
-    <div data-testid="heap-panel" className="flex flex-col gap-1 px-3 py-1.5 border-b border-zinc-800/50">
+    <div data-testid="heap-panel" className="flex flex-col gap-1 px-3 py-1.5 border-b border-viz-line/50">
       <button
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        className="flex items-center gap-1 text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+        className="flex items-center gap-1 text-xs text-viz-ink/60 hover:text-viz-ink transition-colors"
       >
         <span className="font-mono">{open ? "▾" : "▸"}</span>
         <span className="font-medium uppercase tracking-wide">Heap</span>
-        <span className="font-mono text-zinc-600">({ids.length})</span>
+        <span className="font-mono text-viz-ink/60">({ids.length})</span>
         {mutatedSet.size > 0 && (
           <span className="font-mono text-[10px]" style={{ color: "var(--viz-flash, #f59e0b)" }}>
             · {mutatedSet.size} changed
@@ -172,18 +172,18 @@ export function HeapPanel({ heap, heapDiff, vars }: Props) {
                   }}
                 >
                   <div className="flex items-center gap-1.5">
-                    <span className="text-zinc-500">#{id}</span>
+                    <span className="text-viz-ink/60">#{id}</span>
                     {typeof entry.type === "string" && (
-                      <span className="text-zinc-400">{entry.type}</span>
+                      <span className="text-viz-ink/60">{entry.type}</span>
                     )}
                     {typeof entry.addr === "string" && (
-                      <span className="text-zinc-600 text-[10px]">{entry.addr}</span>
+                      <span className="text-viz-ink/60 text-[10px]">{entry.addr}</span>
                     )}
                     {cycle && (
                       <span className="text-[10px] px-1 rounded bg-red-500/20 text-red-400">$cycle</span>
                     )}
                     {sources.length >= 2 && (
-                      <span className="text-[10px] text-zinc-500">×{sources.length} refs</span>
+                      <span className="text-[10px] text-viz-ink/60">×{sources.length} refs</span>
                     )}
                   </div>
                   {fieldRows.map(([k, v]) => (
@@ -193,8 +193,8 @@ export function HeapPanel({ heap, heapDiff, vars }: Props) {
                       className="flex gap-1"
                       style={changed?.has(k) ? { color: "var(--viz-flash, #f59e0b)" } : undefined}
                     >
-                      <span className="text-zinc-500">{k}</span>
-                      <span className="text-zinc-200">= {fmtScalar(v)}</span>
+                      <span className="text-viz-ink/60">{k}</span>
+                      <span className="text-viz-ink">= {fmtScalar(v)}</span>
                     </div>
                   ))}
                   {refRows.map(([k, v]) => {
@@ -207,8 +207,8 @@ export function HeapPanel({ heap, heapDiff, vars }: Props) {
                         className="flex gap-1"
                         style={inboundHit ? { color: "var(--viz-alias-edge, #a1a1aa)" } : undefined}
                       >
-                        <span className="text-zinc-500">{k}</span>
-                        <span className="text-zinc-200">→ {targets.length > 0 ? targets.map((t) => `#${t}`).join(", ") : "unknown"}</span>
+                        <span className="text-viz-ink/60">{k}</span>
+                        <span className="text-viz-ink">→ {targets.length > 0 ? targets.map((t) => `#${t}`).join(", ") : "unknown"}</span>
                       </div>
                     );
                   })}

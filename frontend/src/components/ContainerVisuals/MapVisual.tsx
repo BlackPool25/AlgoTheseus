@@ -32,13 +32,13 @@ export function MapVisual({ value, name }: Props) {
   if (entries.length <= VIRTUALIZE_THRESHOLD) {
     return (
       <div className="flex flex-col gap-1">
-        <div className="text-xs text-zinc-500">
+        <div className="text-xs text-viz-ink/60">
           {name}: map ({entries.length})
         </div>
-        <div className="border border-zinc-700 rounded overflow-hidden">
+        <div className="border border-viz-line rounded overflow-hidden">
           {entries.map(([k, v]) => (
-            <div key={k} className="flex border-b border-zinc-800 last:border-0">
-              <div className="px-2 py-1 text-xs font-mono text-blue-300 border-r border-zinc-700 min-w-[60px]">
+            <div key={k} className="flex border-b border-viz-line last:border-0">
+              <div className="px-2 py-1 text-xs font-mono text-blue-300 border-r border-viz-line min-w-[60px]">
                 {k}
               </div>
               <div className="px-2 py-1 text-xs font-mono text-zinc-200">
@@ -54,12 +54,12 @@ export function MapVisual({ value, name }: Props) {
   /* ── Virtualised path (> threshold) ── */
   return (
     <div className="flex flex-col gap-1">
-      <div className="text-xs text-zinc-500">
+      <div className="text-xs text-viz-ink/60">
         {name}: map ({entries.length})
       </div>
       <div
         ref={parentRef}
-        className="border border-zinc-700 rounded overflow-y-auto"
+        className="border border-viz-line rounded overflow-y-auto"
         style={{ maxHeight: MAX_LIST_HEIGHT }}
       >
         <div
@@ -73,7 +73,7 @@ export function MapVisual({ value, name }: Props) {
             return (
               <div
                 key={k}
-                className="flex border-b border-zinc-800"
+                className="flex border-b border-viz-line"
                 style={{
                   position: "absolute",
                   top: 0,
@@ -83,7 +83,7 @@ export function MapVisual({ value, name }: Props) {
                   transform: `translateY(${virtualItem.start}px)`,
                 }}
               >
-                <div className="px-2 py-1 text-xs font-mono text-blue-300 border-r border-zinc-700 min-w-[60px]">
+                <div className="px-2 py-1 text-xs font-mono text-blue-300 border-r border-viz-line min-w-[60px]">
                   {k}
                 </div>
                 <div className="px-2 py-1 text-xs font-mono text-zinc-200">

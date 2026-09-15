@@ -59,3 +59,16 @@ export function currentTheme(): ThemeName {
   const value = document.documentElement.dataset.theme ?? DEFAULT_THEME;
   return isThemeName(value) ? value : DEFAULT_THEME;
 }
+
+/** Monaco built-in matching the palette luminance (no new deps). */
+export function monacoThemeFor(theme: ThemeName): "vs-dark" | "vs" | "hc-black" {
+  if (theme === "high-contrast") return "hc-black";
+  if (
+    theme === "light" ||
+    theme === "papyrus" ||
+    theme === "colorblind-safe"
+  ) {
+    return "vs";
+  }
+  return "vs-dark";
+}

@@ -36,7 +36,7 @@ export function StackVisual({ value, name }: Props) {
   if (value.items.length <= VIRTUALIZE_THRESHOLD) {
     return (
       <div className="flex flex-col gap-1">
-        <div className="text-xs text-zinc-500">{name}: stack</div>
+        <div className="text-xs text-viz-ink/60">{name}: stack</div>
         <div className="flex flex-col gap-0.5">
           {value.items.map((item, i) => (
             <div
@@ -59,7 +59,7 @@ export function StackVisual({ value, name }: Props) {
   /* ── Virtualised path (> threshold) ── */
   return (
     <div className="flex flex-col gap-1">
-      <div className="text-xs text-zinc-500">
+      <div className="text-xs text-viz-ink/60">
         {name}: stack ({value.items.length})
       </div>
       <div

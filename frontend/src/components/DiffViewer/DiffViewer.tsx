@@ -106,8 +106,8 @@ export function DiffViewer({ results }: DiffViewerProps) {
   // ── Empty state ────────────────────────────────────────────
   if (results.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-8 text-zinc-500 text-sm gap-2">
-        <span className="text-zinc-600 text-lg">∅</span>
+      <div className="flex flex-col items-center justify-center py-8 text-viz-ink/60 text-sm gap-2">
+        <span className="text-viz-ink/60 text-lg">∅</span>
         <span>No test results to display</span>
       </div>
     );
@@ -125,22 +125,22 @@ export function DiffViewer({ results }: DiffViewerProps) {
     >
       {/* ── Summary bar ─────────────────────────────────────── */}
       <div className="flex items-center justify-between">
-        <span className="text-xs font-medium text-zinc-400 uppercase tracking-wide">
+        <span className="text-xs font-medium text-viz-ink/60 uppercase tracking-wide">
           Test Results
         </span>
         <span className="text-xs font-mono">
           <span className="text-green-400">{passCount}</span>
-          <span className="text-zinc-600">/</span>
-          <span className="text-zinc-400">{results.length}</span>
-          <span className="text-zinc-600 ml-1">passed</span>
+          <span className="text-viz-ink/60">/</span>
+          <span className="text-viz-ink/60">{results.length}</span>
+          <span className="text-viz-ink/60 ml-1">passed</span>
         </span>
       </div>
 
       {/* ── Active test case header ─────────────────────────── */}
-      <div className="flex items-center justify-between gap-2 bg-zinc-900 rounded px-3 py-2 border border-zinc-800">
+      <div className="flex items-center justify-between gap-2 bg-viz-body rounded px-3 py-2 border border-viz-line">
         <div className="flex items-center gap-2 min-w-0">
           {/* Test case ID */}
-          <span className="text-xs font-mono text-zinc-300 truncate" title={active.testId}>
+          <span className="text-xs font-mono text-viz-ink truncate" title={active.testId}>
             {active.testId}
           </span>
 
@@ -153,7 +153,7 @@ export function DiffViewer({ results }: DiffViewerProps) {
 
           {/* Runtime */}
           {active.runtime !== undefined && (
-            <span className="text-[11px] text-zinc-500 font-mono">
+            <span className="text-[11px] text-viz-ink/60 font-mono">
               {active.runtime}ms
             </span>
           )}
@@ -163,7 +163,7 @@ export function DiffViewer({ results }: DiffViewerProps) {
           {/* Expand / collapse */}
           <button
             onClick={() => setExpanded((e) => !e)}
-            className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+            className="text-xs text-viz-ink/60 hover:text-viz-ink transition-colors"
             aria-label={expanded ? "Collapse diff" : "Expand diff"}
           >
             {expanded ? "Collapse" : "Expand"}
@@ -171,14 +171,14 @@ export function DiffViewer({ results }: DiffViewerProps) {
 
           {/* Navigation */}
           <div className="flex items-center gap-2">
-            <span className="text-xs text-zinc-600 font-mono">
+            <span className="text-xs text-viz-ink/60 font-mono">
               {activeIdx + 1}/{results.length}
             </span>
             <button
               onClick={() =>
                 setActiveIdx((p) => (p - 1 + results.length) % results.length)
               }
-              className="text-zinc-400 hover:text-zinc-200 transition-colors text-sm leading-none"
+              className="text-viz-ink/60 hover:text-viz-ink transition-colors text-sm leading-none"
               aria-label="Previous test case"
             >
               ◀
@@ -187,7 +187,7 @@ export function DiffViewer({ results }: DiffViewerProps) {
               onClick={() =>
                 setActiveIdx((p) => (p + 1) % results.length)
               }
-              className="text-zinc-400 hover:text-zinc-200 transition-colors text-sm leading-none"
+              className="text-viz-ink/60 hover:text-viz-ink transition-colors text-sm leading-none"
               aria-label="Next test case"
             >
               ▶
@@ -218,7 +218,7 @@ function DiffContent({ test }: { test: DiffTestCase }) {
   // ── No expected output banner ─────────────────────────────
   if (hasNoExpected) {
     return (
-      <div className="rounded border border-zinc-800 bg-zinc-900/50 p-4 text-center text-xs text-zinc-500">
+      <div className="rounded border border-viz-line bg-viz-body/50 p-4 text-center text-xs text-viz-ink/60">
         No expected output provided for this test case.
       </div>
     );
@@ -239,12 +239,12 @@ function DiffContent({ test }: { test: DiffTestCase }) {
   if (changes.adds > 0) changeParts.push(`${changes.adds} added`);
 
   return (
-    <div className="rounded border border-zinc-800 overflow-hidden">
+    <div className="rounded border border-viz-line overflow-hidden">
       {/* Changes summary */}
-      <div className="px-3 py-1.5 bg-zinc-900 border-b border-zinc-800 flex items-center gap-3 text-[11px] font-mono">
-        <span className="text-zinc-500">{diff.length} lines</span>
+      <div className="px-3 py-1.5 bg-viz-body border-b border-viz-line flex items-center gap-3 text-[11px] font-mono">
+        <span className="text-viz-ink/60">{diff.length} lines</span>
         {changeParts.length > 0 && (
-          <span className="text-zinc-600">·</span>
+          <span className="text-viz-ink/60">·</span>
         )}
         {changes.removals > 0 && (
           <span className="text-red-400">−{changes.removals}</span>
@@ -255,8 +255,8 @@ function DiffContent({ test }: { test: DiffTestCase }) {
       </div>
 
       {/* Column headers */}
-      <div className="flex border-b border-zinc-800 text-[11px] font-medium text-zinc-500 bg-zinc-900/50">
-        <div className="flex-1 px-3 py-1.5 border-r border-zinc-800">
+      <div className="flex border-b border-viz-line text-[11px] font-medium text-viz-ink/60 bg-viz-body/50">
+        <div className="flex-1 px-3 py-1.5 border-r border-viz-line">
           Expected
         </div>
         <div className="flex-1 px-3 py-1.5">Actual</div>
@@ -279,14 +279,14 @@ function DiffRow({ line }: { line: DiffLine }) {
 
   const leftContent =
     line.op === "add" ? (
-      <span className="text-zinc-600 italic">—</span>
+      <span className="text-viz-ink/60 italic">—</span>
     ) : (
       <span className="whitespace-pre">{line.left}</span>
     );
 
   const rightContent =
     line.op === "remove" ? (
-      <span className="text-zinc-600 italic">—</span>
+      <span className="text-viz-ink/60 italic">—</span>
     ) : (
       <span className="whitespace-pre">{line.right}</span>
     );
@@ -299,12 +299,12 @@ function DiffRow({ line }: { line: DiffLine }) {
     ) : null;
 
   return (
-    <div className="flex text-xs font-mono leading-5 border-b border-zinc-800/30 last:border-b-0">
+    <div className="flex text-xs font-mono leading-5 border-b border-viz-line/30 last:border-b-0">
       {/* Left (expected) */}
       <div
-        className={`flex-1 flex items-start px-3 py-0.5 border-r border-zinc-800/30 ${colors.left}`}
+        className={`flex-1 flex items-start px-3 py-0.5 border-r border-viz-line/30 ${colors.left}`}
       >
-        <span className="text-zinc-600 w-6 shrink-0 text-right mr-2 select-none">
+        <span className="text-viz-ink/60 w-6 shrink-0 text-right mr-2 select-none">
           {line.leftNum ?? ""}
         </span>
         <span className="min-w-0 break-all">{leftContent}</span>
@@ -314,7 +314,7 @@ function DiffRow({ line }: { line: DiffLine }) {
       <div
         className={`flex-1 flex items-start px-3 py-0.5 ${colors.right}`}
       >
-        <span className="text-zinc-600 w-6 shrink-0 text-right mr-2 select-none">
+        <span className="text-viz-ink/60 w-6 shrink-0 text-right mr-2 select-none">
           {line.rightNum ?? ""}
         </span>
         {opMark}

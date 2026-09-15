@@ -138,7 +138,7 @@ function renderStructureContent(def: StructureDef): React.ReactNode {
   const Component = VISUAL_REGISTRY[kind];
   if (!Component) {
     return (
-      <span className="break-all text-xs font-mono text-zinc-200">
+      <span className="break-all text-xs font-mono text-viz-ink">
         {renderFallback(value)}
       </span>
     );
@@ -282,9 +282,9 @@ export function MultiStructureSyncView({
     return (
       <div className="flex flex-col gap-1 px-3 py-2">
         {name && (
-          <span className="text-xs text-zinc-500">{name}: multi-structure</span>
+          <span className="text-xs text-viz-ink/60">{name}: multi-structure</span>
         )}
-        <span className="text-[10px] text-zinc-600 italic">no structures</span>
+        <span className="text-[10px] text-viz-ink/60 italic">no structures</span>
       </div>
     );
   }
@@ -295,8 +295,8 @@ export function MultiStructureSyncView({
       {/* Header */}
       {name && (
         <div className="flex items-center gap-2 px-1">
-          <span className="text-xs text-zinc-400">{name}</span>
-          <span className="text-[10px] text-zinc-600">
+          <span className="text-xs text-viz-ink/60">{name}</span>
+          <span className="text-[10px] text-viz-ink/60">
             {count} view{count !== 1 ? "s" : ""}
             {isHorizontal ? " · horizontal" : isGrid ? " · grid" : ""}
           </span>
@@ -318,18 +318,18 @@ export function MultiStructureSyncView({
                 <div
                   data-structure-name={def.name}
                   data-mutated-flash={flashFor(def.value) ? "true" : "false"}
-                  className="border rounded bg-zinc-900/30 overflow-hidden mx-px"
+                  className="border rounded bg-viz-body/30 overflow-hidden mx-px"
                   style={{
                     borderColor: flashFor(def.value)
                       ? "var(--viz-flash, #f59e0b)"
                       : "rgba(63, 63, 70, 0.5)",
                   }}
                 >
-                  <div className="flex items-center justify-between px-2 py-1 border-b border-zinc-800 bg-zinc-900/60">
-                    <span className="text-[10px] font-mono text-zinc-400 truncate">
+                  <div className="flex items-center justify-between px-2 py-1 border-b border-viz-line bg-viz-body/60">
+                    <span className="text-[10px] font-mono text-viz-ink/60 truncate">
                       {def.label ?? def.name}
                     </span>
-                    <span className="text-[9px] text-zinc-600 uppercase shrink-0 ml-1">
+                    <span className="text-[9px] text-viz-ink/60 uppercase shrink-0 ml-1">
                       {def.kind}
                     </span>
                   </div>
@@ -345,7 +345,7 @@ export function MultiStructureSyncView({
                     style={{ transform: "translateX(50%)" }}
                     onMouseDown={handleResizeStart(i)}
                   >
-                    <div className="w-0.5 h-8 rounded-full bg-zinc-700 group-hover:bg-amber-500/60 transition-colors duration-150" />
+                    <div className="w-0.5 h-8 rounded-full bg-viz-line group-hover:bg-amber-500/60 transition-colors duration-150" />
                   </div>
                 )}
               </div>
@@ -358,18 +358,18 @@ export function MultiStructureSyncView({
                 key={def.name}
                 data-structure-name={def.name}
                 data-mutated-flash={flashFor(def.value) ? "true" : "false"}
-                className="border rounded bg-zinc-900/30 overflow-hidden"
+                className="border rounded bg-viz-body/30 overflow-hidden"
                 style={{
                   borderColor: flashFor(def.value)
                     ? "var(--viz-flash, #f59e0b)"
                     : "rgba(63, 63, 70, 0.5)",
                 }}
               >
-                <div className="flex items-center justify-between px-2 py-1 border-b border-zinc-800 bg-zinc-900/60">
-                  <span className="text-[10px] font-mono text-zinc-400 truncate">
+                <div className="flex items-center justify-between px-2 py-1 border-b border-viz-line bg-viz-body/60">
+                  <span className="text-[10px] font-mono text-viz-ink/60 truncate">
                     {def.label ?? def.name}
                   </span>
-                  <span className="text-[9px] text-zinc-600 uppercase shrink-0 ml-1">
+                  <span className="text-[9px] text-viz-ink/60 uppercase shrink-0 ml-1">
                     {def.kind}
                   </span>
                 </div>
@@ -384,18 +384,18 @@ export function MultiStructureSyncView({
           <div
             data-structure-name={structures[0].name}
             data-mutated-flash={flashFor(structures[0].value) ? "true" : "false"}
-            className="border rounded bg-zinc-900/30 overflow-hidden"
+            className="border rounded bg-viz-body/30 overflow-hidden"
             style={{
               borderColor: flashFor(structures[0].value)
                 ? "var(--viz-flash, #f59e0b)"
                 : "rgba(63, 63, 70, 0.5)",
             }}
           >
-            <div className="flex items-center justify-between px-2 py-1 border-b border-zinc-800 bg-zinc-900/60">
-              <span className="text-[10px] font-mono text-zinc-400">
+            <div className="flex items-center justify-between px-2 py-1 border-b border-viz-line bg-viz-body/60">
+              <span className="text-[10px] font-mono text-viz-ink/60">
                 {structures[0].label ?? structures[0].name}
               </span>
-              <span className="text-[9px] text-zinc-600 uppercase">
+              <span className="text-[9px] text-viz-ink/60 uppercase">
                 {structures[0].kind}
               </span>
             </div>

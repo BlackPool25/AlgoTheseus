@@ -8,9 +8,10 @@
 
 import Editor, { type Monaco } from "@monaco-editor/react";
 import type { editor } from "monaco-editor";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTraceStore } from "../../store/traceStore";
 import { useUIStore } from "../../store/uiStore";
+import { currentTheme, monacoThemeFor } from "../../theme";
 import type { TraceEvent } from "../../types/trace";
 
 interface GutterLines {
@@ -90,6 +91,20 @@ export function CodeEditor() {
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
   const monacoRef = useRef<Monaco | null>(null);
   const decorationsRef = useRef<editor.IEditorDecorationsCollection | null>(null);
+
+  const [monacoTheme, setMonacoTheme] = useState(() =>
+    monacoThemeFor(currentTheme()),
+  );
+  useEffect(() => {
+    const observer = new MutationObserver(() =>
+      setMonacoTheme(monacoThemeFor(currentTheme())),
+    );
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["data-theme"],
+    });
+    return () => observer.disconnect();
+  }, []);
 
   // Two-arrow gutter: executed line (prev) vs next-to-execute line (current).
   // prev_line wins; else the previous step's line. Exit events map to their
@@ -202,7 +217,7 @@ export function CodeEditor() {
       <Editor
         height="100%"
         language="cpp"
-        theme="vs-dark"
+        theme={monacoTheme}
         value={code}
         onChange={(v) => setCode(v ?? "")}
         onMount={handleMount}

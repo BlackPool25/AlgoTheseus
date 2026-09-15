@@ -1,5 +1,5 @@
 [project]
-name = "dsa-visualiser-backend"
+name = "algo-theseus-backend"
 version = "0.1.0"
 description = "C++ DSA trace visualiser backend — libclang instrumentation + Docker sandbox"
 requires-python = ">=3.11"
@@ -7,9 +7,15 @@ dependencies = [
     "fastapi==0.115.12",
     "uvicorn[standard]==0.34.3",
     "pydantic==2.11.4",
+# Toolchain pin (Task W0.1): libclang==18.1.1 bundles MATCHED Python bindings
+# (clang/cindex.py) + native lib (clang/native/libclang.so) — it IS the pin.
+# Do NOT add the obsolete PyPI `clang` package (latest release 9.0, no 18.x
+# wheel exists; it also collides with libclang on the `clang/` package dir).
+# _find_libclang must resolve the bundled native lib, never system libclang.
     "libclang==18.1.1",
     "docker==7.1.0",
     "httpx==0.28.1",
+    "slowapi==0.1.10",
     "python-multipart>=0.0.32",
 ]
 

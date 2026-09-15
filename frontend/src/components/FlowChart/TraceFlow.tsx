@@ -136,7 +136,7 @@ export function TraceFlow() {
 
   // Derive active node from current step
   const activeId = useMemo(() => {
-    const node = cfgNodes.find((n) => n.trace_indices.includes(currentStep));
+    const node = cfgNodes.find((n) => (n.trace_indices ?? []).includes(currentStep));
     return node?.id ?? activeNodeId;
   }, [cfgNodes, currentStep, activeNodeId]);
 
@@ -179,7 +179,7 @@ export function TraceFlow() {
 
   if (cfgNodes.length === 0) {
     return (
-      <div className="flex items-center justify-center h-full text-zinc-600 text-sm">
+      <div className="flex items-center justify-center h-full text-viz-ink/60 text-sm">
         Run a program to see the control flow graph.
       </div>
     );
@@ -205,11 +205,23 @@ export function TraceFlow() {
         activeId={activeId}
         flowNodes={flowNodes}
       />
-      <Background color="#27272a" gap={16} />
+      <Background color="var(--viz-panel-bg)" gap={16} />
+      {/* MiniMap legibility: node fills use the body-bg/body-text contrast
+          pair (guaranteed contrast in every palette) with accent for the
+          active node; the viewport mask is a color-mix veil derived from the
+          theme bg so it never renders as a hardcoded black box. */}
       <MiniMap
-        nodeColor={(node) => (node.data?.isActive ? '#f59e0b' : '#52525b')}
-        maskColor="rgba(0,0,0,0.7)"
-        style={{ background: '#18181b' }}
+        nodeColor={(node) =>
+          node.data?.isActive
+            ? "var(--viz-accent)"
+            : "var(--viz-body-text)"
+        }
+        maskColor="color-mix(in srgb, var(--viz-body-bg) 62%, transparent)"
+        style={{
+          background: "var(--viz-panel-bg)",
+          border: "1px solid var(--viz-panel-border)",
+          borderRadius: 8,
+        }}
         pannable
         zoomable
       />

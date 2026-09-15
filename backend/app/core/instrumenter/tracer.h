@@ -37,6 +37,111 @@
 #include <type_traits>
 #include <tuple>
 #include <array>
+#include <iostream>
+#include <unistd.h>
+#include <fcntl.h>
+
+// ── Incremental stdout capture (T7, engine-agnostic "o" protocol) ───────────
+// fd 1 is redirected to a temp file at program start so BOTH std::cout and
+// printf land there in execution order (one shared file description, flushed
+// before every read). Each __TRACE_* macro reads the bytes written since the
+// previous event and emits them as "o" (delta, JSON string). The backend
+// parser accumulates deltas into cumulative per-event stdout; a later WASM
+// shim can fill "o" identically (delta bytes as JSON string) — the parser
+// carries no Docker specifics. Compat: a destructor replays the full capture
+// back to the real stdout so terminal/container stdout is unchanged.
+
+static int __trace_stdout_saved = -1;
+static int __trace_cap_fd = -1;
+static long __trace_cap_readpos = 0;
+static char __trace_cap_path[64] = "";
+
+// JSON-escape raw bytes (UTF-8 passthrough; C0 controls escaped).
+inline std::string __trace_json_escape(const char* s, size_t n) {
+    std::string out;
+    out.reserve(n + 8);
+    const char* hex = "0123456789abcdef";
+    for (size_t i = 0; i < n; ++i) {
+        unsigned char c = (unsigned char)s[i];
+        switch (c) {
+            case '"':  out += "\\\""; break;
+            case '\\': out += "\\\\"; break;
+            case '\n': out += "\\n"; break;
+            case '\t': out += "\\t"; break;
+            case '\r': out += "\\r"; break;
+            case '\b': out += "\\b"; break;
+            case '\f': out += "\\f"; break;
+            default:
+                if (c < 0x20) {
+                    out += "\\u00";
+                    out += hex[c >> 4];
+                    out += hex[c & 15];
+                } else {
+                    out += (char)c;
+                }
+        }
+    }
+    return out;
+}
+
+inline std::string __trace_stdout_delta() {
+    if (__trace_cap_fd < 0) return std::string();
+    fflush(stdout);
+    std::cout.flush();
+    off_t end = lseek(__trace_cap_fd, 0, SEEK_END);
+    if (end < 0 || end <= __trace_cap_readpos) return std::string();
+    size_t n = (size_t)(end - __trace_cap_readpos);
+    std::string raw(n, '\0');
+    ssize_t got = pread(__trace_cap_fd, raw.data(), n, __trace_cap_readpos);
+    if (got <= 0) return std::string();
+    raw.resize((size_t)got);
+    __trace_cap_readpos += got;
+    return __trace_json_escape(raw.data(), raw.size());
+}
+
+__attribute__((constructor)) static void __trace_stdout_init() {
+    fflush(stdout);
+    char tmpl[] = "/tmp/__trace_stdout_XXXXXX";
+    int fd = mkstemp(tmpl);
+    if (fd < 0) return;
+    __trace_stdout_saved = dup(1);
+    if (__trace_stdout_saved < 0) { close(fd); unlink(tmpl); return; }
+    if (dup2(fd, 1) < 0) {
+        close(fd); close(__trace_stdout_saved);
+        __trace_stdout_saved = -1; unlink(tmpl); return;
+    }
+    __trace_cap_fd = fd;  // shares the file description with fd 1
+    __trace_cap_readpos = 0;
+    size_t k = 0;
+    while (tmpl[k] && k < sizeof(__trace_cap_path) - 1) {
+        __trace_cap_path[k] = tmpl[k];
+        ++k;
+    }
+    __trace_cap_path[k] = '\0';
+}
+
+__attribute__((destructor)) static void __trace_stdout_fini() {
+    if (__trace_cap_fd < 0 || __trace_stdout_saved < 0) return;
+    fflush(stdout);
+    // Restore fd 1 first so the replay and any late flushes hit the terminal.
+    dup2(__trace_stdout_saved, 1);
+    lseek(__trace_cap_fd, 0, SEEK_SET);
+    char buf[65536];
+    ssize_t r;
+    while ((r = read(__trace_cap_fd, buf, sizeof(buf))) > 0) {
+        size_t off = 0;
+        while (off < (size_t)r) {
+            ssize_t w = write(__trace_stdout_saved, buf + off, (size_t)r - off);
+            if (w <= 0) break;
+            off += (size_t)w;
+        }
+    }
+    close(__trace_stdout_saved);
+    __trace_stdout_saved = -1;
+    close(__trace_cap_fd);
+    __trace_cap_fd = -1;
+    if (__trace_cap_path[0]) unlink(__trace_cap_path);
+}
 
 // ── Re-entrancy guard ────────────────────────────────────────────────────────
 // Prevents trace macros from firing while we are already inside a trace call.
@@ -93,31 +198,6 @@ std::string __ser(const std::vector<T>& v) {
         out += __ser(v[i]);
     }
     return out + "]";
-}
-
-template<typename T>
-std::string __ser(const std::vector<std::vector<T>>& v) {
-    bool jagged = !v.empty() && [&]{
-        size_t firstLen = v[0].size();
-        for (size_t i = 1; i < v.size(); ++i)
-            if (v[i].size() != firstLen) return true;
-        return false;
-    }();
-
-    if (jagged) {
-        std::string out = "{\"_type\":\"graph\",\"adj\":[";
-        for (size_t i = 0; i < v.size(); ++i) {
-            if (i) out += ",";
-            out += __ser(v[i]);
-        }
-        return out + "]}";
-    }
-    std::string out = "{\"_type\":\"dp_table\",\"data\":[";
-    for (size_t i = 0; i < v.size(); ++i) {
-        if (i) out += ",";
-        out += __ser(v[i]);
-    }
-    return out + "]}";
 }
 
 template<typename T>
@@ -342,6 +422,35 @@ std::string __vars_build(const char* name, const V& val, Rest&&... rest) {
     return out;
 }
 
+// ── Branch operand builders (T8 ops) ─────────────────────────────────────────
+// Each operand is emitted as one JSON string "name=value" inside the "op"
+// array. Values are capped at 256 chars each (never unbounded stringify);
+// unserializable pointers fall back to the $addr placeholder via __ser.
+inline std::string __ops_item(const char* name, const std::string& val) {
+    std::string v = val.size() > 256 ? val.substr(0, 256) + "...<trunc>" : val;
+    std::string out = "\"";
+    out += name;
+    out += "=";
+    for (char c : v) {
+        if (c == '"')       out += "\\\"";
+        else if (c == '\\') out += "\\\\";
+        else if (c == '\n') out += "\\n";
+        else if (c == '\t') out += "\\t";
+        else                out += c;
+    }
+    return out + "\"";
+}
+
+inline std::string __ops_build() { return ""; }
+
+template<typename V, typename... Rest>
+std::string __ops_build(const char* name, const V& val, Rest&&... rest) {
+    std::string out = __ops_item(name, __ser(val));
+    std::string tail = __ops_build(std::forward<Rest>(rest)...);
+    if (!tail.empty()) out += "," + tail;
+    return out;
+}
+
 // ── Trace macros ─────────────────────────────────────────────────────────────
 // Each macro checks __trace_active to prevent re-entrant logging.
 
@@ -350,9 +459,10 @@ std::string __vars_build(const char* name, const V& val, Rest&&... rest) {
         if (!__trace_active) {                                                   \
             __TraceGuard __tg;                                                   \
             std::string __p = __vars_build(__VA_ARGS__);                         \
+            std::string __o = __trace_stdout_delta();                            \
             fprintf(stderr,                                                      \
-                "TRACE:{\"t\":\"enter\",\"l\":%d,\"f\":\"%s\",\"d\":%d,\"p\":{%s}}\n", \
-                line, func, depth, __p.c_str());                                 \
+                "TRACE:{\"t\":\"enter\",\"l\":%d,\"f\":\"%s\",\"d\":%d,\"p\":{%s},\"o\":\"%s\"}\n", \
+                line, func, depth, __p.c_str(), __o.c_str());                    \
         }                                                                        \
     } while(0)
 
@@ -360,9 +470,10 @@ std::string __vars_build(const char* name, const V& val, Rest&&... rest) {
     do {                                                                         \
         if (!__trace_active) {                                                   \
             __TraceGuard __tg;                                                   \
+            std::string __o = __trace_stdout_delta();                            \
             fprintf(stderr,                                                      \
-                "TRACE:{\"t\":\"exit\",\"l\":%d,\"f\":\"%s\",\"d\":%d,\"r\":%s}\n", \
-                line, func, depth, __ser(retval).c_str());                       \
+                "TRACE:{\"t\":\"exit\",\"l\":%d,\"f\":\"%s\",\"d\":%d,\"r\":%s,\"o\":\"%s\"}\n", \
+                line, func, depth, __ser(retval).c_str(), __o.c_str());          \
         }                                                                        \
     } while(0)
 
@@ -370,9 +481,10 @@ std::string __vars_build(const char* name, const V& val, Rest&&... rest) {
     do {                                                                         \
         if (!__trace_active) {                                                   \
             __TraceGuard __tg;                                                   \
+            std::string __o = __trace_stdout_delta();                            \
             fprintf(stderr,                                                      \
-                "TRACE:{\"t\":\"exit\",\"l\":%d,\"f\":\"%s\",\"d\":%d,\"r\":null}\n", \
-                line, func, depth);                                              \
+                "TRACE:{\"t\":\"exit\",\"l\":%d,\"f\":\"%s\",\"d\":%d,\"r\":null,\"o\":\"%s\"}\n", \
+                line, func, depth, __o.c_str());                                 \
         }                                                                        \
     } while(0)
 
@@ -381,9 +493,38 @@ std::string __vars_build(const char* name, const V& val, Rest&&... rest) {
         if (!__trace_active) {                                                   \
             __TraceGuard __tg;                                                   \
             std::string __v = __vars_build(__VA_ARGS__);                         \
+            std::string __o = __trace_stdout_delta();                            \
             fprintf(stderr,                                                      \
-                "TRACE:{\"t\":\"state\",\"l\":%d,\"f\":\"%s\",\"d\":%d,\"v\":{%s}}\n", \
-                line, func, depth, __v.c_str());                                 \
+                "TRACE:{\"t\":\"state\",\"l\":%d,\"f\":\"%s\",\"d\":%d,\"v\":{%s},\"o\":\"%s\"}\n", \
+                line, func, depth, __v.c_str(), __o.c_str());                    \
+        }                                                                        \
+    } while(0)
+
+// ── Globals snapshot with change-dedup ───────────────────────────────────────
+// __TRACE_STATE_G emits "g" only when the globals JSON differs from the
+// previous STATE; otherwise the key is omitted (bound trace size).
+// Zero-globals programs keep using __TRACE_STATE, so no "g" key appears.
+static std::string __trace_prev_g;
+static bool __trace_g_first = true;
+
+#define __TRACE_STATE_G(line, func, depth, VJSON, GJSON)                        \
+    do {                                                                         \
+        if (!__trace_active) {                                                   \
+            __TraceGuard __tg;                                                   \
+            std::string __v = (VJSON);                                            \
+            std::string __g = (GJSON);                                            \
+            std::string __o = __trace_stdout_delta();                            \
+            if (__trace_g_first || __g != __trace_prev_g) {                       \
+                __trace_g_first = false;                                         \
+                __trace_prev_g = __g;                                             \
+                fprintf(stderr,                                                  \
+                    "TRACE:{\"t\":\"state\",\"l\":%d,\"f\":\"%s\",\"d\":%d,\"v\":{%s},\"g\":{%s},\"o\":\"%s\"}\n", \
+                    line, func, depth, __v.c_str(), __g.c_str(), __o.c_str());   \
+            } else {                                                             \
+                fprintf(stderr,                                                  \
+                    "TRACE:{\"t\":\"state\",\"l\":%d,\"f\":\"%s\",\"d\":%d,\"v\":{%s},\"o\":\"%s\"}\n", \
+                    line, func, depth, __v.c_str(), __o.c_str());                \
+            }                                                                    \
         }                                                                        \
     } while(0)
 
@@ -391,9 +532,24 @@ std::string __vars_build(const char* name, const V& val, Rest&&... rest) {
     do {                                                                         \
         if (!__trace_active) {                                                   \
             __TraceGuard __tg;                                                   \
+            std::string __o = __trace_stdout_delta();                            \
             fprintf(stderr,                                                      \
-                "TRACE:{\"t\":\"branch\",\"l\":%d,\"f\":\"%s\",\"d\":%d,\"c\":\"%s\",\"tk\":%s}\n", \
-                line, func, depth, cond_str, (cond_val) ? "true" : "false");    \
+                "TRACE:{\"t\":\"branch\",\"l\":%d,\"f\":\"%s\",\"d\":%d,\"c\":\"%s\",\"tk\":%s,\"o\":\"%s\"}\n", \
+                line, func, depth, cond_str, (cond_val) ? "true" : "false",      \
+                __o.c_str());                                                    \
+        }                                                                        \
+    } while(0)
+
+#define __TRACE_BRANCH_OPS(line, func, depth, cond_str, cond_val, ...)         \
+    do {                                                                         \
+        if (!__trace_active) {                                                   \
+            __TraceGuard __tg;                                                   \
+            std::string __ops = __ops_build(__VA_ARGS__);                        \
+            std::string __o = __trace_stdout_delta();                            \
+            fprintf(stderr,                                                      \
+                "TRACE:{\"t\":\"branch\",\"l\":%d,\"f\":\"%s\",\"d\":%d,\"c\":\"%s\",\"tk\":%s,\"op\":[%s],\"o\":\"%s\"}\n", \
+                line, func, depth, cond_str, (cond_val) ? "true" : "false", __ops.c_str(), \
+                __o.c_str()); \
         }                                                                        \
     } while(0)
 
@@ -401,8 +557,9 @@ std::string __vars_build(const char* name, const V& val, Rest&&... rest) {
     do {                                                                         \
         if (!__trace_active) {                                                   \
             __TraceGuard __tg;                                                   \
+            std::string __o = __trace_stdout_delta();                            \
             fprintf(stderr,                                                      \
-                "TRACE:{\"t\":\"iter\",\"l\":%d,\"f\":\"%s\",\"d\":%d,\"it\":%d}\n", \
-                line, func, depth, iter);                                        \
+                "TRACE:{\"t\":\"iter\",\"l\":%d,\"f\":\"%s\",\"d\":%d,\"it\":%d,\"o\":\"%s\"}\n", \
+                line, func, depth, iter, __o.c_str());                           \
         }                                                                        \
     } while(0)

@@ -27,8 +27,16 @@ export function useTraceNavigation() {
     return () => window.removeEventListener("keydown", onKey);
   }, [next, prev, setStep, totalSteps]);
 
+  const stepDesc =
+    currentEvent != null &&
+    typeof currentEvent.step_desc === "string" &&
+    currentEvent.step_desc.length > 0
+      ? currentEvent.step_desc
+      : null;
+
   const label = currentEvent
-    ? `Step ${currentStep + 1} / ${totalSteps} — ${currentEvent.func}() line ${currentEvent.line}`
+    ? `Step ${currentStep + 1} / ${totalSteps} — ${currentEvent.func}() line ${currentEvent.line}` +
+      (stepDesc != null ? ` · ${stepDesc}` : "")
     : `Step ${currentStep + 1} / ${totalSteps}`;
 
   return {

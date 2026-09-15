@@ -48,7 +48,7 @@ export interface DPTableMeta {
 }
 
 interface Props {
-  value: DPTableMeta | number[][] | number[];
+  value: unknown;
   name: string;
 }
 
@@ -224,8 +224,8 @@ export function DPTableVisual({ value, name }: Props) {
   if (rows === 0 || cols === 0) {
     return (
       <div className="flex flex-col gap-1">
-        <div className="text-xs text-zinc-500">{name}: dp_table</div>
-        <span className="text-[10px] text-zinc-600 italic">empty</span>
+        <div className="text-xs text-viz-ink/60">{name}: dp_table</div>
+        <span className="text-[10px] text-viz-ink/60 italic">empty</span>
       </div>
     );
   }
@@ -257,6 +257,10 @@ export function DPTableVisual({ value, name }: Props) {
     return (
       <div
         className={cellClass}
+        data-testid="dp-cell"
+        data-pos={`${r},${c}`}
+        data-current={isCurrent ? "true" : "false"}
+        data-dep={isDep ? "true" : "false"}
         onMouseEnter={() => handleCellHover(r, c)}
         onMouseLeave={handleCellLeave}
         title={`[${r}][${c}] = ${val}${isCurrent && formula ? `\n${formula}` : ""}`}
@@ -275,13 +279,13 @@ export function DPTableVisual({ value, name }: Props) {
       <div className="flex flex-col gap-1.5">
         {/* Header: name + formula */}
         <div className="flex items-center gap-2">
-          <span className="text-xs text-zinc-500">{name}: dp_table</span>
-          <span className="text-[10px] text-zinc-600">
+          <span className="text-xs text-viz-ink/60">{name}: dp_table</span>
+          <span className="text-[10px] text-viz-ink/60">
             {rows}×{cols}
           </span>
         </div>
         {formula && (
-          <div className="text-[10px] text-zinc-500 font-mono leading-tight">
+          <div className="text-[10px] text-viz-ink/60 font-mono leading-tight">
             {formula}
           </div>
         )}
@@ -300,7 +304,7 @@ export function DPTableVisual({ value, name }: Props) {
             {colLabels.map((label, c) => (
               <div
                 key={c}
-                className="flex items-center justify-center text-[10px] text-zinc-600 font-mono shrink-0"
+                className="flex items-center justify-center text-[10px] text-viz-ink/60 font-mono shrink-0"
                 style={{ width: CELL_W, marginRight: CELL_GAP }}
               >
                 {label}
@@ -327,17 +331,18 @@ export function DPTableVisual({ value, name }: Props) {
                     refY="3"
                     orient="auto"
                   >
-                    <path d="M0,0 L0,6 L6,3 z" fill="#3b82f6" />
+                    <path d="M0,0 L0,6 L6,3 z" fill="var(--viz-alias-edge)" />
                   </marker>
                 </defs>
                 {arrows.map((a, i) => (
                   <line
                     key={i}
+                    data-testid="dp-arrow"
                     x1={a.x1}
                     y1={a.y1}
                     x2={a.x2}
                     y2={a.y2}
-                    stroke="#3b82f6"
+                    stroke="var(--viz-alias-edge)"
                     strokeWidth={1.5}
                     strokeDasharray="3 2"
                     markerEnd="url(#dp-arrow)"
@@ -351,7 +356,7 @@ export function DPTableVisual({ value, name }: Props) {
             {data.map((row, r) => (
               <div key={r} className="flex items-center" style={{ height: CELL_H, marginBottom: CELL_GAP }}>
                 <div
-                  className="flex items-center justify-end pr-1 text-[10px] text-zinc-600 font-mono shrink-0"
+                  className="flex items-center justify-end pr-1 text-[10px] text-viz-ink/60 font-mono shrink-0"
                   style={{ width: ROW_LABEL_W }}
                 >
                   {rowLabels[r]}
@@ -366,7 +371,7 @@ export function DPTableVisual({ value, name }: Props) {
 
         {/* Legend */}
         {currentCell && (
-          <div className="flex items-center gap-3 text-[9px] text-zinc-600">
+          <div className="flex items-center gap-3 text-[9px] text-viz-ink/60">
             <span className="flex items-center gap-1">
               <span className="inline-block w-2 h-2 rounded-sm bg-cyan-500/30 border border-cyan-500" />
               current
@@ -390,13 +395,13 @@ export function DPTableVisual({ value, name }: Props) {
     <div className="flex flex-col gap-1.5">
       {/* Header */}
       <div className="flex items-center gap-2">
-        <span className="text-xs text-zinc-500">{name}: dp_table</span>
-        <span className="text-[10px] text-zinc-600">
+        <span className="text-xs text-viz-ink/60">{name}: dp_table</span>
+        <span className="text-[10px] text-viz-ink/60">
           {rows}×{cols} (virtualized)
         </span>
       </div>
       {formula && (
-        <div className="text-[10px] text-zinc-500 font-mono leading-tight">
+        <div className="text-[10px] text-viz-ink/60 font-mono leading-tight">
           {formula}
         </div>
       )}
@@ -408,7 +413,7 @@ export function DPTableVisual({ value, name }: Props) {
         style={{ maxHeight: MAX_LIST_HEIGHT }}
       >
         {/* Column headers (fixed at top) */}
-        <div className="flex sticky top-0 z-20 bg-zinc-950" style={{ height: COL_HDR_H }}>
+        <div className="flex sticky top-0 z-20 bg-viz-body" style={{ height: COL_HDR_H }}>
           <div
             className="shrink-0"
             style={{ width: ROW_LABEL_W }}
@@ -416,7 +421,7 @@ export function DPTableVisual({ value, name }: Props) {
           {colLabels.map((label, c) => (
             <div
               key={c}
-              className="flex items-center justify-center text-[10px] text-zinc-600 font-mono shrink-0"
+              className="flex items-center justify-center text-[10px] text-viz-ink/60 font-mono shrink-0"
               style={{ width: CELL_W, marginRight: CELL_GAP }}
             >
               {label}
@@ -449,17 +454,18 @@ export function DPTableVisual({ value, name }: Props) {
                   refY="3"
                   orient="auto"
                 >
-                  <path d="M0,0 L0,6 L6,3 z" fill="#3b82f6" />
+                  <path d="M0,0 L0,6 L6,3 z" fill="var(--viz-alias-edge)" />
                 </marker>
               </defs>
               {arrows.map((a, i) => (
                 <line
                   key={i}
+                  data-testid="dp-arrow"
                   x1={a.x1}
                   y1={a.y1}
                   x2={a.x2}
                   y2={a.y2}
-                  stroke="#3b82f6"
+                  stroke="var(--viz-alias-edge)"
                   strokeWidth={1.5}
                   strokeDasharray="3 2"
                   markerEnd="url(#dp-arrow-v)"
@@ -487,7 +493,7 @@ export function DPTableVisual({ value, name }: Props) {
                 }}
               >
                 <div
-                  className="flex items-center justify-end pr-1 text-[10px] text-zinc-600 font-mono shrink-0"
+                  className="flex items-center justify-end pr-1 text-[10px] text-viz-ink/60 font-mono shrink-0"
                   style={{ width: ROW_LABEL_W }}
                 >
                   {rowLabels[r]}
@@ -503,7 +509,7 @@ export function DPTableVisual({ value, name }: Props) {
 
       {/* Legend */}
       {currentCell && (
-        <div className="flex items-center gap-3 text-[9px] text-zinc-600">
+        <div className="flex items-center gap-3 text-[9px] text-viz-ink/60">
           <span className="flex items-center gap-1">
             <span className="inline-block w-2 h-2 rounded-sm bg-cyan-500/30 border border-cyan-500" />
             current

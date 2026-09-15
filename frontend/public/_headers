@@ -1,0 +1,6 @@
+# Static-host headers (task 19): COOP/COEP pair for the future browser-WASM
+# path (SharedArrayBuffer toolchain). App routes to the server path when SAB
+# is disabled. Cloudflare Pages / Netlify `_headers` format.
+/*
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Embedder-Policy: require-corp

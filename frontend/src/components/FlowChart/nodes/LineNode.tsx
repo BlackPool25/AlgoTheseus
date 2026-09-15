@@ -17,7 +17,7 @@ export function LineNode({ data }: NodeProps) {
       className={`px-3 py-2 rounded border text-xs font-mono min-w-[140px] text-center transition-colors ${
         d.isActive
           ? "border-amber-400 bg-amber-400/10 text-amber-300"
-          : "border-zinc-700 bg-zinc-800 text-zinc-300"
+          : "border-viz-line bg-viz-panel text-viz-ink"
       }`}
     >
       <Handle type="target" position={Position.Top} className="!bg-zinc-600" />

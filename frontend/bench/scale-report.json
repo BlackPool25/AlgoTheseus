@@ -1,0 +1,188 @@
+{
+  "measured_at": "2026-09-15T10:00:16.671Z",
+  "machine": {
+    "cpu_model": "AMD Ryzen 5 7600 6-Core Processor",
+    "cpu_count": 12,
+    "ram_gb": 30.5,
+    "platform": "linux 7.1.13-200.fc44.x86_64",
+    "node": "v24.19.0"
+  },
+  "browser": {
+    "measured_at": "2026-09-15T10:00:06.225Z",
+    "browser": "chromium",
+    "browser_version": "153.0.8010.12",
+    "wall_total_ms": 24320,
+    "legs": {
+      "nested-loop": {
+        "total_steps": 10002,
+        "payload_bytes": 1027588,
+        "load_ms": 453,
+        "verdict": "measured",
+        "p95_ms": 5.105000000447035,
+        "repeat_p95s": [
+          33.730000000447035,
+          5.105000000447035,
+          4.41499999910593
+        ],
+        "dom_collapsed": 147,
+        "spot_reach_pct": 100
+      },
+      "fib-recursion": {
+        "total_steps": 65675,
+        "payload_bytes": 6437269,
+        "load_ms": 5674,
+        "verdict": "measured",
+        "p95_ms": 11.214999999850988,
+        "repeat_p95s": [
+          13.125,
+          11.214999999850988,
+          10.524999998509884
+        ],
+        "dom_collapsed": 385,
+        "spot_reach_pct": 100
+      },
+      "hot-call": {
+        "total_steps": 100002,
+        "payload_bytes": 10200691,
+        "load_ms": 15939,
+        "verdict": "measured",
+        "p95_ms": 17.46000000089407,
+        "repeat_p95s": [
+          17.41000000014901,
+          17.46000000089407,
+          18.885000001639128
+        ],
+        "dom_collapsed": 383,
+        "spot_reach_pct": 100
+      }
+    },
+    "vector_guard": {
+      "median_ms": 2.5150000005960464,
+      "baseline_ms": 4.320000000298023,
+      "ratio": 0.5821759260237371,
+      "pass": true
+    }
+  },
+  "legs": {
+    "nested-loop": {
+      "total_steps": 10002,
+      "payload_bytes": 1027588,
+      "payload_gate_bytes": 26214400,
+      "reachability_pct": 100,
+      "browser_p95_ms": 5.105000000447035,
+      "browser_dom_collapsed": 147,
+      "browser_load_ms": 453
+    },
+    "fib-recursion": {
+      "total_steps": 65675,
+      "payload_bytes": 6437269,
+      "payload_gate_bytes": 26214400,
+      "reachability_pct": 100,
+      "browser_p95_ms": 11.214999999850988,
+      "browser_dom_collapsed": 385,
+      "browser_load_ms": 5674
+    },
+    "hot-call": {
+      "total_steps": 100002,
+      "payload_bytes": 10200691,
+      "payload_gate_bytes": 26214400,
+      "reachability_pct": 100,
+      "browser_p95_ms": 17.46000000089407,
+      "browser_dom_collapsed": 383,
+      "browser_load_ms": 15939
+    }
+  },
+  "fidelity_2k": {
+    "total_steps": 1502,
+    "reachability_pct": 100
+  },
+  "gates": [
+    {
+      "gate": "R7.5 payload nested-loop",
+      "verdict": "pass",
+      "detail": "1027588B <= 26214400B"
+    },
+    {
+      "gate": "R7.5 payload fib-recursion",
+      "verdict": "pass",
+      "detail": "6437269B <= 26214400B"
+    },
+    {
+      "gate": "R7.5 payload hot-call",
+      "verdict": "pass",
+      "detail": "10200691B <= 26214400B"
+    },
+    {
+      "gate": "R7.3 reachability nested-loop",
+      "verdict": "pass",
+      "detail": "10002/10002 (100%) audit 6ms"
+    },
+    {
+      "gate": "R7.3 reachability fib-recursion",
+      "verdict": "pass",
+      "detail": "65675/65675 (100%) audit 34ms"
+    },
+    {
+      "gate": "R7.3 reachability hot-call",
+      "verdict": "pass",
+      "detail": "100002/100002 (100%) audit 25ms"
+    },
+    {
+      "gate": "R7.3 reachability fidelity-2k",
+      "verdict": "pass",
+      "detail": "1502/1502 (100%) audit 0ms"
+    },
+    {
+      "gate": "R7.4 fidelity-2k",
+      "verdict": "pass",
+      "detail": "next() walk visited 1502/1502, full fidelity"
+    },
+    {
+      "gate": "R7.1 scrub-p95 nested-loop",
+      "verdict": "pass",
+      "detail": "median-of-medians p95=5.11ms <= 100ms (repeats 33.7/5.1/4.4)"
+    },
+    {
+      "gate": "R7.2 collapsed-DOM nested-loop",
+      "verdict": "pass",
+      "detail": "147 nodes <= 1000 (collapsed)"
+    },
+    {
+      "gate": "R7.1 scrub-p95 fib-recursion",
+      "verdict": "pass",
+      "detail": "median-of-medians p95=11.21ms <= 100ms (repeats 13.1/11.2/10.5)"
+    },
+    {
+      "gate": "R7.2 collapsed-DOM fib-recursion",
+      "verdict": "pass",
+      "detail": "385 nodes <= 1000 (collapsed)"
+    },
+    {
+      "gate": "R7.1 scrub-p95 hot-call",
+      "verdict": "pass",
+      "detail": "median-of-medians p95=17.46ms <= 100ms (repeats 17.4/17.5/18.9)"
+    },
+    {
+      "gate": "R7.2 collapsed-DOM hot-call",
+      "verdict": "pass",
+      "detail": "383 nodes <= 1000 (collapsed)"
+    },
+    {
+      "gate": "R7.6 vector-flash",
+      "verdict": "pass",
+      "detail": "ratio=0.582 <= 1.2x (median 2.52ms vs baseline 4.32ms)"
+    },
+    {
+      "gate": "R6.1/R6.3 heap-collapsed+single-flash",
+      "verdict": "pass",
+      "detail": "heap-panel.spec.ts (todo 17/31 green) + R7.6 single changed-cell assertion; no UI touched by this todo"
+    },
+    {
+      "gate": "R6.2/R6.4/R6.5 per-$id-diff+aliasing+dead-props",
+      "verdict": "pass",
+      "detail": "held by todos 17/25 (HeapPanel/LinkedListVisual/GridVisual wiring green); no UI touched by this todo"
+    }
+  ],
+  "recursion_comprehension_note": "Recursion-comprehension probe NOTE: R7.3 reachability is 100% (every raw index setStep-able after expand), but reachable != understood. Recursive calls are identified by (func, depth) enter/exit pairing (fib leg max depth 20, 21891 calls) rendered as func_call RecursionTreeNode groups — no per-frame source-mapping comprehension is asserted. Full call-tree understanding at 50k+ steps remains future work (A2 cap escalation).",
+  "escalation_note": "A1 (canvas renderer) / A2 (step cap + adaptive granularity): triggered only if an R7.1/R7.2 leg records downgrade. Current verdicts above; any downgrade is honestly recorded, never silently passed."
+}

@@ -7,7 +7,7 @@
 # the Docker SDK options in sandbox_config.py instead).
 #
 # Build:
-#   docker build -f docker/Dockerfile.sandbox -t dsa-sandbox:latest .
+#   docker build -f docker/Dockerfile.sandbox -t algo-theseus-sandbox:latest .
 #
 # The container is never run directly — docker_runner.py manages it.
 

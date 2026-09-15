@@ -4,12 +4,10 @@ test_instrumenter.py — Tests for ast_walker and scope_tracker.
 Each test has a happy path and an edge case.
 """
 
-import os
 from pathlib import Path
 
-import pytest
-
 from app.core.instrumenter.ast_walker import InjectKind, walk
+from app.core.instrumenter.injector import instrument
 from app.core.instrumenter.scope_tracker import build_scope_map
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -69,6 +67,29 @@ class TestASTWalker:
         result = walk(str(empty))
         assert result.injection_points == []
 
+    def test_state_injected_inside_while_body(self):
+        """Nested STATE: `int mid` line inside the while body needs a STATE point."""
+        result = walk(BSEARCH)
+        states = [
+            p for p in result.injection_points
+            if p.kind == InjectKind.STATE and p.func_name == "bsearch"
+        ]
+        state_lines = [p.line for p in states]
+        assert 8 in state_lines
+        assert len(state_lines) == len(set(state_lines))
+        mid_point = next(p for p in states if p.line == 8)
+        assert "mid" in mid_point.var_names
+
+    def test_state_injected_inside_if_branches(self):
+        """Nested STATE: statements inside if/else-if/else bodies need STATE points."""
+        result = walk(BSEARCH)
+        state_lines = {
+            p.line for p in result.injection_points
+            if p.kind == InjectKind.STATE and p.func_name == "bsearch"
+        }
+        assert 10 in state_lines
+        assert 11 in state_lines
+
 
 # ── scope_tracker tests ───────────────────────────────────────────────────────
 
@@ -112,3 +133,30 @@ class TestScopeTracker:
                 for v in vars_list:
                     assert not v.name.startswith("__"), \
                         f"Internal variable leaked into scope: {v.name}"
+
+    def test_declared_var_included_in_same_line_state(self, tmp_path):
+        """Post-decl snapshot: `int x = 5;` STATE carries x (pre does not)."""
+        src = tmp_path / "decl.cpp"
+        src.write_text("int foo() {\n    int x = 5;\n    return x;\n}\n")
+        scopes = build_scope_map(str(src))
+        post = scopes["foo"].vars_at_line_post[2]
+        assert {v.name for v in post} == {"x"}
+        pre = scopes["foo"].vars_at_line_pre[2]
+        assert "x" not in {v.name for v in pre}
+        out = instrument(src.read_text())
+        state_lines = [ln for ln in out.splitlines() if "__TRACE_STATE(2," in ln]
+        assert len(state_lines) == 1
+        assert '"x", x' in state_lines[0]
+
+    def test_params_plus_declared_vars(self, tmp_path):
+        """Post set on a decl line carries params + the newly declared var."""
+        src = tmp_path / "params.cpp"
+        src.write_text("int add(int a, int b) {\n    int s = a + b;\n    return s;\n}\n")
+        scopes = build_scope_map(str(src))
+        post = scopes["add"].vars_at_line_post[2]
+        assert {v.name for v in post} == {"a", "b", "s"}
+        out = instrument(src.read_text())
+        state_lines = [ln for ln in out.splitlines() if "__TRACE_STATE(2," in ln]
+        assert len(state_lines) == 1
+        for name in ("a", "b", "s"):
+            assert f'"{name}", {name}' in state_lines[0]

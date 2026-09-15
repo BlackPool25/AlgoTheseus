@@ -1,6 +1,8 @@
 /**
  * components/ContainerVisuals/MapVisual.tsx — Key-value table.
  *
+ * Changed-key flash comes from the shared flash.ts primitive (todo 25);
+ * rehash notes travel in the trace step_desc (rendered by StatePanel).
  * Virtualises rows when entry count exceeds the threshold.
  */
 
@@ -9,10 +11,13 @@ import {
   VIRTUALIZE_THRESHOLD,
 } from "../../hooks/useVirtualizedList";
 import { renderCellValue } from "../../utils/format";
+import { flashRowStyle } from "./flash";
 
 interface Props {
-  value: Record<string, unknown>;
+  value: unknown;
   name: string;
+  /** Keys inserted/updated this step — flash via the shared primitive. */
+  changedKeys?: string[];
 }
 
 /** Height of one key-value row in px. */
@@ -20,28 +25,55 @@ const ITEM_SIZE = 28;
 /** Max height of the scrollable container in virtualised mode. */
 const MAX_LIST_HEIGHT = 400;
 
-export function MapVisual({ value, name }: Props) {
-  const entries = Object.entries(value);
+function asEntries(value: unknown): [string, unknown][] | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return Object.entries(value as Record<string, unknown>);
+}
+
+export function MapVisual({ value, name, changedKeys = [] }: Props) {
+  const entries = asEntries(value);
+  // Unconditional: hooks must run in the same order every render, even for
+  // the primitive-fallback path below (count 0 renders nothing virtualised).
   const { parentRef, virtualizer } = useVirtualizedList({
-    count: entries.length,
+    count: entries?.length ?? 0,
     itemSize: ITEM_SIZE,
     horizontal: false,
   });
+  const changed = new Set(changedKeys);
+  if (!entries) {
+    return (
+      <div className="flex flex-col gap-1">
+        <div className="text-xs text-viz-ink/60">
+          {name}: map
+        </div>
+        <span data-testid="primitive-fallback" className="text-[10px] text-viz-ink/60 italic">
+          {renderCellValue(value)}
+        </span>
+      </div>
+    );
+  }
+  function rowAttrs(k: string) {
+    return {
+      "data-testid": "map-row",
+      "data-key": k,
+      "data-flash": changed.has(k) ? "true" : "false",
+    };
+  }
 
   /* ── Non-virtualised path (≤ threshold) ── */
   if (entries.length <= VIRTUALIZE_THRESHOLD) {
     return (
       <div className="flex flex-col gap-1">
-        <div className="text-xs text-zinc-500">
+        <div className="text-xs text-viz-ink/60">
           {name}: map ({entries.length})
         </div>
-        <div className="border border-zinc-700 rounded overflow-hidden">
+        <div className="border border-viz-line rounded overflow-hidden">
           {entries.map(([k, v]) => (
-            <div key={k} className="flex border-b border-zinc-800 last:border-0">
-              <div className="px-2 py-1 text-xs font-mono text-blue-300 border-r border-zinc-700 min-w-[60px]">
+            <div key={k} className="flex border-b border-viz-line last:border-0" style={flashRowStyle(changed.has(k))} {...rowAttrs(k)}>
+              <div className={`px-2 py-1 text-xs font-mono border-r border-viz-line min-w-[60px] ${changed.has(k) ? "text-viz-flash" : "text-viz-alias"}`}>
                 {k}
               </div>
-              <div className="px-2 py-1 text-xs font-mono text-zinc-200">
+              <div className="px-2 py-1 text-xs font-mono text-viz-ink">
                 {renderCellValue(v)}
               </div>
             </div>
@@ -54,12 +86,12 @@ export function MapVisual({ value, name }: Props) {
   /* ── Virtualised path (> threshold) ── */
   return (
     <div className="flex flex-col gap-1">
-      <div className="text-xs text-zinc-500">
+      <div className="text-xs text-viz-ink/60">
         {name}: map ({entries.length})
       </div>
       <div
         ref={parentRef}
-        className="border border-zinc-700 rounded overflow-y-auto"
+        className="border border-viz-line rounded overflow-y-auto"
         style={{ maxHeight: MAX_LIST_HEIGHT }}
       >
         <div
@@ -73,7 +105,8 @@ export function MapVisual({ value, name }: Props) {
             return (
               <div
                 key={k}
-                className="flex border-b border-zinc-800"
+                className="flex border-b border-viz-line"
+                {...rowAttrs(k)}
                 style={{
                   position: "absolute",
                   top: 0,
@@ -81,12 +114,13 @@ export function MapVisual({ value, name }: Props) {
                   width: "100%",
                   height: `${virtualItem.size}px`,
                   transform: `translateY(${virtualItem.start}px)`,
+                  ...flashRowStyle(changed.has(k)),
                 }}
               >
-                <div className="px-2 py-1 text-xs font-mono text-blue-300 border-r border-zinc-700 min-w-[60px]">
+                <div className={`px-2 py-1 text-xs font-mono border-r border-viz-line min-w-[60px] ${changed.has(k) ? "text-viz-flash" : "text-viz-alias"}`}>
                   {k}
                 </div>
-                <div className="px-2 py-1 text-xs font-mono text-zinc-200">
+                <div className="px-2 py-1 text-xs font-mono text-viz-ink">
                   {renderCellValue(v)}
                 </div>
               </div>

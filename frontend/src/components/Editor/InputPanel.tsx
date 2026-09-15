@@ -10,11 +10,11 @@ export function InputPanel() {
 
   return (
     <div className="flex flex-col gap-2 h-full">
-      <div className="text-xs font-medium text-zinc-400 uppercase tracking-wide">
+      <div className="text-xs font-medium text-viz-ink/60 uppercase tracking-wide">
         stdin (optional)
       </div>
       <textarea
-        className="flex-1 bg-zinc-900 rounded p-2 text-xs text-zinc-300 font-mono resize-none outline-none focus:ring-1 focus:ring-zinc-600"
+        className="flex-1 bg-viz-body rounded p-2 text-xs text-viz-ink font-mono resize-none outline-none focus:ring-1 focus:ring-viz-line"
         placeholder="Enter program input here..."
         value={rawInput}
         onChange={(e) => setRawInput(e.target.value)}

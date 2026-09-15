@@ -29,15 +29,15 @@ export function SetVisual({ value, label = "set" }: Props) {
           </div>
         ))}
         {overflow > 0 && (
-          <div className="flex items-center justify-center h-6 px-1.5 text-[10px] text-zinc-500">
+          <div className="flex items-center justify-center h-6 px-1.5 text-[10px] text-viz-ink/60">
             +{overflow}
           </div>
         )}
         {items.length === 0 && (
-          <span className="text-[10px] text-zinc-600 italic">∅ empty</span>
+          <span className="text-[10px] text-viz-ink/60 italic">∅ empty</span>
         )}
       </div>
-      <span className="text-[9px] text-zinc-600">{label} · {items.length} items</span>
+      <span className="text-[9px] text-viz-ink/60">{label} · {items.length} items</span>
     </div>
   );
 }

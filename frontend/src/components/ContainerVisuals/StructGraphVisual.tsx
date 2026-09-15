@@ -162,7 +162,7 @@ export function StructGraphVisual({
   nextField = "next",
 }: Props) {
   const content = useMemo(() => {
-    if (!value) return <span className="text-[10px] text-zinc-600">null</span>;
+    if (!value) return <span className="text-[10px] text-viz-ink/60">null</span>;
 
     if (renderAs === "linked_list") {
       const nodes = collectLinkedList(value, labelField, nextField);
@@ -171,7 +171,7 @@ export function StructGraphVisual({
 
     // tree or graph — use tree layout
     const root = buildTreeLayout(value, labelField, leftField, rightField);
-    if (!root) return <span className="text-[10px] text-zinc-600">null</span>;
+    if (!root) return <span className="text-[10px] text-viz-ink/60">null</span>;
     return <TreeSVG root={root} />;
   }, [value, renderAs, labelField, leftField, rightField, nextField]);
 

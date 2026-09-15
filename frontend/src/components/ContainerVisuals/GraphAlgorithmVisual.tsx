@@ -356,8 +356,8 @@ export function GraphAlgorithmVisual({ value, name }: Props) {
   if (n === 0) {
     return (
       <div className="flex flex-col gap-1">
-        {name && <div className="text-xs text-zinc-500">{name}: graph</div>}
-        <span className="text-[10px] text-zinc-600 italic">empty graph</span>
+        {name && <div className="text-xs text-viz-ink/60">{name}: graph</div>}
+        <span className="text-[10px] text-viz-ink/60 italic">empty graph</span>
       </div>
     );
   }
@@ -365,17 +365,17 @@ export function GraphAlgorithmVisual({ value, name }: Props) {
   return (
     <div className="flex flex-col gap-1">
       {name && (
-        <div className="text-xs text-zinc-500 flex items-center gap-2">
+        <div className="text-xs text-viz-ink/60 flex items-center gap-2">
           <span>{name}: graph · {n} nodes · {edges.length} edges</span>
           <button
             onClick={() => setUseForce(!useForce)}
-            className="underline decoration-dotted underline-offset-2 hover:text-zinc-300"
+            className="underline decoration-dotted underline-offset-2 hover:text-viz-ink"
           >
             {effectiveUseForce ? "circular" : "force-directed"}
           </button>
         </div>
       )}
-      <div className="border border-zinc-800 rounded-md overflow-hidden bg-zinc-900/50">
+      <div className="border border-viz-line rounded-md overflow-hidden bg-viz-body/50">
         <div style={{ height: 280, width: "100%" }}>
           <ReactFlow
             nodes={nodes}

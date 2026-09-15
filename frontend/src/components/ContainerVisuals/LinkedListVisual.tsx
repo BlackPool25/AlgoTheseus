@@ -253,7 +253,7 @@ export function LinkedListVisual({ value, name, currentAddr }: Props) {
   return (
     <div className="flex flex-col gap-1">
       {/* Header */}
-      <div className="flex items-center gap-2 text-[10px] text-zinc-500">
+      <div className="flex items-center gap-2 text-[10px] text-viz-ink/60">
         <span>
           {name}: {isDoubly ? "doubly" : "singly"}-linked list
           {hasCycle && <span className="text-red-400 ml-1">(cycle)</span>}

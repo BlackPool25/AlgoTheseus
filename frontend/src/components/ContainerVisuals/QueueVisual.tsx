@@ -58,16 +58,16 @@ export function QueueVisual({ value }: Props) {
           ))}
 
           {items.length === 0 && (
-            <span className="text-[10px] text-zinc-600 italic">empty</span>
+            <span className="text-[10px] text-viz-ink/60 italic">empty</span>
           )}
 
           {/* Back arrow */}
           <div className="flex flex-col items-center shrink-0">
-            <span className="text-[9px] text-zinc-500">back</span>
-            <span className="text-zinc-500 text-xs">→</span>
+            <span className="text-[9px] text-viz-ink/60">back</span>
+            <span className="text-viz-ink/60 text-xs">→</span>
           </div>
         </div>
-        <span className="text-[9px] text-zinc-600">
+        <span className="text-[9px] text-viz-ink/60">
           queue · {items.length} items
         </span>
       </div>
@@ -124,11 +124,11 @@ export function QueueVisual({ value }: Props) {
 
         {/* Back arrow */}
         <div className="flex flex-col items-center shrink-0">
-          <span className="text-[9px] text-zinc-500">back</span>
-          <span className="text-zinc-500 text-xs">→</span>
+          <span className="text-[9px] text-viz-ink/60">back</span>
+          <span className="text-viz-ink/60 text-xs">→</span>
         </div>
       </div>
-      <span className="text-[9px] text-zinc-600">
+      <span className="text-[9px] text-viz-ink/60">
         queue · {items.length} items
       </span>
     </div>

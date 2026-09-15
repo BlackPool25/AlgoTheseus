@@ -91,13 +91,13 @@ export function VariableRow({ name, value, changed, highlightIndex, heap, heapDi
 
   return (
     <div
-      className={`flex flex-col gap-1 px-3 py-1.5 border-b border-zinc-800/50 ${
+      className={`flex flex-col gap-1 px-3 py-1.5 border-b border-viz-line/50 ${
         changed ? "bg-cyan-500/15" : ""
       }`}
     >
       {/* Name + changed badge */}
       <div className="flex items-center gap-2">
-        <span className="text-xs font-mono text-zinc-400 min-w-[80px] shrink-0">
+        <span className="text-xs font-mono text-viz-ink/60 min-w-[80px] shrink-0">
           {name}
         </span>
         {changed && (
@@ -106,7 +106,7 @@ export function VariableRow({ name, value, changed, highlightIndex, heap, heapDi
       </div>
 
       {/* Value visual */}
-      <div className={`text-xs font-mono ${changed ? "text-cyan-400" : "text-zinc-200"}`}>
+      <div className={`text-xs font-mono ${changed ? "text-cyan-400" : "text-viz-ink"}`}>
         <ValueVisual name={name} value={value} kind={containerKind} highlightIndex={highlightIndex} heap={heap} heapDiff={heapDiff} prevValue={prevValue} />
       </div>
     </div>

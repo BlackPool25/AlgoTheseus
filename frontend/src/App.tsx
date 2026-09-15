@@ -101,19 +101,19 @@ export default function App() {
   const isLoading = status === "executing";
 
   return (
-    <div className="flex flex-col h-screen bg-zinc-950 text-zinc-100">
+    <div className="flex flex-col h-screen bg-viz-body text-viz-ink">
       {/* Header */}
-      <header className="flex items-center justify-between px-4 py-2 bg-zinc-900 border-b border-zinc-800 shrink-0">
+      <header className="flex items-center justify-between px-4 py-2 bg-viz-body border-b border-viz-line shrink-0">
         <div className="flex items-center gap-3">
-          <h1 className="text-sm font-semibold text-zinc-100">DSA Visualiser</h1>
-          <span className="text-xs bg-zinc-800 text-zinc-400 px-2 py-0.5 rounded font-mono">C++ · libclang</span>
+          <h1 className="text-sm font-semibold text-viz-ink">DSA Visualiser</h1>
+          <span className="text-xs bg-viz-panel text-viz-ink/60 px-2 py-0.5 rounded font-mono">C++ · libclang</span>
         </div>
         <div className="flex items-center gap-2">
           <select
             aria-label="Theme"
             value={theme}
             onChange={(e) => setTheme(applyTheme(e.target.value))}
-            className="text-xs bg-zinc-800 text-zinc-400 px-2 py-1 rounded font-mono"
+            className="text-xs bg-viz-panel text-viz-ink/60 px-2 py-1 rounded font-mono"
           >
             {THEMES.map((t) => (
               <option key={t} value={t}>
@@ -124,7 +124,7 @@ export default function App() {
           {status === "done" && (
             <button
               onClick={() => { reset(); useTraceStore.getState().reset(); useCFGStore.getState().reset(); }}
-              className="text-xs text-zinc-400 hover:text-zinc-200 transition-colors"
+              className="text-xs text-viz-ink/60 hover:text-viz-ink transition-colors"
             >
               Reset
             </button>
@@ -142,12 +142,12 @@ export default function App() {
       {/* Main content */}
       <div className="flex flex-1 overflow-hidden">
         {/* Left panel: editor + input */}
-        <div className="flex flex-col w-[45%] border-r border-zinc-800">
+        <div className="flex flex-col w-[45%] border-r border-viz-line">
           <div className="flex-1 overflow-hidden">
             <CodeEditor />
           </div>
-          <div className="h-[360px] border-t border-zinc-800 flex flex-col">
-            <div className="flex-1 overflow-y-auto p-3 border-b border-zinc-800">
+          <div className="h-[360px] border-t border-viz-line flex flex-col">
+            <div className="flex-1 overflow-y-auto p-3 border-b border-viz-line">
               <InputPanel />
             </div>
             <div className="overflow-y-auto p-3">
@@ -163,7 +163,7 @@ export default function App() {
             <TraceFlow />
           </div>
           {/* State panel */}
-          <div className="w-[260px] border-l border-zinc-800 overflow-hidden">
+          <div className="w-[260px] border-l border-viz-line overflow-hidden">
             <StatePanel />
           </div>
         </div>
@@ -182,8 +182,8 @@ export default function App() {
       ) : (
         stdout &&
         status === "done" && (
-          <div className="px-4 py-2 bg-zinc-900 border-t border-zinc-800 text-xs text-zinc-300 font-mono">
-            <span className="text-zinc-500 mr-2">stdout:</span>{stdout.trim()}
+          <div className="px-4 py-2 bg-viz-body border-t border-viz-line text-xs text-viz-ink font-mono">
+            <span className="text-viz-ink/60 mr-2">stdout:</span>{stdout.trim()}
           </div>
         )
       )}

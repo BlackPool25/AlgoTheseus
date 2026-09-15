@@ -69,7 +69,7 @@ export function TraceScrubber() {
   if (totalSteps === 0) return null;
 
   return (
-    <div className="flex flex-col gap-1 px-4 py-2 bg-zinc-900 border-t border-zinc-800">
+    <div className="flex flex-col gap-1 px-4 py-2 bg-viz-body border-t border-zinc-800">
       {/* Label row — shows step info + expand/collapse toggle */}
       <div className="flex items-center justify-between">
         <span className="text-xs text-zinc-400 font-mono">{displayLabel}</span>

@@ -475,17 +475,17 @@ export function HeapVisual({ value }: Props) {
     <div className="flex flex-col gap-1">
       {/* Heap type badge */}
       <div className="flex items-center gap-2">
-        <span className="text-[10px] font-mono text-zinc-500">
+        <span className="text-[10px] font-mono text-viz-ink/60">
           {heapType === "min" ? "min‑heap" : "max‑heap"}
         </span>
-        <span className="text-[9px] text-zinc-600">
+        <span className="text-[9px] text-viz-ink/60">
           · {items.length} item{items.length !== 1 ? "s" : ""}
         </span>
       </div>
 
       {/* SVG tree */}
       {items.length === 0 ? (
-        <span className="text-[10px] text-zinc-600 italic">empty</span>
+        <span className="text-[10px] text-viz-ink/60 italic">empty</span>
       ) : (
         <div className="overflow-auto max-w-full">
           <style>{KEYFRAMES}</style>

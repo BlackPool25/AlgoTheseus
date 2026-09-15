@@ -40,7 +40,7 @@ export function VectorVisual({ value, name, highlightIndex }: Props) {
   if (value.length <= VIRTUALIZE_THRESHOLD) {
     return (
       <div className="flex flex-col gap-1">
-        <div className="text-xs text-zinc-500">{name}: vector</div>
+        <div className="text-xs text-viz-ink/60">{name}: vector</div>
         <div className="flex gap-0.5 overflow-x-auto pb-1">
           {value.map((item, i) => (
             <div key={i} className="flex flex-col items-center shrink-0">
@@ -60,7 +60,7 @@ export function VectorVisual({ value, name, highlightIndex }: Props) {
   /* ── Virtualised path (> threshold) ── */
   return (
     <div className="flex flex-col gap-1">
-      <div className="text-xs text-zinc-500">
+      <div className="text-xs text-viz-ink/60">
         {name}: vector ({value.length})
       </div>
       <div

@@ -92,6 +92,28 @@ test.describe("Theme switcher", () => {
     expect(warnings.some((w) => w.includes("bogus-theme"))).toBe(true);
   });
 
+  test("light theme visibly re-skins the app shell and editor", async ({
+    page,
+  }) => {
+    await setupWithMock(page);
+    await page.waitForSelector(".monaco-editor", { timeout: 20000 });
+    await page.getByLabel("Theme").selectOption("light");
+    await page.waitForTimeout(500);
+    const headerBg = await page.evaluate(
+      () => getComputedStyle(document.querySelector("header")!).backgroundColor,
+    );
+    // light --viz-body-bg #fdf6e3 (header uses bg-viz-body, byte-identical
+    // to bg-zinc-900 #18181b under zinc-dark).
+    expect(headerBg).toBe("rgb(253, 246, 227)");
+    const editorBg = await page.evaluate(
+      () =>
+        getComputedStyle(document.querySelector(".monaco-editor")!)
+          .backgroundColor,
+    );
+    // monaco `vs` surface (#FFFFFE) — fails today (hardcoded vs-dark #1e1e1e).
+    expect(editorBg).toBe("rgb(255, 255, 254)");
+  });
+
   test("canonical-trace screenshot per palette", async ({ page }) => {
     await setupWithMock(page);
     await goToStep(page, STEPS.VECTOR);

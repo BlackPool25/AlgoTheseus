@@ -161,19 +161,19 @@ function CellTooltip({
 }) {
   return (
     <div className="absolute z-50 top-0 left-0 w-full h-full pointer-events-none">
-      <div className="pointer-events-auto absolute top-1 right-1 bg-zinc-900 border border-zinc-600 rounded px-2.5 py-1.5 shadow-lg text-xs font-mono">
-        <div className="text-zinc-300">
-          <span className="text-zinc-500">row </span>
+      <div className="pointer-events-auto absolute top-1 right-1 bg-viz-body border border-viz-line rounded px-2.5 py-1.5 shadow-lg text-xs font-mono">
+        <div className="text-viz-ink">
+          <span className="text-viz-ink/60">row </span>
           {cell.row}
-          <span className="text-zinc-500">  col </span>
+          <span className="text-viz-ink/60">  col </span>
           {cell.col}
         </div>
-        <div className="text-zinc-100 mt-0.5">
+        <div className="text-viz-ink mt-0.5">
           value = <span className="text-amber-400">{cell.value}</span>
         </div>
         <button
           onClick={onClose}
-          className="absolute -top-1 -right-1 w-4 h-4 flex items-center justify-center rounded-full bg-zinc-700 text-zinc-400 text-[10px] leading-none hover:bg-zinc-600"
+          className="absolute -top-1 -right-1 w-4 h-4 flex items-center justify-center rounded-full bg-viz-panel text-viz-ink/60 text-[10px] leading-none hover:bg-viz-line"
         >
           ×
         </button>
@@ -266,7 +266,7 @@ export function GridVisual({
       <div key={rowIdx} className="flex gap-0.5">
         {/* Row index label */}
         <div
-          className="shrink-0 text-[9px] text-zinc-600 font-mono text-right pr-1 leading-[28px]"
+          className="shrink-0 text-[9px] text-viz-ink/60 font-mono text-right pr-1 leading-[28px]"
           style={{ width: ROW_HEADER_W }}
         >
           {rowIdx}
@@ -306,8 +306,8 @@ export function GridVisual({
   if (rows === 0 || cols === 0) {
     return (
       <div className="flex flex-col gap-1">
-        <div className="text-xs text-zinc-500">{name}: grid</div>
-        <span className="text-[10px] text-zinc-600 italic">∅ empty grid</span>
+        <div className="text-xs text-viz-ink/60">{name}: grid</div>
+        <span className="text-[10px] text-viz-ink/60 italic">∅ empty grid</span>
       </div>
     );
   }
@@ -322,9 +322,9 @@ export function GridVisual({
     <div className="flex flex-col gap-1 relative">
       {/* Header */}
       <div className="flex items-center gap-2 text-xs">
-        <span className="text-zinc-400">{name}: grid</span>
-        <span className="text-zinc-600">{dimLabel}</span>
-        <span className="text-[10px] text-zinc-600 bg-zinc-800/50 px-1 rounded">
+        <span className="text-viz-ink/60">{name}: grid</span>
+        <span className="text-viz-ink/60">{dimLabel}</span>
+        <span className="text-[10px] text-viz-ink/60 bg-viz-panel/50 px-1 rounded">
           {modeLabel}
         </span>
       </div>
@@ -336,7 +336,7 @@ export function GridVisual({
           {Array.from({ length: cols }, (_, c) => (
             <div
               key={c}
-              className="text-[9px] text-zinc-600 font-mono text-center shrink-0"
+              className="text-[9px] text-viz-ink/60 font-mono text-center shrink-0"
               style={{ width: CELL_SIZE }}
             >
               {c}
@@ -402,13 +402,13 @@ export function GridVisual({
 
       {/* Footer: stats */}
       {regionMap && (
-        <div className="text-[10px] text-zinc-600">
+        <div className="text-[10px] text-viz-ink/60">
           regions:{" "}
           {new Set(regionMap.flat().filter((id) => id > 0)).size}
         </div>
       )}
       {changingCells.length > 0 && (
-        <div className="text-[10px] text-zinc-600">
+        <div className="text-[10px] text-viz-ink/60">
           changing: {changingCells.length} cells
         </div>
       )}

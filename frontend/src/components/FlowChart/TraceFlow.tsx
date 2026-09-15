@@ -179,7 +179,7 @@ export function TraceFlow() {
 
   if (cfgNodes.length === 0) {
     return (
-      <div className="flex items-center justify-center h-full text-zinc-600 text-sm">
+      <div className="flex items-center justify-center h-full text-viz-ink/60 text-sm">
         Run a program to see the control flow graph.
       </div>
     );

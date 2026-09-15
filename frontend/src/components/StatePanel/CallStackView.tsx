@@ -28,19 +28,19 @@ export function CallStackView() {
   if (frames.length === 0) return null;
 
   return (
-    <div className="border-t border-zinc-800">
+    <div className="border-t border-viz-line">
       <div className="px-3 py-1.5 flex items-center justify-between">
-        <span className="text-[10px] font-medium text-zinc-500 uppercase tracking-wide">
+        <span className="text-[10px] font-medium text-viz-ink/60 uppercase tracking-wide">
           Call Stack
         </span>
-        <span className="text-[10px] text-zinc-600">{frames.length} frame{frames.length !== 1 ? "s" : ""}</span>
+        <span className="text-[10px] text-viz-ink/60">{frames.length} frame{frames.length !== 1 ? "s" : ""}</span>
       </div>
       <div className="overflow-y-auto max-h-[120px]">
         {frames.map((frame, i) => (
           <div
             key={i}
-            className={`flex flex-col px-3 py-1 border-b border-zinc-800/50 ${
-              i === 0 ? "bg-zinc-800/40" : ""
+            className={`flex flex-col px-3 py-1 border-b border-viz-line/50 ${
+              i === 0 ? "bg-viz-panel/40" : ""
             }`}
           >
             <div className="flex items-center gap-2">
@@ -54,10 +54,10 @@ export function CallStackView() {
               >
                 {frame.depth}
               </div>
-              <span className="text-[11px] font-mono text-zinc-300 truncate">
+              <span className="text-[11px] font-mono text-viz-ink truncate">
                 {frame.func}()
               </span>
-              <span className="text-[10px] text-zinc-600 ml-auto shrink-0">
+              <span className="text-[10px] text-viz-ink/60 ml-auto shrink-0">
                 :{frame.line}
               </span>
             </div>
@@ -66,7 +66,7 @@ export function CallStackView() {
                 {Object.keys(frame.vars).map((name) => (
                   <span
                     key={name}
-                    className="text-[10px] font-mono text-zinc-500 bg-zinc-800/60 rounded px-1"
+                    className="text-[10px] font-mono text-viz-ink/60 bg-viz-panel/60 rounded px-1"
                   >
                     {name}
                   </span>

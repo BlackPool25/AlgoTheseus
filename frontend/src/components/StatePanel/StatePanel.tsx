@@ -32,7 +32,7 @@ export function StatePanel() {
 
   if (!currentEvent) {
     return (
-      <div className="p-4 text-zinc-500 text-sm">
+      <div className="p-4 text-viz-ink/60 text-sm">
         Run a program to see variable state.
       </div>
     );
@@ -95,29 +95,29 @@ export function StatePanel() {
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Header */}
-      <div className="px-3 py-2 border-b border-zinc-800 flex items-center justify-between">
-        <span className="text-xs font-medium text-zinc-400 uppercase tracking-wide">
+      <div className="px-3 py-2 border-b border-viz-line flex items-center justify-between">
+        <span className="text-xs font-medium text-viz-ink/60 uppercase tracking-wide">
           Variables
         </span>
-        <span className="text-xs text-zinc-600">
+        <span className="text-xs text-viz-ink/60">
           {currentEvent.func}() · line {currentEvent.line}
         </span>
       </div>
 
       {/* Call stack badge */}
-      <div className="px-3 py-1.5 border-b border-zinc-800">
+      <div className="px-3 py-1.5 border-b border-viz-line">
         <div className="flex items-center gap-1">
-          <span className="text-xs text-zinc-500">depth</span>
+          <span className="text-xs text-viz-ink/60">depth</span>
           <span className="text-xs font-mono text-amber-400">{currentEvent.depth}</span>
-          <span className="text-xs text-zinc-500 ml-2">in</span>
-          <span className="text-xs font-mono text-zinc-300">{currentEvent.func}()</span>
+          <span className="text-xs text-viz-ink/60 ml-2">in</span>
+          <span className="text-xs font-mono text-viz-ink">{currentEvent.func}()</span>
         </div>
       </div>
 
       {/* Step description header (v2 only — absent on v1 traces) */}
       {stepDesc != null && (
-        <div className="px-3 py-1.5 border-b border-zinc-800">
-          <span data-testid="step-desc-header" className="text-xs font-mono text-zinc-300">
+        <div className="px-3 py-1.5 border-b border-viz-line">
+          <span data-testid="step-desc-header" className="text-xs font-mono text-viz-ink">
             {stepDesc}
           </span>
         </div>
@@ -125,15 +125,15 @@ export function StatePanel() {
 
       {/* Globals section (v2 only — collapsible, above frame vars) */}
       {globalEntries.length > 0 && (
-        <div data-testid="globals-section" className="border-b border-zinc-800">
+        <div data-testid="globals-section" className="border-b border-viz-line">
           <button
             onClick={() => setGlobalsOpen((v) => !v)}
-            className="w-full flex items-center gap-1 px-3 py-1.5 text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+            className="w-full flex items-center gap-1 px-3 py-1.5 text-xs text-viz-ink/60 hover:text-viz-ink transition-colors"
             aria-expanded={globalsOpen}
           >
             <span className="font-mono">{globalsOpen ? "▾" : "▸"}</span>
             <span className="font-medium uppercase tracking-wide">Globals</span>
-            <span className="font-mono text-zinc-600">({globalEntries.length})</span>
+            <span className="font-mono text-viz-ink/60">({globalEntries.length})</span>
           </button>
           {globalsOpen && (
             <div data-testid="frame-table" data-frame="globals">
@@ -152,7 +152,7 @@ export function StatePanel() {
 
       {/* Per-frame var tables (nested stacks only; flat list below is untouched) */}
       {showFrameTables && (
-        <div className="border-b border-zinc-800">
+        <div className="border-b border-viz-line">
           {framesDisplay.map((frame) => {
             const frameEntries = Object.entries(frame.vars);
             return (
@@ -162,18 +162,18 @@ export function StatePanel() {
                 data-frame={`${frame.func}@${frame.depth}`}
               >
                 <div className="px-3 py-1 flex items-center gap-1">
-                  <span className="text-[10px] font-medium text-zinc-500 uppercase tracking-wide">
+                  <span className="text-[10px] font-medium text-viz-ink/60 uppercase tracking-wide">
                     Frame
                   </span>
                   <span className="text-[11px] font-mono text-amber-400">
                     {frame.func}()
                   </span>
-                  <span className="text-[10px] text-zinc-600 ml-auto">
+                  <span className="text-[10px] text-viz-ink/60 ml-auto">
                     depth {frame.depth}
                   </span>
                 </div>
                 {frameEntries.length === 0 ? (
-                  <div className="px-3 py-1 text-xs text-zinc-600">No vars in frame</div>
+                  <div className="px-3 py-1 text-xs text-viz-ink/60">No vars in frame</div>
                 ) : (
                   frameEntries.map(([name, value]) => (
                     <VariableRow
@@ -193,7 +193,7 @@ export function StatePanel() {
       {/* Variable list */}
       <div className="flex-1 overflow-y-auto">
         {entries.length === 0 ? (
-          <div className="px-3 py-2 text-xs text-zinc-600">No variables in scope</div>
+          <div className="px-3 py-2 text-xs text-viz-ink/60">No variables in scope</div>
         ) : (
           entries.map(([name, value]) => (
             <VariableRow
@@ -217,7 +217,7 @@ export function StatePanel() {
       <HeapPanel heap={heap} heapDiff={heapDiff} vars={vars} />
 
       {/* Event type badge */}
-      <div className="px-3 py-2 border-t border-zinc-800">
+      <div className="px-3 py-2 border-t border-viz-line">
         <EventBadge event={currentEvent} />
       </div>
 
@@ -255,7 +255,7 @@ function EventBadge({ event }: { event: NonNullable<ReturnType<typeof useTraceSt
   const colors: Record<string, string> = {
     enter:  "bg-blue-500/20 text-blue-400",
     exit:   "bg-purple-500/20 text-purple-400",
-    state:  "bg-zinc-700 text-zinc-400",
+    state:  "bg-viz-panel text-viz-ink/60",
     branch: "bg-orange-500/20 text-orange-400",
     iter:   "bg-emerald-500/20 text-emerald-400",
   };
@@ -268,7 +268,7 @@ function EventBadge({ event }: { event: NonNullable<ReturnType<typeof useTraceSt
   };
 
   return (
-    <span className={`text-xs px-2 py-0.5 rounded font-mono ${colors[event.type] ?? "bg-zinc-700 text-zinc-400"}`}>
+    <span className={`text-xs px-2 py-0.5 rounded font-mono ${colors[event.type] ?? "bg-viz-panel text-viz-ink/60"}`}>
       {labels[event.type] ?? event.type}
     </span>
   );

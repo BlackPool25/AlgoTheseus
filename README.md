@@ -1,11 +1,11 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="resources/DSA-Vis.png">
-    <img src="resources/DSA-Vis.png" alt="DSA Visualiser" width="720"/>
+    <source media="(prefers-color-scheme: dark)" srcset="resources/AlgoTheseus.png">
+    <img src="resources/AlgoTheseus.png" alt="AlgoTheseus" width="720"/>
   </picture>
 </p>
 
-<h1 align="center">DSA Visualiser</h1>
+<h1 align="center">AlgoTheseus</h1>
 
 <p align="center">
   <strong>Step-by-step C++ visualisation for interview DSA &amp; competitive programming</strong>
@@ -86,8 +86,8 @@ Paste any C++ interview problem, click **Run**, and scrub through every step of 
 > **Only Docker is required.** The sandbox image builds automatically on first run.
 
 ```bash
-git clone https://github.com/yourusername/DSA-Visualiser.git
-cd DSA-Visualiser
+git clone https://github.com/yourusername/AlgoTheseus.git
+cd AlgoTheseus
 docker compose up --build
 ```
 
@@ -341,7 +341,7 @@ npx playwright test
 
 # Build sandbox image (for backend tests)
 docker build -f backend/docker/Dockerfile.sandbox \
-  -t dsa-sandbox:latest backend/docker/
+  -t algo-theseus-sandbox:latest backend/docker/
 ```
 
 <br>
@@ -362,7 +362,7 @@ docker build -f backend/docker/Dockerfile.sandbox \
 ```bash
 cd backend
 uv sync --extra dev
-docker build -f docker/Dockerfile.sandbox -t dsa-sandbox:latest docker/
+docker build -f docker/Dockerfile.sandbox -t algo-theseus-sandbox:latest docker/
 uv run uvicorn app.main:app --reload --port 8000
 ```
 

@@ -1,5 +1,5 @@
 [project]
-name = "dsa-visualiser-backend"
+name = "algo-theseus-backend"
 version = "0.1.0"
 description = "C++ DSA trace visualiser backend — libclang instrumentation + Docker sandbox"
 requires-python = ">=3.11"

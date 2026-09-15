@@ -1,5 +1,5 @@
 /**
- * utils/api.ts — Typed API client for the DSA Visualiser backend.
+ * utils/api.ts — Typed API client for the AlgoTheseus backend.
  *
  * Endpoints:
  *   POST /execute            — trace + CFG (JSON or NDJSON streaming)

@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react'
 import path from 'path'
 
 /**
- * Vite configuration for DSA Visualizer frontend
+ * Vite configuration for AlgoTheseus frontend
  *
  * Features:
  * - React plugin for HMR and JSX transformation

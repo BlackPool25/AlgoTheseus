@@ -37,7 +37,7 @@ def anyio_backend():
 @pytest.fixture
 def isolated_cache(tmp_path, monkeypatch):
     """Point the executor cache at a fresh tmp dir (and reset the singleton)."""
-    cache_dir = tmp_path / "dsa-cache"
+    cache_dir = tmp_path / "algo-theseus-cache"
     monkeypatch.setenv("CACHE_DIR", str(cache_dir))
     monkeypatch.setenv("CACHE_TTL_SECONDS", "3600")
     monkeypatch.setenv("CACHE_MAX_BYTES", str(512 * 1024 * 1024))

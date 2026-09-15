@@ -1,7 +1,7 @@
 # T13 OPTIONAL — Expression-temp steps: SKIP decision (todo 27)
 
 **Status:** SKIPPED (deliberate, LIGHT rigor) — do not re-open without new evidence.
-**Date:** 2026-09-15 · branch `feat/dsa-visualiser-improvements` · worktree only.
+**Date:** 2026-09-15 · worktree only.
 
 ## Proposal
 Wrap simple-assignment RHS temps (`int x = a + b*c` → temp step + assign step),
@@ -32,8 +32,8 @@ reusing the `__trace_ret_N` return-expr pattern in
 ## Baseline evidence (current behavior, unchanged)
 `int x = a + b * 2;` → single statement + one post `__TRACE_STATE` showing `x`;
 `x = x + 1;` → single `__TRACE_STATE`; no `__trace_ret_*`/`__expr_tmp` emitted
-for assignments. Full output captured in
-`.omo/evidence/task-27-dsa-visualiser-improvements.log`.
+for assignments. Full output captured in the task-27 evidence log under
+`.omo/evidence/` (historic filename references the pre-rename project name).
 
 ## Re-open only if
 A concrete user-facing trace gap is filed AND a libclang-typed rewrite design

@@ -20,7 +20,7 @@ export type ThemeName = (typeof THEMES)[number];
 
 export const DEFAULT_THEME: ThemeName = "zinc-dark";
 
-const STORAGE_KEY = "dsa-viz-theme";
+const STORAGE_KEY = "algo-theseus-theme";
 
 export function isThemeName(value: string): value is ThemeName {
   return (THEMES as readonly string[]).includes(value);

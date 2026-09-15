@@ -23,7 +23,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(
-    title="DSA Visualiser API",
+    title="AlgoTheseus API",
     description="C++ DSA trace visualiser — libclang instrumentation + Docker sandbox",
     version="0.1.0",
 )

@@ -20,7 +20,7 @@
  *     the refetch instead of trusting the cache.
  */
 
-export const TOOLCHAIN_CACHE_KEY = "dsa-wasm-toolchain";
+export const TOOLCHAIN_CACHE_KEY = "algo-theseus-toolchain";
 
 /** No toolchain is shipped while browser-WASM is killed (D1). */
 export const TOOLCHAIN_VERSION = "none";

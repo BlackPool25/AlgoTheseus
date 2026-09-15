@@ -1,4 +1,4 @@
-# Docker Compose configuration for DSA Visualiser
+# Docker Compose configuration for AlgoTheseus
 version: "3.8"
 
 services:
@@ -7,7 +7,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: dsa-backend
+    container_name: algo-theseus-backend
     # ports: no host exposure — backend is reached via internal Docker DNS through nginx proxy
     environment:
       # docker = local-dev DooD path (default); subprocess = socketless
@@ -17,34 +17,34 @@ services:
       # Docker socket for spawning sandbox containers (DooD)
       - /var/run/docker.sock:/var/run/docker.sock
       # Shared temp directory for code files (same path as host for Docker bind mounts)
-      - /tmp/dsa-visualizer:/tmp/dsa-visualizer
+      - /tmp/algo-theseus:/tmp/algo-theseus
     networks:
-      - dsa-network
+      - algo-theseus-network
 
   # Nginx frontend serving built Vite output
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    container_name: dsa-frontend
+    container_name: algo-theseus-frontend
     ports:
       - "9001:80"
     depends_on:
       - backend
     networks:
-      - dsa-network
+      - algo-theseus-network
 
   # Sandboxed C++ execution environment (build-only — image is used by backend)
-  # Build: creates dsa-sandbox:latest; backend spawns containers dynamically via Docker SDK
+  # Build: creates algo-theseus-sandbox:latest; backend spawns containers dynamically via Docker SDK
   sandbox:
     build:
       context: ./backend/docker
       dockerfile: Dockerfile.sandbox
-    image: dsa-sandbox:latest
-    container_name: dsa-sandbox
+    image: algo-theseus-sandbox:latest
+    container_name: algo-theseus-sandbox
     command: ["echo", "Sandbox image built successfully"]
 
 networks:
-  dsa-network:
+  algo-theseus-network:
     driver: bridge
-    name: dsa-network
+    name: algo-theseus-network

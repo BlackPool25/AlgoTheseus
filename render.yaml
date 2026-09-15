@@ -6,7 +6,7 @@
 
 services:
   - type: web
-    name: dsa-visualiser-backend
+    name: algo-theseus-backend
     runtime: docker
     plan: free
     dockerfilePath: ./backend/Dockerfile
@@ -16,7 +16,7 @@ services:
       - key: SANDBOX_MODE
         value: subprocess
       - key: CACHE_DIR
-        value: /tmp/dsa-cache
+        value: /tmp/algo-theseus-cache
       # Free instances are small: cap batch fan-out below the local default of 4.
       - key: MAX_BATCH_SANDBOXES
         value: 2

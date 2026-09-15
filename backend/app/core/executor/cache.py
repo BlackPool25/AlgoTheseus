@@ -12,7 +12,7 @@ flags, ``compressed`` parse mode, MAX_TRACE_LINES, endpoint kind) ALWAYS hash
 to different keys — entries are NEVER shared across flag sets.
 
 Warm-instance-only SLO:
-  The cache lives under ``/tmp/dsa-cache`` (or ``$CACHE_DIR``). The compose
+  The cache lives under ``/tmp/algo-theseus-cache`` (or ``$CACHE_DIR``). The compose
   file mounts no volume there and the Dockerfile copies no volume, so a
   host sleep / container restart wipes ``/tmp``. A cold-start MISS is therefore
   EXPECTED and logged at INFO — never a failure, never retried.
@@ -39,7 +39,7 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_DIR = "/tmp/dsa-cache"
+DEFAULT_DIR = "/tmp/algo-theseus-cache"
 DEFAULT_MAX_BYTES = 512 * 1024 * 1024  # 512MB size cap
 DEFAULT_TTL_SECONDS = 3600.0  # 1h TTL eviction
 

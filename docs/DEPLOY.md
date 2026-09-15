@@ -14,7 +14,7 @@ free-forever surface with a script, not claims:
   serves the server replay either way.
 - Backend (container, todo-20 image): SnapDeploy free primary · Render
   free fallback. `SANDBOX_MODE=subprocess`, single worker, ephemeral
-  `CACHE_DIR=/tmp/dsa-cache` (no volume — sleep wipes it, cold MISS
+  `CACHE_DIR=/tmp/algo-theseus-cache` (no volume — sleep wipes it, cold MISS
   expected, never a failure).
 
 ## 1. Frontend — Cloudflare Pages (primary, free, no sleep)
@@ -55,7 +55,7 @@ nothing is lost — same server-driven replay.
 1. Settings → Pages → Source: GitHub Actions.
 2. The workflow `.github/workflows/gh-pages-mirror.yml` builds
    `frontend/` with `VITE_BASE=/<repo>/` and deploys `frontend/dist`.
-3. It runs on pushes to `feat/dsa-visualiser-improvements` touching
+3. It runs on pushes to the feature branch touching
    `frontend/**`, or manually via workflow_dispatch.
 
 ## 4. Backend — SnapDeploy free (primary)
@@ -69,7 +69,7 @@ waits for wake. Never promised otherwise.
 2. Dockerfile path `backend/Dockerfile`, context `backend/`.
 3. Port: `8000` (or leave default — the image honors `$PORT`).
 4. Env: `SANDBOX_MODE=subprocess` (image default; set explicitly to be
-   sure), `CACHE_DIR=/tmp/dsa-cache` (image default; ephemeral by design).
+   sure), `CACHE_DIR=/tmp/algo-theseus-cache` (image default; ephemeral by design).
 5. Deploy → `GET /health` returns `{"status":"ok"}`.
 6. Cold reality: first wake after idle takes ~60 s; the smoke script
    reports SLEEPING with retry guidance instead of hanging, and a
@@ -83,10 +83,10 @@ spin-up on next request takes ~1 min** (visitor sees Render's loading
 page). Never promised otherwise.
 
 1. Dash → New → Web Service → pick repo, or New → Blueprint and point at
-   `render.yaml` (service `dsa-visualiser-backend`, `plan: free`,
+   `render.yaml` (service `algo-theseus-backend`, `plan: free`,
    `healthCheckPath: /health`, env baked in).
 2. Manual path: runtime Docker, Dockerfile `backend/Dockerfile`, context
-   `backend/`, env `SANDBOX_MODE=subprocess`, `CACHE_DIR=/tmp/dsa-cache`,
+   `backend/`, env `SANDBOX_MODE=subprocess`, `CACHE_DIR=/tmp/algo-theseus-cache`,
    `MAX_BATCH_SANDBOXES=2` (small instances — below the local default 4).
 3. Create → `GET /health` returns `{"status":"ok"}`.
 4. Same wake/RETHINK honesty as §4.

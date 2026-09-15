@@ -2,7 +2,8 @@
 
 Status: decided. KILL-CRITERIA FIRED — browser-WASM killed as primary,
 server-container is primary. All four candidate diffs exit 1 (0/17 TRACE
-lines each). Evidence: `.omo/evidence/task-18-dsa-visualiser-improvements.log`;
+lines each). Evidence: the task-18 evidence log under `.omo/evidence/`
+(historic filename references the pre-rename project name);
 harnesses: `spikes/wasm-<candidate>/run.mjs`; ground truth:
 `spikes/wasm-ground-truth/TRACE.jsonl` (17 lines, local g++ 16.2.1 path,
 exit 0, stdout `3`).

@@ -1,8 +1,8 @@
 # =============================================================================
-# DSA Visualiser — Backend Dockerfile
+# AlgoTheseus — Backend Dockerfile
 # =============================================================================
-# Build:   docker build -f backend/Dockerfile -t dsa-backend ./backend
-# Run:     docker run -d -p 8000:8000 dsa-backend
+# Build:   docker build -f backend/Dockerfile -t algo-theseus-backend ./backend
+# Run:     docker run -d -p 8000:8000 algo-theseus-backend
 # Verify:  curl http://localhost:8000/health
 # =============================================================================
 
@@ -70,7 +70,7 @@ COPY app/ ./app/
 # ephemeral cache under /tmp (no volume — sleep/restart wipes it, cold MISS
 # expected). Compose overrides SANDBOX_MODE for local DooD dev.
 ENV SANDBOX_MODE=subprocess \
-    CACHE_DIR=/tmp/dsa-cache
+    CACHE_DIR=/tmp/algo-theseus-cache
 
 EXPOSE 8000
 

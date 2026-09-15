@@ -26,5 +26,5 @@ class ExecuteBatchRequest(BaseModel):
     code: str = Field(..., description="Full C++ source code")
     test_ids: list[str] = Field(
         ...,
-        description="List of test case UUIDs to run against. Each UUID must have a corresponding input.txt in /tmp/dsa-visualizer/testcases/<uuid>/",
+        description="List of test case UUIDs to run against. Each UUID must have a corresponding input.txt in /tmp/algo-theseus/testcases/<uuid>/",
     )

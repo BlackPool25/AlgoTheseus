@@ -178,7 +178,7 @@ test("stale cached toolchain is detected, version-pinned, engine stays server", 
 }) => {
   await page.addInitScript(() => {
     window.localStorage.setItem(
-      "dsa-wasm-toolchain",
+      "algo-theseus-toolchain",
       JSON.stringify({ version: "0.0.0-stale" }),
     );
   });

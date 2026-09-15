@@ -28,12 +28,12 @@ import logging
 import re
 import tempfile
 from pathlib import Path
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-from .ast_walker import InjectKind, InjectionPoint, WalkResult, walk
+from .ast_walker import InjectionPoint, InjectKind, walk
 from .scope_tracker import FunctionScope, build_scope_map
+
 
 def _make_vars_args(var_names: list[str]) -> str:
     """Build the variadic argument list for __TRACE_STATE / __TRACE_FUNC_ENTER.

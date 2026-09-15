@@ -14,7 +14,6 @@ import json
 from app.core.trace import models
 from app.core.trace.parser import parse
 
-
 # ── Old v1 fixture: no v2 fields anywhere ─────────────────────────────────────
 
 OLD_FIXTURE_LINES = [

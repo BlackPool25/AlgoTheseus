@@ -16,8 +16,6 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-import pytest
-
 from app.core.instrumenter import serializer_gen
 
 TRACER_H = Path(__file__).parent.parent / "app" / "core" / "instrumenter" / "tracer.h"

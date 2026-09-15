@@ -13,8 +13,6 @@ Tests cover:
 
 from __future__ import annotations
 
-import pytest
-
 from app.core.stdin.parser import (
     _extract_cin_summary,
     _extract_expected_tokens,
@@ -23,7 +21,6 @@ from app.core.stdin.parser import (
     _strip_prose,
     parse_stdin,
 )
-
 
 # ── _extract_cin_summary ──────────────────────────────────────────────────────
 

@@ -1,5 +1,5 @@
 /**
- * types/schema.ts — Struct rendering schema types (from LLM analysis).
+ * types/schema.ts — Struct rendering schema types (from AST-validated struct analysis).
  */
 
 export type FieldRole =

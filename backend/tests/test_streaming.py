@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
 
 import pytest
 from fastapi import FastAPI
@@ -24,15 +24,14 @@ from fastapi.responses import StreamingResponse
 from httpx import ASGITransport, AsyncClient
 
 from app.core.trace.models import (
+    BranchEvent,
     EventType,
     FuncEnterEvent,
     FuncExitEvent,
-    StateEvent,
-    BranchEvent,
     LoopIterEvent,
+    StateEvent,
 )
 from app.core.trace.parser import parse
-
 
 # ── Test streaming endpoint ───────────────────────────────────────────────────
 

@@ -4,10 +4,7 @@ test_instrumenter.py — Tests for ast_walker and scope_tracker.
 Each test has a happy path and an edge case.
 """
 
-import os
 from pathlib import Path
-
-import pytest
 
 from app.core.instrumenter.ast_walker import InjectKind, walk
 from app.core.instrumenter.injector import instrument

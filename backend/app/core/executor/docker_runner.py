@@ -26,8 +26,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from uuid import uuid4
 
-import docker
 import docker.errors
+
+import docker
 
 from .sandbox_config import (
     EXECUTION_TIMEOUT_SECONDS,

@@ -24,13 +24,8 @@ from pydantic import TypeAdapter, ValidationError
 
 from .descriptions import describe
 from .models import (
-    BranchEvent,
     EventType,
-    FuncEnterEvent,
-    FuncExitEvent,
-    LoopIterEvent,
     StackFrame,
-    StateEvent,
     TraceEvent,
 )
 
@@ -102,6 +97,14 @@ def parse(raw_lines: list[str], compressed: bool = False) -> list[Any]:
         else:
             event.depth = len(call_stack) - 1 if call_stack else 0
 
+    # F3 two-arrow gutter: the live tracer (tracer.h) never emits pl/rl,
+    # so synthesize them here — previous executed line per step, plus the
+    # call-site line on nested function exits. Tracer-provided values win
+    # (mocks/older shims may already carry them). Outermost exits keep
+    # return_line None (no caller to map to); the frontend falls back to
+    # the single highlight for those steps only.
+    _apply_gutter_lines(events)
+
     # Accumulate "o" transport deltas into cumulative per-STATE stdout
     # (adaptive granularity + 64KB cap per docs/trace-schema-v2.md).
     _apply_incremental_stdout(events, deltas)
@@ -120,6 +123,32 @@ def parse(raw_lines: list[str], compressed: bool = False) -> list[Any]:
         events = _compress_state_events(events)
 
     return events
+
+
+def _apply_gutter_lines(events: list[Any]) -> None:
+    enter_stack: list[tuple[str, int]] = []  # (func, enter line) per live frame
+    prev: int | None = None  # previous executed line
+    for event in events:
+        if event.type == EventType.FUNC_ENTER:
+            enter_stack.append((event.func, event.line))
+        elif event.type == EventType.FUNC_EXIT:
+            if event.return_line is None:
+                idx = next(
+                    (i for i in range(len(enter_stack) - 1, -1, -1)
+                     if enter_stack[i][0] == event.func),
+                    None,
+                )
+                if idx is not None and idx > 0:
+                    event.return_line = enter_stack[idx][1]
+            if enter_stack and enter_stack[-1][0] == event.func:
+                enter_stack.pop()
+            elif any(f == event.func for f, _ in enter_stack):
+                cut = max(i for i, (f, _) in enumerate(enter_stack) if f == event.func)
+                del enter_stack[cut:]
+        elif event.type == EventType.STATE:
+            if event.prev_line is None:
+                event.prev_line = prev
+        prev = event.line
 
 
 def frames_at_step(events: list[Any]) -> list[list[StackFrame]]:

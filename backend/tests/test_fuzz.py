@@ -157,7 +157,7 @@ def build_cases(seed: int = SEED) -> list[tuple[str, list[str]]]:
     mb_anchor = full.encode("utf-8").find("hÃ".encode("latin1", errors="ignore")[:0])  # noop guard
     del mb_anchor
     # Mid-UTF8: cut inside the multibyte "héllo wörld" bytes explicitly.
-    mb_seg = "héllo wörld".encode("utf-8")
+    mb_seg = "héllo wörld".encode()
     prefix = "\n".join(json.dumps(e) for e in ALIAS_EVENTS[:4]) + "\n"
     base = len(prefix.encode("utf-8"))
     for off in range(0, len(mb_seg) + 2):

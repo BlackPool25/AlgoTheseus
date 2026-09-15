@@ -387,6 +387,33 @@ std::string __vars_build(const char* name, const V& val, Rest&&... rest) {
         }                                                                        \
     } while(0)
 
+// ── Globals snapshot with change-dedup ───────────────────────────────────────
+// __TRACE_STATE_G emits "g" only when the globals JSON differs from the
+// previous STATE; otherwise the key is omitted (bound trace size).
+// Zero-globals programs keep using __TRACE_STATE, so no "g" key appears.
+static std::string __trace_prev_g;
+static bool __trace_g_first = true;
+
+#define __TRACE_STATE_G(line, func, depth, VJSON, GJSON)                        \
+    do {                                                                         \
+        if (!__trace_active) {                                                   \
+            __TraceGuard __tg;                                                   \
+            std::string __v = (VJSON);                                            \
+            std::string __g = (GJSON);                                            \
+            if (__trace_g_first || __g != __trace_prev_g) {                       \
+                __trace_g_first = false;                                         \
+                __trace_prev_g = __g;                                             \
+                fprintf(stderr,                                                  \
+                    "TRACE:{\"t\":\"state\",\"l\":%d,\"f\":\"%s\",\"d\":%d,\"v\":{%s},\"g\":{%s}}\n", \
+                    line, func, depth, __v.c_str(), __g.c_str());                 \
+            } else {                                                             \
+                fprintf(stderr,                                                  \
+                    "TRACE:{\"t\":\"state\",\"l\":%d,\"f\":\"%s\",\"d\":%d,\"v\":{%s}}\n", \
+                    line, func, depth, __v.c_str());                              \
+            }                                                                    \
+        }                                                                        \
+    } while(0)
+
 #define __TRACE_BRANCH(line, func, depth, cond_str, cond_val)                  \
     do {                                                                         \
         if (!__trace_active) {                                                   \

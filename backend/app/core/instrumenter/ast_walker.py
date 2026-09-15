@@ -73,6 +73,9 @@ class WalkResult:
     injection_points: list[InjectionPoint]
     # Maps function name → list of loop counter variable names needed
     loop_counters: dict[str, list[str]]
+    # Top-level TU variable names (user globals, decl order); injector feeds
+    # these to every STATE for the v2 `g` snapshot with change-dedup.
+    global_vars: list[str] = field(default_factory=list)
 
 
 # ── Walker ────────────────────────────────────────────────────────────────────
@@ -114,6 +117,14 @@ class ASTWalker:
         points: list[InjectionPoint] = []
         loop_counters: dict[str, list[str]] = {}
 
+        # Top-level TU declarations: user globals for the v2 STATE snapshot.
+        global_vars: list[str] = []
+        for child in tu.cursor.get_children():
+            if child.kind == clang.CursorKind.VAR_DECL and child.spelling:
+                if self._is_user_code(child) and not child.spelling.startswith("__"):
+                    if child.spelling not in global_vars:
+                        global_vars.append(child.spelling)
+
         # First pass: collect all user-defined function names for depth tracking
         user_functions: set[str] = set()
         self._collect_user_functions(tu.cursor, user_functions)
@@ -125,7 +136,11 @@ class ASTWalker:
 
         self._walk_cursor(tu.cursor, points, loop_counters, depth=0, func_name="", func_depth=0, depth_map=depth_map)
 
-        return WalkResult(injection_points=points, loop_counters=loop_counters)
+        return WalkResult(
+            injection_points=points,
+            loop_counters=loop_counters,
+            global_vars=global_vars,
+        )
 
     def _collect_user_functions(self, cursor: clang.Cursor, result: set[str]) -> None:
         """Collect names of all user-defined functions."""

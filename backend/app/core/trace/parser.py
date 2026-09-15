@@ -22,6 +22,7 @@ from typing import Any
 
 from pydantic import TypeAdapter, ValidationError
 
+from .descriptions import describe
 from .models import (
     BranchEvent,
     EventType,
@@ -88,6 +89,11 @@ def parse(raw_lines: list[str], compressed: bool = False) -> list[Any]:
                 call_stack.pop(idx)
         else:
             event.depth = len(call_stack) - 1 if call_stack else 0
+
+    # Synthesize per-step explanations (pure, never raises). Iter events carry
+    # theirs via __pydantic_extra__ (no declared field) into model_dump().
+    for event in events:
+        event.step_desc = describe(event)
 
     if compressed:
         events = _compress_state_events(events)

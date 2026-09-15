@@ -11,6 +11,8 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { renderCellValue } from "../../utils/format";
+import { flashStyle } from "./flash";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -49,13 +51,30 @@ type AnimPhase =
   | "pop-mark"    // top marked for removal
   | "pop-sink";   // bubble-down swaps in progress
 
+/** Timeout choreography derived during render; the effect only schedules it. */
+type AnimPlan =
+  | { kind: "none" }
+  | { kind: "push"; prev: unknown[]; curr: unknown[] }
+  | { kind: "pop"; prev: unknown[]; curr: unknown[] }
+  | { kind: "reorder"; curr: unknown[]; swaps: [number, number][] };
+
 interface HeapData {
   top: unknown;
   items: unknown[];
 }
 
 interface Props {
-  value: HeapData;
+  value: unknown;
+  /** Indices that mutated this step (sift-swap pair) — flash both together. */
+  changedIndices?: number[];
+}
+
+/** Parse the heap envelope at the boundary; non-heap values render fallback. */
+function asHeapData(value: unknown): HeapData | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  if (!Array.isArray(record.items)) return null;
+  return { top: record.top, items: record.items };
 }
 
 interface NodePos {
@@ -79,7 +98,7 @@ function getLeftChild(i: number): number {
 }
 
 function getRightChild(i: number): number {
-  return (i << 1) | 2;
+  return (i << 1) + 2;
 }
 
 function getLevel(i: number): number {
@@ -248,38 +267,35 @@ function HeapNodeSVG({
   violation,
   appearing,
   disappearing,
+  flashed,
 }: {
   node: NodePos;
   isTop: boolean;
-  highlight: "none" | "pink" | "green";
+  highlight: "none" | "swap";
   violation: boolean;
   appearing: boolean;
   disappearing: boolean;
+  flashed: boolean;
 }) {
-  let fill = "#27272a";
-  let stroke = "#52525b";
+  let fill = "var(--viz-panel-bg)";
+  let stroke = "var(--viz-panel-border)";
   let strokeW = 1.5;
-  let textFill = "#e4e4e7";
+  let textFill = "var(--viz-body-text)";
 
   if (violation) {
-    fill = "rgba(239,68,68,0.12)";
-    stroke = "#ef4444";
+    fill = "rgba(245, 158, 11, 0.06)";
+    stroke = "var(--viz-exception)";
     strokeW = 2;
-    textFill = "#fca5a5";
-  } else if (highlight === "pink") {
-    fill = "rgba(236,72,153,0.12)";
-    stroke = "#ec4899";
+    textFill = "var(--viz-exception)";
+  } else if (highlight === "swap" || flashed) {
+    fill = "rgba(245, 158, 11, 0.12)";
+    stroke = "var(--viz-flash)";
     strokeW = 2;
-    textFill = "#f472b6";
-  } else if (highlight === "green") {
-    fill = "rgba(16,185,129,0.12)";
-    stroke = "#10b981";
-    strokeW = 2;
-    textFill = "#6ee7b7";
+    textFill = "var(--viz-flash)";
   } else if (isTop) {
-    stroke = "#f59e0b";
+    stroke = "var(--viz-flash)";
     strokeW = 1.5;
-    textFill = "#f59e0b";
+    textFill = "var(--viz-flash)";
   }
 
   const animStyle: React.CSSProperties = {};
@@ -291,19 +307,24 @@ function HeapNodeSVG({
   }
 
   return (
-    <g transform={`translate(${node.x},${node.y})`} style={animStyle}>
+    <g
+      transform={`translate(${node.x},${node.y})`}
+      style={animStyle}
+      data-testid="heap-tree-node"
+      data-index={node.index}
+      data-flash={flashed || highlight !== "none" ? "true" : "false"}
+    >
       <rect
         width={NODE_W}
         height={NODE_H}
         rx={4}
-        fill={fill}
-        stroke={stroke}
-        strokeWidth={strokeW}
+        style={{ fill, stroke, strokeWidth: strokeW }}
       />
       {disappearing && (
         <line
           x1={4} y1={4} x2={NODE_W - 4} y2={NODE_H - 4}
-          stroke="#ef4444" strokeWidth={2}
+          style={{ stroke: "var(--viz-exception)" }}
+          strokeWidth={2}
         />
       )}
       <text
@@ -311,10 +332,9 @@ function HeapNodeSVG({
         y={NODE_H / 2 + 1}
         textAnchor="middle"
         dominantBaseline="middle"
-        fill={textFill}
         fontSize={11}
         fontFamily="monospace"
-        style={{ pointerEvents: "none" }}
+        style={{ pointerEvents: "none", fill: textFill }}
       >
         {node.label.length > 4 ? node.label.slice(0, 4) : node.label}
       </text>
@@ -324,12 +344,15 @@ function HeapNodeSVG({
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export function HeapVisual({ value }: Props) {
-  const items = value.items ?? [];
+export function HeapVisual({ value, changedIndices = [] }: Props) {
+  // Stable identity per value: the render-phase adjustment below keys off it.
+  const items = useMemo(() => asHeapData(value)?.items ?? [], [value]);
+  const propFlash = new Set(changedIndices);
 
   // ── Animation state ──
-  const prevItemsRef = useRef<unknown[]>([]);
+  const [prevItems, setPrevItems] = useState<unknown[]>(items);
   const [animPhase, setAnimPhase] = useState<AnimPhase>("idle");
+  const [animPlan, setAnimPlan] = useState<AnimPlan>({ kind: "none" });
   const [swapHighlight, setSwapHighlight] = useState<Set<number>>(new Set());
   const [violations, setViolations] = useState<Set<number>>(new Set());
   const [appearingIndex, setAppearingIndex] = useState<number | null>(null);
@@ -338,133 +361,96 @@ export function HeapVisual({ value }: Props) {
 
   const heapType = useMemo(() => detectHeapType(items), [items]);
 
-  // Detect operation and animate
-  useEffect(() => {
-    const prev = prevItemsRef.current;
-    prevItemsRef.current = items;
-
-    // Clear any pending timeouts from previous animation
-    timeoutsRef.current.forEach(clearTimeout);
-    timeoutsRef.current = [];
-
-    setAppearingIndex(null);
-    setDisappearingIndex(null);
+  // Derive the animation reset during render (previous-items adjustment):
+  // pure and batched, never a cascading effect. Timeout choreography for the
+  // resulting plan lives in the effect below, which sets state only inside
+  // timeout callbacks (async subscriptions).
+  if (prevItems !== items) {
+    const prev = prevItems;
+    setPrevItems(items);
     setSwapHighlight(new Set());
-
-    if (prev.length === 0 || items.length === 0) {
-      setAnimPhase("idle");
-      setViolations(new Set());
-      return;
-    }
-
-    // Compute violations for current state
-    const currViolations = findViolations(items, heapType);
-    setViolations(currViolations);
-
-    // --- Detect operation ---
+    setViolations(
+      prev.length === 0 || items.length === 0
+        ? new Set<number>()
+        : findViolations(items, heapType),
+    );
     if (items.length === prev.length + 1) {
       // PUSH
       setAnimPhase("push-appear");
-      const newIdx = items.length - 1;
-      setAppearingIndex(newIdx);
-
-      // Phase 1: new node appears (PHASE_MS)
-      const t1 = setTimeout(() => {
-        setAppearingIndex(null);
-
-        // Phase 2: bubble-up swaps
-        setAnimPhase("push-bubble");
-        animateBubbleUp(prev, items);
-
-        // After bubble-up, check remaining violations
-        const t3 = setTimeout(() => {
-          setAnimPhase("idle");
-          setSwapHighlight(new Set());
-          setViolations(findViolations(items, heapType));
-        }, SWAP_MS * 3);
-
-        timeoutsRef.current.push(t3);
-      }, PHASE_MS);
-      timeoutsRef.current.push(t1);
+      setAppearingIndex(items.length - 1);
+      setDisappearingIndex(null);
+      setAnimPlan({ kind: "push", prev, curr: items });
     } else if (items.length === prev.length - 1) {
       // POP
       setAnimPhase("pop-mark");
       setDisappearingIndex(-1); // special: top element removed
-
-      const t1 = setTimeout(() => {
-        setDisappearingIndex(null);
-        setAnimPhase("pop-sink");
-        animateBubbleDown(prev, items);
-
-        const t3 = setTimeout(() => {
-          setAnimPhase("idle");
-          setSwapHighlight(new Set());
-          setViolations(findViolations(items, heapType));
-        }, SWAP_MS * 3);
-        timeoutsRef.current.push(t3);
-      }, PHASE_MS);
-      timeoutsRef.current.push(t1);
-    } else if (items.length === prev.length) {
-      // REORDER (intermediate bubble-up/down step)
-      const swaps = detectSwapPairs(prev, items);
+      setAppearingIndex(null);
+      setAnimPlan({ kind: "pop", prev, curr: items });
+    } else {
+      // REORDER (intermediate bubble step) or unrelated shape change
+      const swaps =
+        items.length === prev.length ? detectSwapPairs(prev, items) : [];
+      setAppearingIndex(null);
+      setDisappearingIndex(null);
       if (swaps.length > 0) {
         setAnimPhase("push-bubble"); // reuse bubble phase for any swap
-        animateSwaps(swaps);
-
-        const t = setTimeout(() => {
-          setAnimPhase("idle");
-          setSwapHighlight(new Set());
-          setViolations(findViolations(items, heapType));
-        }, SWAP_MS * swaps.length + 100);
-        timeoutsRef.current.push(t);
+        setAnimPlan({ kind: "reorder", curr: items, swaps });
       } else {
         setAnimPhase("idle");
+        setAnimPlan({ kind: "none" });
       }
     }
+  }
 
-    // ── helpers ──
+  // Timeout choreography for the plan derived above: the effect body only
+  // clears pending timers and schedules new ones.
+  useEffect(() => {
+    timeoutsRef.current.forEach(clearTimeout);
+    timeoutsRef.current = [];
 
-    function animateSwaps(swaps: [number, number][]) {
+    const later = (ms: number, fn: () => void): void => {
+      timeoutsRef.current.push(setTimeout(fn, ms));
+    };
+    const settle = (curr: unknown[]): void => {
+      setAnimPhase("idle");
+      setSwapHighlight(new Set());
+      setViolations(findViolations(curr, heapType));
+    };
+    const playSwaps = (swaps: [number, number][]): void => {
       swaps.forEach(([i, j], idx) => {
-        const t = setTimeout(() => {
-          setSwapHighlight(new Set([i, j]));
-        }, idx * SWAP_MS);
-        timeoutsRef.current.push(t);
+        later(idx * SWAP_MS, () => setSwapHighlight(new Set([i, j])));
       });
+    };
 
-      const t = setTimeout(() => {
-        setSwapHighlight(new Set());
-      }, swaps.length * SWAP_MS + 50);
-      timeoutsRef.current.push(t);
+    if (animPlan.kind === "push") {
+      const { prev, curr } = animPlan;
+      later(PHASE_MS, () => {
+        setAppearingIndex(null);
+        // Phase 2: bubble-up swaps
+        setAnimPhase("push-bubble");
+        playSwaps(detectSwapPairs(prev, curr));
+        later(SWAP_MS * 3, () => settle(curr));
+      });
+    } else if (animPlan.kind === "pop") {
+      const { prev, curr } = animPlan;
+      later(PHASE_MS, () => {
+        setDisappearingIndex(null);
+        setAnimPhase("pop-sink");
+        // After pop, the last element was moved to root and sinks down
+        playSwaps(detectSwapPairs(prev, curr));
+        later(SWAP_MS * 3, () => settle(curr));
+      });
+    } else if (animPlan.kind === "reorder") {
+      const { curr, swaps } = animPlan;
+      playSwaps(swaps);
+      later(SWAP_MS * swaps.length + 100, () => settle(curr));
     }
 
-    function animateBubbleUp(prev: unknown[], curr: unknown[]) {
-      const swaps = detectSwapPairs(prev, curr);
-      swaps.forEach(([i, j], idx) => {
-        const t = setTimeout(() => {
-          setSwapHighlight(new Set([i, j]));
-        }, idx * SWAP_MS);
-        timeoutsRef.current.push(t);
-      });
-    }
-
-    function animateBubbleDown(prev: unknown[], curr: unknown[]) {
-      // After pop, the last element was moved to root and sinks down
-      const swaps = detectSwapPairs(prev, curr);
-      swaps.forEach(([i, j], idx) => {
-        const t = setTimeout(() => {
-          setSwapHighlight(new Set([i, j]));
-        }, idx * SWAP_MS);
-        timeoutsRef.current.push(t);
-      });
-    }
-
-    // Cleanup timeouts on unmount
+    // Cleanup timeouts on unmount or before the next plan schedules.
     return () => {
       timeoutsRef.current.forEach(clearTimeout);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items, heapType]);
+  }, [animPlan, heapType]);
 
   // ── Layout ──
   const { nodes, edges, width, height } = useMemo(() => computeLayout(items), [items]);
@@ -477,17 +463,41 @@ export function HeapVisual({ value }: Props) {
     <div className="flex flex-col gap-1">
       {/* Heap type badge */}
       <div className="flex items-center gap-2">
-        <span className="text-[10px] font-mono text-zinc-500">
+        <span className="text-[10px] font-mono text-viz-ink/60">
           {heapType === "min" ? "min‑heap" : "max‑heap"}
         </span>
-        <span className="text-[9px] text-zinc-600">
+        <span className="text-[9px] text-viz-ink/60">
           · {items.length} item{items.length !== 1 ? "s" : ""}
         </span>
       </div>
 
+      {/* Array strip dual (render-spec §2: triangle array-tree dual view) */}
+      {items.length > 0 && (
+        <div data-testid="heap-array-strip" className="flex gap-0.5 overflow-x-auto pb-1">
+          {items.slice(0, MAX_NODES).map((item, i) => {
+            const flashed = swapHighlight.has(i) || propFlash.has(i);
+            return (
+              <div key={i} className="flex flex-col items-center shrink-0">
+                <div
+                  data-testid="heap-strip-cell"
+                  data-index={i}
+                  data-flash={flashed ? "true" : "false"}
+                  className={`w-8 h-7 flex items-center justify-center text-xs font-mono truncate overflow-hidden border ${flashed ? "border-viz-flash bg-viz-flash/15 text-viz-flash" : "border-viz-line bg-viz-panel text-viz-ink"}`}
+                  style={flashStyle(flashed)}
+                  title={renderCellValue(item)}
+                >
+                  {renderCellValue(item)}
+                </div>
+                <div className="text-[10px] font-mono text-viz-ink/60">{i}</div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       {/* SVG tree */}
       {items.length === 0 ? (
-        <span className="text-[10px] text-zinc-600 italic">empty</span>
+        <span className="text-[10px] text-viz-ink/60 italic">empty</span>
       ) : (
         <div className="overflow-auto max-w-full">
           <style>{KEYFRAMES}</style>
@@ -505,8 +515,8 @@ export function HeapVisual({ value }: Props) {
                 y1={e.y1}
                 x2={e.x2}
                 y2={e.y2}
-                stroke="#3f3f46"
                 strokeWidth={1.5}
+                style={{ stroke: "var(--viz-panel-border)" }}
               />
             ))}
 
@@ -516,12 +526,11 @@ export function HeapVisual({ value }: Props) {
               const isAppearing = animPhase === "push-appear" && node.index === appearingIndex;
               const isDisappearing = animPhase === "pop-mark" && node.index === 0 && disappearingIndex === -1;
               const isHighlighted = swapHighlight.has(node.index);
-              const isViolation = violations.has(node.index) && !isHighlighted;
+              const isViolation = violations.has(node.index) && !isHighlighted && !propFlash.has(node.index);
+              const flashed = isHighlighted || propFlash.has(node.index);
 
-              // If pop animation: the last element (which became root) highlights differently
-              let highlight: "none" | "pink" | "green" = "none";
-              if (isHighlighted) highlight = "pink";
-              if (animPhase === "push-bubble" && isHighlighted) highlight = "pink";
+              let highlight: "none" | "swap" = "none";
+              if (flashed) highlight = "swap";
 
               return (
                 <HeapNodeSVG
@@ -532,6 +541,7 @@ export function HeapVisual({ value }: Props) {
                   violation={isViolation}
                   appearing={isAppearing}
                   disappearing={isDisappearing}
+                  flashed={propFlash.has(node.index)}
                 />
               );
             })}
@@ -540,9 +550,9 @@ export function HeapVisual({ value }: Props) {
             {overflow > 0 && (
               <g transform={`translate(${PAD}, ${PAD + (getLevel(MAX_NODES - 1) + 1) * V_GAP + NODE_H + 8})`}>
                 <text
-                  fill="#a1a1aa"
                   fontSize={10}
                   fontFamily="monospace"
+                  style={{ fill: "var(--viz-alias-edge)" }}
                 >
                   +{overflow} more
                 </text>

@@ -7,7 +7,7 @@ Thanks for your interest! Here's how to get started.
 ```bash
 # Fork & clone
 git clone <your-fork>
-cd DSA-Visualiser
+cd AlgoTheseus
 
 # Backend
 cd backend
@@ -18,7 +18,7 @@ cd ../frontend
 bun install
 
 # Sandbox image
-docker build -f backend/docker/Dockerfile.sandbox -t dsa-sandbox:latest backend/docker/
+docker build -f backend/docker/Dockerfile.sandbox -t algo-theseus-sandbox:latest backend/docker/
 ```
 
 ## Code Style

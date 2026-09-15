@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "@dsa-visualizer/frontend",
+      "name": "@algo-theseus/frontend",
       "dependencies": {
         "@dagrejs/dagre": "^3.0.0",
         "@monaco-editor/react": "^4.7.0",

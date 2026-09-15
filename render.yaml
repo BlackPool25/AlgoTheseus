@@ -1,0 +1,22 @@
+# Render Blueprint — free-tier fallback for the backend (todo 21, D4).
+# Primary is SnapDeploy free; this file is the Render equivalent.
+# Verified against current Render blueprint spec: services/-/type/web,
+# runtime/docker, plan/free, healthCheckPath, dockerfilePath/dockerContext,
+# envVars key/value. `sync: false` prompts for the value in the dashboard.
+
+services:
+  - type: web
+    name: algo-theseus-backend
+    runtime: docker
+    plan: free
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    healthCheckPath: /health
+    envVars:
+      - key: SANDBOX_MODE
+        value: subprocess
+      - key: CACHE_DIR
+        value: /tmp/algo-theseus-cache
+      # Free instances are small: cap batch fan-out below the local default of 4.
+      - key: MAX_BATCH_SANDBOXES
+        value: 2

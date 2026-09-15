@@ -49,10 +49,10 @@ export function PriorityQueueVisual({ value }: Props) {
       )}
 
       {items.length === 0 && (
-        <span className="text-[10px] text-zinc-600 italic">empty</span>
+        <span className="text-[10px] text-viz-ink/60 italic">empty</span>
       )}
 
-      <span className="text-[9px] text-zinc-600">priority_queue · {items.length} items</span>
+      <span className="text-[9px] text-viz-ink/60">priority_queue · {items.length} items</span>
     </div>
   );
 }

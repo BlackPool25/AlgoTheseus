@@ -13,6 +13,7 @@ export interface MockFuncEnterEvent {
   func: string;
   depth: number;
   params: Record<string, unknown>;
+  step_desc?: string | null;
 }
 
 export interface MockFuncExitEvent {
@@ -21,6 +22,8 @@ export interface MockFuncExitEvent {
   func: string;
   depth: number;
   return_val: unknown;
+  step_desc?: string | null;
+  return_line?: number | null;
 }
 
 export interface MockStateEvent {
@@ -29,6 +32,18 @@ export interface MockStateEvent {
   func: string;
   depth: number;
   vars: Record<string, unknown>;
+  step_desc?: string | null;
+  globals?: Record<string, unknown> | null;
+  stdout?: string | null;
+  stdout_truncated?: boolean;
+  prev_line?: number | null;
+  heap?: Record<string, unknown> | null;
+  heap_diff?: {
+    added: string[];
+    removed: string[];
+    mutated: string[];
+    changed_fields: Record<string, string[]>;
+  } | null;
 }
 
 export interface MockBranchEvent {
@@ -38,6 +53,7 @@ export interface MockBranchEvent {
   depth: number;
   condition: string;
   taken: boolean;
+  step_desc?: string | null;
 }
 
 export interface MockLoopIterEvent {
@@ -110,23 +126,26 @@ function buildNDJSON(
     cfg_nodes?: unknown[];
     cfg_edges?: unknown[];
   },
+  omitCfg = false,
 ): string {
   const lines: string[] = [];
   for (const ev of events) {
     lines.push(JSON.stringify({ type: "event", data: ev }));
   }
-  lines.push(
-    JSON.stringify({
-      type: "cfg" as const,
-      stdout: meta.stdout ?? "",
-      runtime_error: meta.runtime_error ?? null,
-      timed_out: meta.timed_out ?? false,
-      truncated: meta.truncated ?? false,
-      cfg_nodes: meta.cfg_nodes ?? BASE_CFG.cfg_nodes,
-      cfg_edges: meta.cfg_edges ?? BASE_CFG.cfg_edges,
-      total_steps: meta.total_steps ?? events.length,
-    }),
-  );
+  if (!omitCfg) {
+    lines.push(
+      JSON.stringify({
+        type: "cfg" as const,
+        stdout: meta.stdout ?? "",
+        runtime_error: meta.runtime_error ?? null,
+        timed_out: meta.timed_out ?? false,
+        truncated: meta.truncated ?? false,
+        cfg_nodes: meta.cfg_nodes ?? BASE_CFG.cfg_nodes,
+        cfg_edges: meta.cfg_edges ?? BASE_CFG.cfg_edges,
+        total_steps: meta.total_steps ?? events.length,
+      }),
+    );
+  }
   // Trailing newline is critical — the stream reader's split() + pop()
   // discards the last line otherwise, losing the cfg chunk.
   return lines.join("\n") + "\n";
@@ -223,4 +242,203 @@ export function createCompileErrorNDJSON(): string {
     type: "error",
     compile_error: "test.cpp:12: error: expected ';'",
   }) + "\n";
+}
+
+/**
+ * NDJSON with v2 `step_desc` on every event + `globals` on state events.
+ * Step-0 description is "call main()" for the header assertion.
+ */
+export function createStepDescNDJSON(): string {
+  const events: MockTraceEvent[] = [
+    { type: "enter", line: 1, func: "main", depth: 1, params: {}, step_desc: "call main()" },
+    {
+      type: "state", line: 2, func: "main", depth: 1,
+      vars: { x: 2 }, globals: { g: 1 }, step_desc: "assign x = 2",
+    },
+    {
+      type: "branch", line: 3, func: "main", depth: 1,
+      condition: "x > 0", taken: true, step_desc: "branch taken: x > 0",
+    },
+    { type: "exit", line: 4, func: "main", depth: 1, return_val: 15, step_desc: "return 15" },
+  ];
+  return buildNDJSON(events, { stdout: "", total_steps: events.length });
+}
+
+/**
+ * NDJSON for T9 phase-2: nested call (main → helper) with per-step
+ * cumulative `stdout` + `prev_line` on states + `return_line` on exit.
+ * At steps 3-4 the call stack holds 2 frames; stdout grows "a" → "a b" → "a b c".
+ */
+export function createFrameStdoutNDJSON(): string {
+  const events: MockTraceEvent[] = [
+    { type: "enter", line: 1, func: "main", depth: 1, params: {}, step_desc: "call main()" },
+    {
+      type: "state", line: 2, func: "main", depth: 1,
+      vars: { x: 1 }, stdout: "a\n", prev_line: 1, step_desc: "assign x = 1",
+    },
+    { type: "enter", line: 3, func: "helper", depth: 2, params: { n: 5 }, step_desc: "call helper(n=5)" },
+    {
+      type: "state", line: 4, func: "helper", depth: 2,
+      vars: { y: 10 }, stdout: "a\nb\n", prev_line: 3, step_desc: "assign y = 10",
+    },
+    {
+      type: "state", line: 5, func: "helper", depth: 2,
+      vars: { y: 11 }, stdout: "a\nb\nc\n", prev_line: 4, step_desc: "assign y = 11",
+    },
+    { type: "exit", line: 5, func: "helper", depth: 2, return_val: 11, return_line: 3, step_desc: "return 11" },
+    { type: "exit", line: 6, func: "main", depth: 1, return_val: 0, step_desc: "return 0" },
+  ];
+  return buildNDJSON(events, { stdout: "a\nb\nc\n", total_steps: events.length });
+}
+
+/**
+ * NDJSON for T10 end-to-end wiring: a print-loop whose STATE events carry
+ * IDENTICAL vars but GROWING cumulative stdout (plus step_desc/globals on
+ * some steps to prove field passthrough). Compression must NOT merge these.
+ */
+export function createPrintLoopNDJSON(): string {
+  const events: MockTraceEvent[] = [
+    { type: "enter", line: 1, func: "main", depth: 1, params: {}, step_desc: "call main()" },
+    {
+      type: "state", line: 2, func: "main", depth: 1,
+      vars: { limit: 3 }, stdout: "1\n", prev_line: 1,
+      step_desc: "assign limit = 3", globals: { g: 0 },
+    },
+    {
+      type: "state", line: 3, func: "main", depth: 1,
+      vars: { limit: 3 }, stdout: "1\n2\n", prev_line: 2,
+      step_desc: "state at line 3",
+    },
+    {
+      type: "state", line: 3, func: "main", depth: 1,
+      vars: { limit: 3 }, stdout: "1\n2\n3\n", prev_line: 3,
+      step_desc: "state at line 3",
+    },
+    { type: "exit", line: 4, func: "main", depth: 1, return_val: 0, step_desc: "return 0" },
+  ];
+  return buildNDJSON(events, { stdout: "1\n2\n3\n", total_steps: events.length });
+}
+
+/**
+ * NDJSON for T10: IDENTICAL vars AND identical stdout, but DIFFERING heap
+ * snapshots across steps. Compression must NOT merge these either.
+ */
+export function createHeapDriftNDJSON(): string {
+  const events: MockTraceEvent[] = [
+    { type: "enter", line: 1, func: "main", depth: 1, params: {}, step_desc: "call main()" },
+    {
+      type: "state", line: 2, func: "main", depth: 1,
+      vars: { head: { $id: 1 } }, stdout: "",
+      heap: { "1": { type: "Node", val: 1 } },
+      step_desc: "assign head",
+    },
+    {
+      type: "state", line: 2, func: "main", depth: 1,
+      vars: { head: { $id: 1 } }, stdout: "",
+      heap: { "1": { type: "Node", val: 2 } },
+      step_desc: "assign head",
+    },
+    { type: "exit", line: 3, func: "main", depth: 1, return_val: 0, step_desc: "return 0" },
+  ];
+  return buildNDJSON(events, { stdout: "", total_steps: events.length });
+}
+
+/**
+ * NDJSON for T12 HeapPanel: linked list 1→2→3 across three STATE steps.
+ * Heap tables mirror live backend output byte-for-byte (verified via
+ * parse() probe: refs are STRINGS matching table keys, scalar `next: null`
+ * lands in fields, changed_fields names real fields like ["val"]).
+ *
+ * Step 1: creation — all three ids added.
+ * Step 2: single-field mutation (id "2" val 2→20) — ONLY "2" flashes.
+ * Step 3: alias var `alias: {$ref: 2}` (N-inbound on "2" → alias connector)
+ *   + self-cycle on "3" (`refs.next === "3"` → $cycle badge).
+ */
+export function createHeapPanelNDJSON(): string {
+  const n = (id: number, addr: string, val: number, next: unknown) => ({
+    $id: id,
+    $addr: addr,
+    val,
+    next,
+  });
+  const e = (
+    type: string,
+    fields: Record<string, unknown>,
+    refs: Record<string, unknown>,
+    addr: string,
+  ) => ({ type, fields, refs, addr });
+
+  const head1 = n(1, "0x100", 1, n(2, "0x200", 2, n(3, "0x300", 3, null)));
+  const head2 = n(1, "0x100", 1, n(2, "0x200", 20, n(3, "0x300", 3, null)));
+  // Step 3 head is value-identical to step 2 (cycle/alias live in heap only,
+  // exactly like the backend where the table is the source of truth).
+  const head3 = n(1, "0x100", 1, n(2, "0x200", 20, n(3, "0x300", 3, null)));
+
+  const heap1 = {
+    "1": e("struct", { val: 1 }, { next: "2" }, "0x100"),
+    "2": e("struct", { val: 2 }, { next: "3" }, "0x200"),
+    "3": e("struct", { val: 3, next: null }, {}, "0x300"),
+  };
+  const heap2 = {
+    "1": e("struct", { val: 1 }, { next: "2" }, "0x100"),
+    "2": e("struct", { val: 20 }, { next: "3" }, "0x200"),
+    "3": e("struct", { val: 3, next: null }, {}, "0x300"),
+  };
+  const heap3 = {
+    "1": e("struct", { val: 1 }, { next: "2" }, "0x100"),
+    "2": e("struct", { val: 20 }, { next: "3" }, "0x200"),
+    "3": e("struct", { val: 3 }, { next: "3" }, "0x300"),
+  };
+
+  const events: MockTraceEvent[] = [
+    { type: "enter", line: 1, func: "main", depth: 1, params: {} },
+    {
+      type: "state", line: 2, func: "main", depth: 1,
+      vars: { head: head1 }, heap: heap1,
+      heap_diff: { added: ["1", "2", "3"], removed: [], mutated: [], changed_fields: {} },
+    },
+    {
+      type: "state", line: 3, func: "main", depth: 1,
+      vars: { head: head2 }, heap: heap2,
+      heap_diff: { added: [], removed: [], mutated: ["2"], changed_fields: { "2": ["val"] } },
+    },
+    {
+      type: "state", line: 4, func: "main", depth: 1,
+      vars: { head: head3, alias: { $ref: 2 } }, heap: heap3,
+      heap_diff: { added: [], removed: [], mutated: ["3"], changed_fields: { "3": ["next"] } },
+    },
+    { type: "exit", line: 5, func: "main", depth: 1, return_val: 0 },
+  ];
+  return buildNDJSON(events, { stdout: "", total_steps: events.length });
+}
+export function createDroppedStreamNDJSON(): string {
+  const events: MockTraceEvent[] = [
+    { type: "enter", line: 1, func: "main", depth: 1, params: {}, step_desc: "call main()" },
+    {
+      type: "state", line: 2, func: "main", depth: 1,
+      vars: { x: 1 }, stdout: "partial\n", prev_line: 1,
+      step_desc: "assign x = 1",
+    },
+  ];
+  return buildNDJSON(events, { stdout: "partial\n" }, true);
+}
+
+/**
+ * NDJSON for T12 GridVisual wiring: one cell mutates between steps, proving
+ * the previously-dead changingCells/highlightedCells props take effect.
+ */
+export function createGridMutationNDJSON(): string {
+  const events: MockTraceEvent[] = [
+    { type: "enter", line: 1, func: "main", depth: 1, params: {} },
+    {
+      type: "state", line: 2, func: "main", depth: 1,
+      vars: { board: [[1, 2], [3, 4]] },
+    },
+    {
+      type: "state", line: 3, func: "main", depth: 1,
+      vars: { board: [[1, 9], [3, 4]] },
+    },
+    { type: "exit", line: 4, func: "main", depth: 1, return_val: 0 },
+  ];
+  return buildNDJSON(events, { stdout: "", total_steps: events.length });
 }

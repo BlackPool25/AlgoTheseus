@@ -144,7 +144,7 @@ export function TestCaseManager() {
 
   return (
     <div className="flex flex-col gap-3">
-      <h2 className="text-sm font-semibold text-zinc-100">Test Cases</h2>
+      <h2 className="text-sm font-semibold text-viz-ink">Test Cases</h2>
 
       {/* Drop zone */}
       <div
@@ -157,7 +157,7 @@ export function TestCaseManager() {
           transition-colors text-center
           ${isDragOver
             ? "border-blue-500 bg-blue-950/30"
-            : "border-zinc-700 bg-zinc-900/50 hover:border-zinc-500"
+            : "border-viz-line bg-viz-body/50 hover:border-viz-line"
           }
         `}
       >
@@ -169,22 +169,22 @@ export function TestCaseManager() {
           onChange={handleInputChange}
           className="hidden"
         />
-        <p className="text-xs text-zinc-400">
-          Drop <span className="font-mono text-zinc-300">.txt .in .out .ans</span> files here
+        <p className="text-xs text-viz-ink/60">
+          Drop <span className="font-mono text-viz-ink">.txt .in .out .ans</span> files here
         </p>
-        <p className="text-xs text-zinc-600 mt-1">or click to browse</p>
+        <p className="text-xs text-viz-ink/60 mt-1">or click to browse</p>
       </div>
 
       {/* Selected files list */}
       {files.length > 0 && (
         <div className="space-y-1">
-          <p className="text-xs text-zinc-500">{files.length} file(s) selected</p>
+          <p className="text-xs text-viz-ink/60">{files.length} file(s) selected</p>
           <div className="max-h-32 overflow-y-auto space-y-1">
             {files.map((f, i) => (
-              <div key={`${f.name}-${i}`} className="flex items-center justify-between bg-zinc-800 rounded px-2 py-1">
-                <span className="text-xs text-zinc-300 truncate mr-2">{f.name}</span>
+              <div key={`${f.name}-${i}`} className="flex items-center justify-between bg-viz-panel rounded px-2 py-1">
+                <span className="text-xs text-viz-ink truncate mr-2">{f.name}</span>
                 <div className="flex items-center gap-2 shrink-0">
-                  <span className="text-xs text-zinc-500">{formatSize(f.size)}</span>
+                  <span className="text-xs text-viz-ink/60">{formatSize(f.size)}</span>
                   <button
                     onClick={(e) => { e.stopPropagation(); handleRemove(i); }}
                     className="text-xs text-red-400 hover:text-red-300 transition-colors"
@@ -214,27 +214,27 @@ export function TestCaseManager() {
 
       {/* Upload result */}
       {result && (
-        <div className="bg-zinc-900 border border-zinc-700 rounded-lg p-3 space-y-2">
+        <div className="bg-viz-body border border-viz-line rounded-lg p-3 space-y-2">
           <div className="flex items-center justify-between">
-            <span className="text-xs text-zinc-400">
-              Test ID: <span className="font-mono text-zinc-200">{result.testId}</span>
+            <span className="text-xs text-viz-ink/60">
+              Test ID: <span className="font-mono text-viz-ink">{result.testId}</span>
             </span>
             <button
               onClick={handleReset}
-              className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+              className="text-xs text-viz-ink/60 hover:text-viz-ink transition-colors"
             >
               Clear
             </button>
           </div>
           <div className="max-h-48 overflow-y-auto space-y-1">
             {result.files.map((f, i) => (
-              <div key={i} className="bg-zinc-800 rounded px-2 py-1.5">
+              <div key={i} className="bg-viz-panel rounded px-2 py-1.5">
                 <div className="flex items-center justify-between mb-1">
-                  <span className="text-xs font-mono text-zinc-200 truncate">{f.name}</span>
-                  <span className="text-xs text-zinc-500 shrink-0 ml-2">{formatSize(f.size)}</span>
+                  <span className="text-xs font-mono text-viz-ink truncate">{f.name}</span>
+                  <span className="text-xs text-viz-ink/60 shrink-0 ml-2">{formatSize(f.size)}</span>
                 </div>
                 {f.preview && (
-                  <pre className="text-[10px] text-zinc-400 leading-relaxed whitespace-pre-wrap font-mono bg-zinc-950 rounded p-1.5 max-h-16 overflow-y-auto">
+                  <pre className="text-[10px] text-viz-ink/60 leading-relaxed whitespace-pre-wrap font-mono bg-viz-body rounded p-1.5 max-h-16 overflow-y-auto">
                     {f.preview}
                   </pre>
                 )}

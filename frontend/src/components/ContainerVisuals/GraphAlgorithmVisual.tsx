@@ -38,17 +38,17 @@ const NODE_D = NODE_R * 2;
 type NodeState = 0 | 1 | 2 | 3;
 
 const STATE_BORDER: Record<NodeState, string> = {
-  0: "#71717a", // unvisited – zinc-500
-  1: "#3b82f6", // queued    – blue-500
-  2: "#f59e0b", // processing – amber-500
-  3: "#22c55e", // processed  – green-500
+  0: "var(--viz-panel-border)",
+  1: "var(--viz-alias-edge)",
+  2: "var(--viz-flash)",
+  3: "var(--viz-gutter-prev)",
 };
 
 const STATE_FILL: Record<NodeState, string> = {
-  0: "#3f3f46", // zinc-700
-  1: "#1e3a5f", // blue-900
-  2: "#451a03", // amber-900
-  3: "#052e16", // green-900
+  0: "var(--viz-panel-border)",
+  1: "var(--viz-panel-bg)",
+  2: "var(--viz-panel-bg)",
+  3: "var(--viz-panel-bg)",
 };
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -217,27 +217,34 @@ function classifyEdge(
 function edgeStyle(kind: EdgeKind): React.CSSProperties {
   switch (kind) {
     case "back":
-      return { stroke: "#ef4444", strokeWidth: 2, strokeDasharray: "6,4" };
+      return { stroke: "var(--viz-exception)", strokeWidth: 2, strokeDasharray: "6,4" };
     case "cross":
-      return { stroke: "#71717a", strokeWidth: 1.5, strokeDasharray: "3,3" };
+      return { stroke: "var(--viz-panel-border)", strokeWidth: 1.5, strokeDasharray: "3,3" };
     case "forward":
-      return { stroke: "#a1a1aa", strokeWidth: 1.5, strokeDasharray: "4,2" };
+      return { stroke: "var(--viz-alias-edge)", strokeWidth: 1.5, strokeDasharray: "4,2" };
     default:
-      return { stroke: "#a1a1aa", strokeWidth: 2 };
+      return { stroke: "var(--viz-alias-edge)", strokeWidth: 2 };
   }
 }
 
 // ── Custom node component ────────────────────────────────────────────────────
 
 function GraphNode({ data }: NodeProps) {
+  const d = data as Record<string, unknown>;
+  const nodeState = typeof d.state === "number" ? d.state : 0;
+  const flashed = nodeState === 1 || nodeState === 2;
   return (
     <div
+      data-node-index={String(d.index ?? "")}
+      data-state={String(nodeState)}
+      data-flash={flashed ? "true" : "false"}
       className="flex flex-col items-center justify-center rounded-full border-2 leading-none"
       style={{
         width: NODE_D,
         height: NODE_D,
-        background: (data as Record<string, unknown>).fill as string,
-        borderColor: (data as Record<string, unknown>).color as string,
+        background: d.fill as string,
+        borderColor: flashed ? "var(--viz-flash)" : (d.color as string),
+        boxShadow: flashed ? "0 0 6px rgba(245, 158, 11, 0.4)" : undefined,
       }}
     >
       {/* Single hidden handle — exists only so React Flow can compute
@@ -314,6 +321,8 @@ export function GraphAlgorithmVisual({ value, name }: Props) {
           annotation,
           color,
           fill,
+          index: i,
+          state: s,
         },
         style: { width: NODE_D, height: NODE_D },
       };
@@ -338,10 +347,10 @@ export function GraphAlgorithmVisual({ value, name }: Props) {
           target: `v${v}`,
           type: "graphEdge",
           style: edgeStyle(kind),
-          markerEnd: { type: MarkerType.ArrowClosed as const, color: edgeStyle(kind).stroke ?? "#a1a1aa", width: 14, height: 14 },
+          markerEnd: { type: MarkerType.ArrowClosed as const, color: edgeStyle(kind).stroke ?? "var(--viz-alias-edge)", width: 14, height: 14 },
           label: kind !== "tree" ? kind : undefined,
-          labelStyle: { fontSize: 9, fill: "#a1a1aa" },
-          labelBgStyle: { fill: "#18181b", fontSize: 9 },
+          labelStyle: { fontSize: 9, fill: "var(--viz-alias-edge)" },
+          labelBgStyle: { fill: "var(--viz-body-bg)", fontSize: 9 },
           animated: false,
         });
       }
@@ -350,14 +359,23 @@ export function GraphAlgorithmVisual({ value, name }: Props) {
     return { nodes: flowNodes, edges: flowEdges };
   }, [graphData, effectiveUseForce]);
 
-  if (!graphData) return null;
+  if (!graphData) {
+    return (
+      <div className="flex flex-col gap-1">
+        {name && <div className="text-xs text-viz-ink/60">{name}: graph</div>}
+        <span data-testid="primitive-fallback" className="text-[10px] text-viz-ink/60 italic">
+          {String(value ?? "null")}
+        </span>
+      </div>
+    );
+  }
 
   const n = graphData.adj.length;
   if (n === 0) {
     return (
       <div className="flex flex-col gap-1">
-        {name && <div className="text-xs text-zinc-500">{name}: graph</div>}
-        <span className="text-[10px] text-zinc-600 italic">empty graph</span>
+        {name && <div className="text-xs text-viz-ink/60">{name}: graph</div>}
+        <span className="text-[10px] text-viz-ink/60 italic">empty graph</span>
       </div>
     );
   }
@@ -365,17 +383,17 @@ export function GraphAlgorithmVisual({ value, name }: Props) {
   return (
     <div className="flex flex-col gap-1">
       {name && (
-        <div className="text-xs text-zinc-500 flex items-center gap-2">
+        <div className="text-xs text-viz-ink/60 flex items-center gap-2">
           <span>{name}: graph · {n} nodes · {edges.length} edges</span>
           <button
             onClick={() => setUseForce(!useForce)}
-            className="underline decoration-dotted underline-offset-2 hover:text-zinc-300"
+            className="underline decoration-dotted underline-offset-2 hover:text-viz-ink"
           >
             {effectiveUseForce ? "circular" : "force-directed"}
           </button>
         </div>
       )}
-      <div className="border border-zinc-800 rounded-md overflow-hidden bg-zinc-900/50">
+      <div className="border border-viz-line rounded-md overflow-hidden bg-viz-body/50">
         <div style={{ height: 280, width: "100%" }}>
           <ReactFlow
             nodes={nodes}
@@ -391,7 +409,7 @@ export function GraphAlgorithmVisual({ value, name }: Props) {
             nodesConnectable={false}
             elementsSelectable={false}
           >
-            <Background color="#27272a" gap={16} />
+            <Background color="var(--viz-panel-bg)" gap={16} />
           </ReactFlow>
         </div>
       </div>

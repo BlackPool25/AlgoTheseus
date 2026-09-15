@@ -11,7 +11,7 @@
  *   - 500-node soft limit with truncation warning
  */
 
-import { useMemo, useRef, useEffect, useState } from "react";
+import { useMemo, useEffect, useState } from "react";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -50,16 +50,16 @@ function ArrowDefs() {
   return (
     <defs>
       <marker id="ll-forward" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
-        <path d="M0,0 L0,6 L8,3 Z" fill="#52525b" />
+        <path d="M0,0 L0,6 L8,3 Z" fill="var(--viz-panel-border)" />
       </marker>
       <marker id="ll-backward" markerWidth="6" markerHeight="5" refX="5" refY="2.5" orient="auto">
-        <path d="M6,0 L6,5 L0,2.5 Z" fill="#52525b" />
+        <path d="M6,0 L6,5 L0,2.5 Z" fill="var(--viz-panel-border)" />
       </marker>
       <marker id="ll-cycle-arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
-        <path d="M0,0 L0,6 L8,3 Z" fill="#ef4444" />
+        <path d="M0,0 L0,6 L8,3 Z" style={{ fill: "var(--viz-exception)" }} />
       </marker>
       <marker id="ll-highlight-arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
-        <path d="M0,0 L0,6 L8,3 Z" fill="#f59e0b" />
+        <path d="M0,0 L0,6 L8,3 Z" style={{ fill: "var(--viz-flash)" }} />
       </marker>
     </defs>
   );
@@ -182,22 +182,22 @@ export function LinkedListVisual({ value, name, currentAddr }: Props) {
   const isDoubly = useMemo(() => hasPrevField(value), [value]);
 
   // ── Animation state ──────────────────────────────────────────────────────
+  /** Serialised ids of the last-diffed list (previous-value adjustment). */
+  const currSerialised = flat.map((n) => n.id).join(",");
+  const [prevSerialised, setPrevSerialised] = useState(currSerialised);
   /** Nodes currently in the render list (keeps exiting nodes alive). */
-  const [renderList, setRenderList] = useState<FlatNode[]>([]);
+  const [renderList, setRenderList] = useState<FlatNode[]>(flat);
   /** IDs of nodes currently playing the exit animation. */
   const [exitingIds, setExitingIds] = useState<Set<string>>(new Set());
   /** IDs of nodes that should render with opacity:0 on the next frame. */
   const [enteringIds, setEnteringIds] = useState<Set<string>>(new Set());
 
-  const prevSerialised = useRef("");
-
-  // Diff incoming flat list vs current render list
-  useEffect(() => {
-    injectAnimStyle();
-
-    const currSerialised = flat.map((n) => n.id).join(",");
-    if (currSerialised === prevSerialised.current) return; // no structural change
-    prevSerialised.current = currSerialised;
+  // Diff the incoming list against the render list during render (previous
+  // serialised adjustment): pure derivation, never a cascading effect.
+  // Delayed commits (exit-animation settle, enter-flag clear) live in the
+  // effects below, which set state only inside async callbacks.
+  if (prevSerialised !== currSerialised) {
+    setPrevSerialised(currSerialised);
 
     const currMap = new Map(flat.map((n) => [n.id, n]));
     const prevMap = new Map(renderList.map((n) => [n.id, n]));
@@ -209,40 +209,41 @@ export function LinkedListVisual({ value, name, currentAddr }: Props) {
     for (const id of currMap.keys()) if (!prevMap.has(id)) entering.add(id);
 
     if (exiting.size > 0) {
-      // Keep exiting nodes temporarily
+      // Keep exiting nodes temporarily; the settle effect below commits flat.
       setExitingIds(exiting);
       setRenderList(
         renderList
           .filter((n) => !exiting.has(n.id))
           .concat(flat.filter((n) => !prevMap.has(n.id))),
       );
-
-      const timer = setTimeout(() => {
-        setRenderList(flat);
-        setExitingIds(new Set());
-      }, 300);
-      return () => clearTimeout(timer);
-    }
-
-    // No exiting nodes — just update
-    setRenderList(flat);
-
-    if (entering.size > 0) {
-      setEnteringIds(entering);
-      const raf = requestAnimationFrame(() => setEnteringIds(new Set()));
-      return () => cancelAnimationFrame(raf);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [flat]);
-
-  // Initial render
-  useEffect(() => {
-    if (renderList.length === 0 && flat.length > 0) {
+    } else {
       setRenderList(flat);
-      prevSerialised.current = flat.map((n) => n.id).join(",");
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [flat]);
+    setEnteringIds(entering);
+  }
+
+  // One-time keyframe injection (DOM setup only, never sets state).
+  useEffect(() => {
+    injectAnimStyle();
+  }, []);
+
+  // Settle an in-flight exit animation: hold exiting nodes 300ms, then
+  // commit the new list. State changes run inside the timeout (async).
+  useEffect(() => {
+    if (exitingIds.size === 0) return;
+    const timer = setTimeout(() => {
+      setRenderList(flat);
+      setExitingIds(new Set());
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [exitingIds, flat]);
+
+  // Clear the enter flag on the next frame so the slide-in plays once.
+  useEffect(() => {
+    if (enteringIds.size === 0) return;
+    const raf = requestAnimationFrame(() => setEnteringIds(new Set()));
+    return () => cancelAnimationFrame(raf);
+  }, [enteringIds]);
 
   const svgW = Math.max(
     60,
@@ -253,7 +254,7 @@ export function LinkedListVisual({ value, name, currentAddr }: Props) {
   return (
     <div className="flex flex-col gap-1">
       {/* Header */}
-      <div className="flex items-center gap-2 text-[10px] text-zinc-500">
+      <div className="flex items-center gap-2 text-[10px] text-viz-ink/60">
         <span>
           {name}: {isDoubly ? "doubly" : "singly"}-linked list
           {hasCycle && <span className="text-red-400 ml-1">(cycle)</span>}
@@ -291,7 +292,7 @@ export function LinkedListVisual({ value, name, currentAddr }: Props) {
                   y1={y + NODE_H + 4}
                   x2={x - 16}
                   y2={y + NODE_H + 4}
-                  stroke="#52525b"
+                  stroke="var(--viz-panel-border)"
                   strokeWidth={1}
                   markerEnd="url(#ll-backward)"
                 />
@@ -307,14 +308,17 @@ export function LinkedListVisual({ value, name, currentAddr }: Props) {
                 y1={y + NODE_H / 2}
                 x2={x + NODE_W + ARROW_LEN}
                 y2={y + NODE_H / 2}
-                stroke={
-                  node.cycleTargetId
-                    ? "#ef4444"
-                    : isHighlighted
-                      ? "#f59e0b"
-                      : "#52525b"
-                }
                 strokeWidth={isHighlighted || node.cycleTargetId ? 2 : 1.5}
+                data-ll-highlight={
+                  !node.cycleTargetId && isHighlighted ? "true" : undefined
+                }
+                style={{
+                  stroke: node.cycleTargetId
+                    ? "var(--viz-exception)"
+                    : isHighlighted
+                      ? "var(--viz-flash)"
+                      : "var(--viz-panel-border)",
+                }}
                 markerEnd={
                   node.cycleTargetId
                     ? "url(#ll-cycle-arrow)"
@@ -341,9 +345,9 @@ export function LinkedListVisual({ value, name, currentAddr }: Props) {
                     key={`cr-${node.id}`}
                     d={`M ${tx} ${ty} Q ${cx} ${qy} ${x + NODE_W / 2} ${y + NODE_H + 8}`}
                     fill="none"
-                    stroke="#ef4444"
                     strokeWidth={1.5}
                     strokeDasharray="4 3"
+                    style={{ stroke: "var(--viz-exception)" }}
                     markerEnd="url(#ll-cycle-arrow)"
                   />
                 );
@@ -401,8 +405,8 @@ export function LinkedListVisual({ value, name, currentAddr }: Props) {
                       cx={x + NODE_W - 10}
                       cy={y - 6}
                       r={10}
-                      fill="#ef4444"
                       className="drop-shadow-sm"
+                      style={{ fill: "var(--viz-exception)" }}
                     />
                     <text
                       x={x + NODE_W - 10}

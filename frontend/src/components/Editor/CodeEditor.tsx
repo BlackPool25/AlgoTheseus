@@ -8,9 +8,35 @@
 
 import Editor, { type Monaco } from "@monaco-editor/react";
 import type { editor } from "monaco-editor";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTraceStore } from "../../store/traceStore";
 import { useUIStore } from "../../store/uiStore";
+import { currentTheme, monacoThemeFor } from "../../theme";
+import type { TraceEvent } from "../../types/trace";
+
+interface GutterLines {
+  prev: number | null;
+  next: number;
+}
+
+function resolveGutterLines(
+  trace: TraceEvent[],
+  currentStep: number,
+  currentEvent: TraceEvent | null,
+): GutterLines | null {
+  if (!currentEvent) return null;
+  let next = currentEvent.line;
+  if (currentEvent.type === "exit" && currentEvent.return_line != null) {
+    next = currentEvent.return_line;
+  }
+  let prev: number | null = null;
+  if (currentEvent.type === "state" && currentEvent.prev_line != null) {
+    prev = currentEvent.prev_line;
+  } else if (currentStep > 0 && currentStep <= trace.length) {
+    prev = trace[currentStep - 1]?.line ?? null;
+  }
+  return { prev, next };
+}
 
 /** Parse g++ error output into Monaco markers.
  *
@@ -57,13 +83,43 @@ export function CodeEditor() {
   const code = useUIStore((s) => s.code);
   const setCode = useUIStore((s) => s.setCode);
   const compileError = useUIStore((s) => s.compileError);
+  const runtimeError = useUIStore((s) => s.runtimeError);
   const currentEvent = useTraceStore((s) => s.currentEvent);
+  const trace = useTraceStore((s) => s.trace);
+  const currentStep = useTraceStore((s) => s.currentStep);
 
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
   const monacoRef = useRef<Monaco | null>(null);
   const decorationsRef = useRef<editor.IEditorDecorationsCollection | null>(null);
 
-  // Highlight the current trace line
+  const [monacoTheme, setMonacoTheme] = useState(() =>
+    monacoThemeFor(currentTheme()),
+  );
+  useEffect(() => {
+    const observer = new MutationObserver(() =>
+      setMonacoTheme(monacoThemeFor(currentTheme())),
+    );
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["data-theme"],
+    });
+    return () => observer.disconnect();
+  }, []);
+
+  // Two-arrow gutter: executed line (prev) vs next-to-execute line (current).
+  // prev_line wins; else the previous step's line. Exit events map to their
+  // return_line (call site); otherwise the current event's line is next.
+  const gutter = resolveGutterLines(trace, currentStep, currentEvent);
+  // v1 traces carry no prev_line/return_line: keep the legacy single highlight.
+  const twoArrow =
+    gutter != null &&
+    trace.some(
+      (e) =>
+        (e.type === "state" && e.prev_line != null) ||
+        (e.type === "exit" && e.return_line != null),
+    );
+
+  // Highlight the current + previous trace lines
   useEffect(() => {
     const ed = editorRef.current;
     if (!ed) return;
@@ -72,25 +128,61 @@ export function CodeEditor() {
       decorationsRef.current.clear();
     }
 
-    if (currentEvent) {
-      decorationsRef.current = ed.createDecorationsCollection([
-        {
+    if (currentEvent && gutter) {
+      if (!twoArrow) {
+        decorationsRef.current = ed.createDecorationsCollection([
+          {
+            range: {
+              startLineNumber: gutter.next,
+              startColumn: 1,
+              endLineNumber: gutter.next,
+              endColumn: 1,
+            },
+            options: {
+              isWholeLine: true,
+              className: "current-line-highlight",
+              glyphMarginClassName: "current-line-glyph",
+            },
+          },
+        ]);
+        ed.revealLineInCenterIfOutsideViewport(gutter.next);
+        return;
+      }
+      const decorations: editor.IModelDeltaDecoration[] = [];
+      if (gutter.prev != null && gutter.prev !== gutter.next) {
+        decorations.push({
           range: {
-            startLineNumber: currentEvent.line,
+            startLineNumber: gutter.prev,
             startColumn: 1,
-            endLineNumber: currentEvent.line,
+            endLineNumber: gutter.prev,
             endColumn: 1,
           },
           options: {
             isWholeLine: true,
-            className: "current-line-highlight",
-            glyphMarginClassName: "current-line-glyph",
+            className: "gutter-prev-line",
+            glyphMarginClassName: "gutter-prev-glyph",
           },
+        });
+      }
+      decorations.push({
+        range: {
+          startLineNumber: gutter.next,
+          startColumn: 1,
+          endLineNumber: gutter.next,
+          endColumn: 1,
         },
-      ]);
-      ed.revealLineInCenterIfOutsideViewport(currentEvent.line);
+        options: {
+          isWholeLine: true,
+          className: runtimeError
+            ? "gutter-next-line gutter-exception-line"
+            : "gutter-next-line",
+          glyphMarginClassName: "gutter-next-glyph",
+        },
+      });
+      decorationsRef.current = ed.createDecorationsCollection(decorations);
+      ed.revealLineInCenterIfOutsideViewport(gutter.next);
     }
-  }, [currentEvent]);
+  }, [currentEvent, gutter, twoArrow, runtimeError]);
 
   // Show compile error markers
   useEffect(() => {
@@ -121,21 +213,35 @@ export function CodeEditor() {
   }
 
   return (
-    <Editor
-      height="100%"
-      language="cpp"
-      theme="vs-dark"
-      value={code}
-      onChange={(v) => setCode(v ?? "")}
-      onMount={handleMount}
-      options={{
-        fontSize: 13,
-        minimap: { enabled: false },
-        scrollBeyondLastLine: false,
-        glyphMargin: true,
-        lineNumbers: "on",
-        wordWrap: "on",
-      }}
-    />
+    <div className="relative h-full">
+      <Editor
+        height="100%"
+        language="cpp"
+        theme={monacoTheme}
+        value={code}
+        onChange={(v) => setCode(v ?? "")}
+        onMount={handleMount}
+        options={{
+          fontSize: 13,
+          minimap: { enabled: false },
+          scrollBeyondLastLine: false,
+          glyphMargin: true,
+          lineNumbers: "on",
+          wordWrap: "on",
+        }}
+      />
+      {gutter && twoArrow && (
+        <div className="absolute bottom-2 right-2 flex items-center gap-1 z-10">
+          {gutter.prev != null && gutter.prev !== gutter.next && (
+            <span data-testid="gutter-prev" className="gutter-prev-chip">
+              ◀ line {gutter.prev}
+            </span>
+          )}
+          <span data-testid="gutter-next" className="gutter-next-chip">
+            ▶ line {gutter.next}
+          </span>
+        </div>
+      )}
+    </div>
   );
 }

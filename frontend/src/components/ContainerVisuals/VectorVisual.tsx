@@ -1,6 +1,7 @@
 /**
  * components/ContainerVisuals/VectorVisual.tsx — Horizontal array of index-labelled boxes.
  *
+ * Changed-cell flash comes from the shared flash.ts primitive (todo 25).
  * Virtualizes the list when item count exceeds the threshold.
  */
 
@@ -9,45 +10,72 @@ import {
   VIRTUALIZE_THRESHOLD,
 } from "../../hooks/useVirtualizedList";
 import { renderCellValue } from "../../utils/format";
+import { flashStyle } from "./flash";
 
 interface Props {
-  value: unknown[];
+  value: unknown;
   name: string;
   /** Zero-based index to highlight (e.g. mid in binary search). */
   highlightIndex?: number;
+  /** Indices that mutated this step — flash via the shared primitive. */
+  changedIndices?: number[];
 }
 
 /** Box width (w-8 = 32px) + gap-0.5 (2px) */
 const ITEM_SIZE = 34;
 
-export function VectorVisual({ value, name, highlightIndex }: Props) {
+export function VectorVisual({ value, name, highlightIndex, changedIndices = [] }: Props) {
+  const items = Array.isArray(value) ? (value as unknown[]) : null;
+  // Unconditional: hooks must run in the same order every render, even for
+  // the primitive-fallback path below (count 0 renders nothing virtualised).
   const { parentRef, virtualizer } = useVirtualizedList({
-    count: value.length,
+    count: items?.length ?? 0,
     itemSize: ITEM_SIZE,
     horizontal: true,
   });
-
+  if (!items) {
+    return (
+      <div className="flex flex-col gap-1">
+        <div className="text-xs text-viz-ink/60">{name}: vector</div>
+        <span data-testid="primitive-fallback" className="text-[10px] text-viz-ink/60 italic">
+          {renderCellValue(value)}
+        </span>
+      </div>
+    );
+  }
+  const changed = new Set(changedIndices);
   /** Returns border/fill classes for an index that may be highlighted. */
   function boxClass(i: number): string {
-    const base = "w-8 h-7 flex items-center justify-center text-xs font-mono truncate overflow-hidden";
-    if (i === highlightIndex) {
-      return `${base} border-amber-500 bg-amber-500/15 text-amber-300 shadow-[0_0_6px_rgba(245,158,11,0.4)]`;
+    const base = "w-8 h-7 flex items-center justify-center text-xs font-mono truncate overflow-hidden border";
+    if (changed.has(i)) {
+      return `${base} border-viz-flash bg-viz-flash/15 text-viz-flash`;
     }
-    return `${base} border border-zinc-600 bg-zinc-800 text-zinc-200`;
+    if (i === highlightIndex) {
+      return `${base} border-viz-flash bg-viz-flash/15 text-viz-flash`;
+    }
+    return `${base} border-viz-line bg-viz-panel text-viz-ink`;
+  }
+
+  function cellAttrs(i: number) {
+    return {
+      "data-testid": "changed-cell",
+      "data-index": String(i),
+      "data-flash": changed.has(i) ? "true" : "false",
+    };
   }
 
   /* ── Non-virtualised path (≤ threshold) ── */
-  if (value.length <= VIRTUALIZE_THRESHOLD) {
+  if (items.length <= VIRTUALIZE_THRESHOLD) {
     return (
       <div className="flex flex-col gap-1">
-        <div className="text-xs text-zinc-500">{name}: vector</div>
+        <div className="text-xs text-viz-ink/60">{name}: vector</div>
         <div className="flex gap-0.5 overflow-x-auto pb-1">
-          {value.map((item, i) => (
+          {items.map((item, i) => (
             <div key={i} className="flex flex-col items-center shrink-0">
-              <div className={boxClass(i)} title={renderCellValue(item)}>
+              <div className={boxClass(i)} style={flashStyle(changed.has(i))} title={renderCellValue(item)} {...cellAttrs(i)}>
                 {renderCellValue(item)}
               </div>
-              <div className={`text-[10px] font-mono ${i === highlightIndex ? "text-amber-600" : "text-zinc-600"}`}>
+              <div className={`text-[10px] font-mono ${i === highlightIndex || changed.has(i) ? "text-viz-flash" : "text-viz-ink/60"}`}>
                 {i}
               </div>
             </div>
@@ -60,8 +88,8 @@ export function VectorVisual({ value, name, highlightIndex }: Props) {
   /* ── Virtualised path (> threshold) ── */
   return (
     <div className="flex flex-col gap-1">
-      <div className="text-xs text-zinc-500">
-        {name}: vector ({value.length})
+      <div className="text-xs text-viz-ink/60">
+        {name}: vector ({items.length})
       </div>
       <div
         ref={parentRef}
@@ -75,7 +103,7 @@ export function VectorVisual({ value, name, highlightIndex }: Props) {
           }}
         >
           {virtualizer.getVirtualItems().map((virtualItem) => {
-            const item = value[virtualItem.index];
+            const item = items[virtualItem.index];
             return (
               <div
                 key={virtualItem.key}
@@ -88,10 +116,10 @@ export function VectorVisual({ value, name, highlightIndex }: Props) {
                   transform: `translateX(${virtualItem.start}px)`,
                 }}
               >
-                <div className={boxClass(virtualItem.index)} title={renderCellValue(item)}>
+                <div className={boxClass(virtualItem.index)} style={flashStyle(changed.has(virtualItem.index))} title={renderCellValue(item)} {...cellAttrs(virtualItem.index)}>
                   {renderCellValue(item)}
                 </div>
-                <div className={`text-[10px] font-mono ${virtualItem.index === highlightIndex ? "text-amber-600" : "text-zinc-600"}`}>
+                <div className={`text-[10px] font-mono ${virtualItem.index === highlightIndex || changed.has(virtualItem.index) ? "text-viz-flash" : "text-viz-ink/60"}`}>
                   {virtualItem.index}
                 </div>
               </div>

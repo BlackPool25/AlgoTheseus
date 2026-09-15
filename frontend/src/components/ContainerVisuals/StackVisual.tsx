@@ -1,6 +1,7 @@
 /**
  * components/ContainerVisuals/StackVisual.tsx — Vertical stack, top clearly marked.
  *
+ * Push/pop flash comes from the shared flash.ts primitive (todo 25).
  * Virtualises items when the count exceeds the threshold.
  */
 
@@ -9,6 +10,7 @@ import {
   VIRTUALIZE_THRESHOLD,
 } from "../../hooks/useVirtualizedList";
 import { renderCellValue } from "../../utils/format";
+import { flashStyle } from "./flash";
 
 interface StackValue {
   top: unknown;
@@ -16,8 +18,10 @@ interface StackValue {
 }
 
 interface Props {
-  value: StackValue;
+  value: unknown;
   name: string;
+  /** Indices that mutated this step — flash via the shared primitive. */
+  changedIndices?: number[];
 }
 
 /** Height of one stack item in px. */
@@ -25,29 +29,56 @@ const ITEM_SIZE = 28;
 /** Max height of the scrollable container in virtualised mode. */
 const MAX_LIST_HEIGHT = 400;
 
-export function StackVisual({ value, name }: Props) {
+function asItems(value: unknown): unknown[] | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const items = (value as StackValue).items;
+  return Array.isArray(items) ? items : null;
+}
+
+export function StackVisual({ value, name, changedIndices = [] }: Props) {
+  const items = asItems(value);
+  // Unconditional: hooks must run in the same order every render, even for
+  // the primitive-fallback path below (count 0 renders nothing virtualised).
   const { parentRef, virtualizer } = useVirtualizedList({
-    count: value.items.length,
+    count: items?.length ?? 0,
     itemSize: ITEM_SIZE,
     horizontal: false,
   });
-
-  /* ── Non-virtualised path (≤ threshold) ── */
-  if (value.items.length <= VIRTUALIZE_THRESHOLD) {
+  if (!items) {
     return (
       <div className="flex flex-col gap-1">
-        <div className="text-xs text-zinc-500">{name}: stack</div>
+        <div className="text-xs text-viz-ink/60">{name}: stack</div>
+        <span data-testid="primitive-fallback" className="text-[10px] text-viz-ink/60 italic">
+          {renderCellValue(value)}
+        </span>
+      </div>
+    );
+  }
+  const changed = new Set(changedIndices);
+  function itemClass(i: number): string {
+    const base = "px-2 py-1 border text-xs font-mono";
+    if (changed.has(i)) return `${base} border-viz-flash bg-viz-flash/10 text-viz-flash`;
+    if (i === 0) return `${base} border-viz-flash bg-viz-flash/10 text-viz-flash`;
+    return `${base} border-viz-line bg-viz-panel text-viz-ink`;
+  }
+
+  function itemAttrs(i: number) {
+    return {
+      "data-testid": "changed-cell",
+      "data-index": String(i),
+      "data-flash": changed.has(i) ? "true" : "false",
+    };
+  }
+
+  /* ── Non-virtualised path (≤ threshold) ── */
+  if (items.length <= VIRTUALIZE_THRESHOLD) {
+    return (
+      <div className="flex flex-col gap-1">
+        <div className="text-xs text-viz-ink/60">{name}: stack</div>
         <div className="flex flex-col gap-0.5">
-          {value.items.map((item, i) => (
-            <div
-              key={i}
-              className={`px-2 py-1 border text-xs font-mono ${
-                i === 0
-                  ? "border-amber-500 bg-amber-500/10 text-amber-300"
-                  : "border-zinc-600 bg-zinc-800 text-zinc-300"
-              }`}
-            >
-              {i === 0 && <span className="text-amber-500 mr-1">top →</span>}
+          {items.map((item, i) => (
+            <div key={i} className={itemClass(i)} style={flashStyle(changed.has(i))} {...itemAttrs(i)}>
+              {i === 0 && <span className="text-viz-flash mr-1">top →</span>}
               {renderCellValue(item)}
             </div>
           ))}
@@ -59,8 +90,8 @@ export function StackVisual({ value, name }: Props) {
   /* ── Virtualised path (> threshold) ── */
   return (
     <div className="flex flex-col gap-1">
-      <div className="text-xs text-zinc-500">
-        {name}: stack ({value.items.length})
+      <div className="text-xs text-viz-ink/60">
+        {name}: stack ({items.length})
       </div>
       <div
         ref={parentRef}
@@ -75,15 +106,12 @@ export function StackVisual({ value, name }: Props) {
         >
           {virtualizer.getVirtualItems().map((virtualItem) => {
             const idx = virtualItem.index;
-            const item = value.items[idx];
+            const item = items[idx];
             return (
               <div
                 key={virtualItem.key}
-                className={`px-2 py-1 border text-xs font-mono ${
-                  idx === 0
-                    ? "border-amber-500 bg-amber-500/10 text-amber-300"
-                    : "border-zinc-600 bg-zinc-800 text-zinc-300"
-                }`}
+                className={itemClass(idx)}
+                {...itemAttrs(idx)}
                 style={{
                   position: "absolute",
                   top: 0,
@@ -91,10 +119,11 @@ export function StackVisual({ value, name }: Props) {
                   width: "100%",
                   height: `${virtualItem.size}px`,
                   transform: `translateY(${virtualItem.start}px)`,
+                  ...flashStyle(changed.has(idx)),
                 }}
               >
                 {idx === 0 && (
-                  <span className="text-amber-500 mr-1">top →</span>
+                  <span className="text-viz-flash mr-1">top →</span>
                 )}
                 {renderCellValue(item)}
               </div>

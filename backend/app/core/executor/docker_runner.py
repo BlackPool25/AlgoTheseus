@@ -13,20 +13,22 @@ of passing the binary between two containers. The binary lives in /tmp (tmpfs).
 
 Gotcha: asyncio.to_thread wraps all blocking Docker SDK calls.
 Gotcha: The container is always removed (auto_remove=True) even on timeout.
-Gotcha: The sandbox directory under /tmp/dsa-visualizer is chmod'd to 755 so the
+Gotcha: The sandbox directory under /tmp/algo-theseus is chmod'd to 755 so the
 container (running as root) can read the mounted files.
 """
 
 from __future__ import annotations
 
 import asyncio
+import os
 import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
 from uuid import uuid4
 
-import docker
 import docker.errors
+
+import docker
 
 from .sandbox_config import (
     EXECUTION_TIMEOUT_SECONDS,
@@ -94,7 +96,7 @@ def _is_compile_error(stderr_clean: str, exit_code: int) -> bool:
 def _run_container_sync(cpp_source: str, stdin_data: str) -> RunResult:
     """Blocking implementation — called via asyncio.to_thread."""
     client = docker.from_env()
-    _sandbox_root = Path("/tmp/dsa-visualizer")
+    _sandbox_root = Path("/tmp/algo-theseus")
     tmp = _sandbox_root / f"dsa_{uuid4().hex}"
     tmp.mkdir(parents=True, exist_ok=True)
 
@@ -128,13 +130,13 @@ def _run_container_sync(cpp_source: str, stdin_data: str) -> RunResult:
             result = container.wait(timeout=EXECUTION_TIMEOUT_SECONDS)
             exit_code = result["StatusCode"]
             timed_out = False
-        except Exception:
+        except (docker.errors.DockerException, OSError):
             container.kill()
             timed_out = True
             exit_code = -1
 
-        stdout_bytes = container.logs(stdout=True, stderr=False)
-        stderr_bytes = container.logs(stdout=False, stderr=True)
+        stdout_bytes = container.logs(stdout=True, stderr=False)[:1_000_000]
+        stderr_bytes = container.logs(stdout=False, stderr=True)[:1_000_000]
         container.remove(force=True)
 
         stdout = stdout_bytes.decode("utf-8", errors="replace")
@@ -159,7 +161,11 @@ def _run_container_sync(cpp_source: str, stdin_data: str) -> RunResult:
 
 
 async def run_in_sandbox(cpp_source: str, stdin_data: str = "") -> RunResult:
-    """Async entry point — runs the blocking Docker work in a thread pool.
+    """Async entry point — runs the blocking sandbox work in a thread pool.
+
+    Dispatches on SANDBOX_MODE: "subprocess" uses the socketless
+    working-dir jail (subprocess_runner); anything else (default "docker")
+    keeps the Docker-DooD path for local dev.
 
     Args:
         cpp_source: Complete instrumented C++ source (already has #include "tracer.h").
@@ -168,4 +174,8 @@ async def run_in_sandbox(cpp_source: str, stdin_data: str = "") -> RunResult:
     Returns:
         RunResult with stdout, clean stderr, raw trace lines, and exit code.
     """
+    if os.environ.get("SANDBOX_MODE", "docker").strip().lower() == "subprocess":
+        from .subprocess_runner import _run_subprocess_sync
+
+        return await asyncio.to_thread(_run_subprocess_sync, cpp_source, stdin_data)
     return await asyncio.to_thread(_run_container_sync, cpp_source, stdin_data)

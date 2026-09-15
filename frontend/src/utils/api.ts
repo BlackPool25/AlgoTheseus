@@ -1,5 +1,5 @@
 /**
- * utils/api.ts — Typed API client for the DSA Visualiser backend.
+ * utils/api.ts — Typed API client for the AlgoTheseus backend.
  *
  * Endpoints:
  *   POST /execute            — trace + CFG (JSON or NDJSON streaming)
@@ -150,7 +150,7 @@ export function streamExecute(
       const decoder = new TextDecoder();
       let buffer = "";
 
-      while (true) {
+      for (;;) {
         const { done, value } = await reader.read();
         if (done) break;
 

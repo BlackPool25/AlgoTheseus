@@ -17,11 +17,14 @@ Gotcha: We assign unique IDs to variables with the same name in nested scopes
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from pathlib import Path
 import os
+from dataclasses import dataclass, field
 
 import clang.cindex as clang
+
+from app.core.instrumenter import _libclang_compat
+
+_libclang_compat.ensure_libclang()
 
 
 def _cursor_kind(cursor: clang.Cursor) -> clang.CursorKind | None:
@@ -43,19 +46,6 @@ _RANGE_FOR_KIND: clang.CursorKind | None = getattr(
 )
 
 
-def _record_line(scope: FunctionScope, line: int, visible: list[ScopeVar]) -> None:
-    """Merge `visible` into scope.vars_at_line[line] (innermost wins)."""
-    if line <= 0:
-        return
-    if line not in scope.vars_at_line:
-        scope.vars_at_line[line] = []
-    existing_names = {v.name for v in scope.vars_at_line[line]}
-    for v in visible:
-        if v.name not in existing_names:
-            scope.vars_at_line[line].append(v)
-            existing_names.add(v.name)
-
-
 @dataclass
 class ScopeVar:
     """A variable visible at a particular point in the source."""
@@ -69,8 +59,18 @@ class ScopeVar:
 class FunctionScope:
     """All variables visible at each line within a function."""
     func_name: str
-    # Maps line number → list of ScopeVar visible at that line
+    # Maps line number → list of ScopeVar visible at that line.
+    # POST-declaration semantics (R1): names declared on the line itself ARE
+    # included, so `int mid = ...` is present on its own line's entry.
     vars_at_line: dict[int, list[ScopeVar]] = field(default_factory=dict)
+    # Pre-declaration snapshot: visible just before the line executes
+    # (a DECL_STMT's own names are NOT in its line's pre set).
+    vars_at_line_pre: dict[int, list[ScopeVar]] = field(default_factory=dict)
+    # Post-declaration snapshot: pre + names declared on the line itself.
+    # STATE injection reads this, so `int x = 5;` captures x. Built only
+    # from decls on that same line — never leaks out-of-scope names.
+    # Mirrors vars_at_line content.
+    vars_at_line_post: dict[int, list[ScopeVar]] = field(default_factory=dict)
 
 
 class ScopeTracker:
@@ -137,6 +137,68 @@ class ScopeTracker:
         for child in cursor.get_children():
             self._visit(child, scopes)
 
+    @staticmethod
+    def _merge_names(
+        target: dict[int, list[ScopeVar]], line: int, visible: list[ScopeVar]
+    ) -> None:
+        """Append-if-missing merge of `visible` into target[line] (first wins)."""
+        if line <= 0:
+            return
+        entry = target.setdefault(line, [])
+        existing_names = {v.name for v in entry}
+        for v in visible:
+            if v.name not in existing_names:
+                entry.append(v)
+                existing_names.add(v.name)
+
+    @staticmethod
+    def _merge_replace(
+        target: dict[int, list[ScopeVar]], line: int, new_vars: list[ScopeVar]
+    ) -> None:
+        """Replace-by-name merge of `new_vars` into target[line].
+
+        Same-line re-declarations shadow outer names, so the newest ScopeVar
+        wins (records the inner decl_line/scope_depth).
+        """
+        if line <= 0:
+            return
+        entry = target.setdefault(line, [])
+        by_name = {v.name: i for i, v in enumerate(entry)}
+        for v in new_vars:
+            if v.name in by_name:
+                entry[by_name[v.name]] = v
+            else:
+                entry.append(v)
+
+    def _record_pre(
+        self,
+        scope: FunctionScope,
+        line: int,
+        visible: list[ScopeVar],
+    ) -> None:
+        """Record the pre-declaration snapshot for a line (excludes own decls)."""
+        self._merge_names(scope.vars_at_line_pre, line, visible)
+
+    def _record_line(
+        self,
+        scope: FunctionScope,
+        line: int,
+        visible: list[ScopeVar],
+    ) -> None:
+        """Record `visible` into the main map and seed the post set."""
+        self._merge_names(scope.vars_at_line, line, visible)
+        self._merge_names(scope.vars_at_line_post, line, visible)
+
+    def _add_post_decls(
+        self,
+        scope: FunctionScope,
+        line: int,
+        new_vars: list[ScopeVar],
+    ) -> None:
+        """Fold same-line declarations into the post set and the main map."""
+        self._merge_replace(scope.vars_at_line_post, line, new_vars)
+        self._merge_replace(scope.vars_at_line, line, new_vars)
+
     def _walk_body(
         self,
         cursor: clang.Cursor,
@@ -153,20 +215,29 @@ class ScopeTracker:
             if stmt_kind is None:
                 continue
 
-            # R1 (M2): post-declaration semantics — fold this line's DECL_STMT
-            # vars into `visible` BEFORE recording, so declared names appear in
-            # their own line's entry (incl. multi-decl `int lo = 0, hi = n`).
+            # Process all DECL_STMT regardless of file origin (template types
+            # like vector<int> may report cursor location in STL headers).
+            # For non-declaration statements, filter by user code as usual.
+            if stmt_kind != clang.CursorKind.DECL_STMT and not self._is_user_code(stmt):
+                continue
+
+            # R1 (M2): post-declaration semantics — the pre snapshot is taken
+            # first, then this line's DECL_STMT vars fold into `visible`
+            # BEFORE recording, so declared names appear in their own line's
+            # entry (incl. multi-decl `int lo = 0, hi = n`).
             if stmt_kind == clang.CursorKind.DECL_STMT:
-                self._append_decl_vars(stmt, visible, depth)
                 # Template-type decls (e.g. vector<int>) report the DECL_STMT
                 # location in STL headers — record at the user-code VAR_DECL
                 # line instead so the entry lands on the real source line.
-                _record_line(scope, self._decl_line(stmt), visible)
+                line = self._decl_line(stmt)
+                self._record_pre(scope, line, visible)
+                new_vars = self._collect_decl_vars(stmt, visible, depth)
+                self._record_line(scope, line, visible)
+                self._add_post_decls(scope, line, new_vars)
             else:
-                if not self._is_user_code(stmt):
-                    continue
-                # Record what's visible at this line
-                _record_line(scope, stmt.location.line, visible)
+                line = stmt.location.line
+                self._record_pre(scope, line, visible)
+                self._record_line(scope, line, visible)
 
                 # Nested compound statement (if/loop body) → recurse
                 if stmt_kind == clang.CursorKind.COMPOUND_STMT:
@@ -186,22 +257,28 @@ class ScopeTracker:
                 ):
                     self._walk_cond(stmt, stmt_kind, scope, visible, depth)
 
-    @staticmethod
-    def _append_decl_vars(
-        decl_stmt: clang.Cursor, visible: list[ScopeVar], depth: int
-    ) -> None:
-        """Append VAR_DECL children of a DECL_STMT to `visible` (shadow-safe)."""
+    def _collect_decl_vars(
+        self, decl_stmt: clang.Cursor, visible: list[ScopeVar], depth: int
+    ) -> list[ScopeVar]:
+        """Append VAR_DECL children of a DECL_STMT to `visible` (shadow-safe).
+
+        Returns the newly added vars so callers can fold them into post sets.
+        """
+        new_vars: list[ScopeVar] = []
         for c in decl_stmt.get_children():
             if c.kind == clang.CursorKind.VAR_DECL and c.spelling:
                 uid = c.spelling
                 if any(v.name == c.spelling for v in visible):
                     uid = f"{c.spelling}_{depth}"
-                visible.append(ScopeVar(
+                sv = ScopeVar(
                     name=c.spelling,
                     unique_id=uid,
                     decl_line=c.location.line,
                     scope_depth=depth,
-                ))
+                )
+                visible.append(sv)
+                new_vars.append(sv)
+        return new_vars
 
     def _decl_line(self, decl_stmt: clang.Cursor) -> int:
         """Line to attribute a DECL_STMT's scope entry to (user-code VAR_DECL)."""
@@ -225,25 +302,29 @@ class ScopeTracker:
     ) -> None:
         """Walk FOR_STMT / CXX_FOR_RANGE_STMT: loop-var scope + body."""
         loop_visible = list(visible)
+        loop_new: list[ScopeVar] = []
 
         # Capture init declarations (`for (int i = 0; ...)`) and the range-for
         # loop var (direct VAR_DECL child of CXX_FOR_RANGE_STMT).
         for child in stmt.get_children():
             if child.kind == clang.CursorKind.DECL_STMT:
-                self._append_decl_vars(child, loop_visible, depth)
+                loop_new.extend(self._collect_decl_vars(child, loop_visible, depth))
             elif child.kind == clang.CursorKind.VAR_DECL and child.spelling:
                 uid = child.spelling
                 if any(v.name == child.spelling for v in loop_visible):
                     uid = f"{child.spelling}_{depth}"
-                loop_visible.append(ScopeVar(
+                sv = ScopeVar(
                     name=child.spelling,
                     unique_id=uid,
                     decl_line=child.location.line,
                     scope_depth=depth,
-                ))
+                )
+                loop_visible.append(sv)
+                loop_new.append(sv)
 
-        # Ensure loop header line records newly added vars
-        _record_line(scope, stmt.location.line, loop_visible)
+        # The loop header line carries the loop vars (replace-by-name so a
+        # loop var shadows an outer same-named var); outer visible is untouched.
+        self._add_post_decls(scope, stmt.location.line, loop_new)
 
         # Body is the last child; a lone statement is a braceless body (R3).
         children = list(stmt.get_children())
@@ -285,7 +366,9 @@ class ScopeTracker:
         depth: int,
     ) -> None:
         """Record scope for a single-statement body; recurse if nested control."""
-        _record_line(scope, node.location.line, visible)
+        if self._is_user_code(node) and node.location.line:
+            self._record_pre(scope, node.location.line, visible)
+            self._record_line(scope, node.location.line, visible)
         kind = _cursor_kind(node)
         if kind == clang.CursorKind.FOR_STMT or (
             _RANGE_FOR_KIND is not None and kind == _RANGE_FOR_KIND

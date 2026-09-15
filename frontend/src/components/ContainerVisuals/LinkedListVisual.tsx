@@ -308,6 +308,9 @@ export function LinkedListVisual({ value, name, currentAddr }: Props) {
                 x2={x + NODE_W + ARROW_LEN}
                 y2={y + NODE_H / 2}
                 strokeWidth={isHighlighted || node.cycleTargetId ? 2 : 1.5}
+                data-ll-highlight={
+                  !node.cycleTargetId && isHighlighted ? "true" : undefined
+                }
                 style={{
                   stroke: node.cycleTargetId
                     ? "var(--viz-exception, #ef4444)"

@@ -1,0 +1,56 @@
+{
+  "measured_at": "2026-09-15T10:00:26.018Z",
+  "browser": "chromium",
+  "browser_version": "153.0.8010.12",
+  "wall_total_ms": 25094,
+  "legs": {
+    "nested-loop": {
+      "total_steps": 10002,
+      "payload_bytes": 1027588,
+      "load_ms": 278,
+      "verdict": "measured",
+      "p95_ms": 5.46000000089407,
+      "repeat_p95s": [
+        6.25,
+        5.46000000089407,
+        4.724999997764826
+      ],
+      "dom_collapsed": 155,
+      "spot_reach_pct": 100
+    },
+    "fib-recursion": {
+      "total_steps": 65675,
+      "payload_bytes": 6437269,
+      "load_ms": 6309,
+      "verdict": "measured",
+      "p95_ms": 11.060000002384186,
+      "repeat_p95s": [
+        11.669999998062849,
+        11.060000002384186,
+        9.92000000178814
+      ],
+      "dom_collapsed": 510,
+      "spot_reach_pct": 100
+    },
+    "hot-call": {
+      "total_steps": 100002,
+      "payload_bytes": 10200691,
+      "load_ms": 16480,
+      "verdict": "measured",
+      "p95_ms": 14.745000001043081,
+      "repeat_p95s": [
+        14.745000001043081,
+        15.015000000596046,
+        13.989999998360872
+      ],
+      "dom_collapsed": 383,
+      "spot_reach_pct": 100
+    }
+  },
+  "vector_guard": {
+    "median_ms": 2.2049999982118607,
+    "baseline_ms": 4.320000000298023,
+    "ratio": 0.5104166662175335,
+    "pass": true
+  }
+}

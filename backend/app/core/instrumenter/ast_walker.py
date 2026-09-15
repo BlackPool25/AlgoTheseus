@@ -19,35 +19,23 @@ by trying the installed libclang package's bundled .so.
 
 from __future__ import annotations
 
-import logging
 import os
+import re
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from pathlib import Path
-from typing import Optional
-import re
-
-logger = logging.getLogger(__name__)
 
 import clang.cindex as clang
 
 # ── libclang setup ────────────────────────────────────────────────────────────
 # The libclang Python package bundles its own .so. Point the bindings at it.
-def _find_libclang() -> Optional[str]:
-    try:
-        import clang
-        pkg_dir = Path(clang.__file__).parent
-        for candidate in pkg_dir.glob("*.so*"):
-            return str(candidate)
-        for candidate in pkg_dir.glob("libclang*.so*"):
-            return str(candidate)
-    except Exception:
-        logger.debug("Failed to find libclang", exc_info=True)
-    return None
+# Toolchain pin lives in _libclang_compat (bundled clang/native/libclang.so +
+# registration of cursor kinds missing from the wheel's cindex.py, e.g. 437).
+from app.core.instrumenter import _libclang_compat
 
-_lib = _find_libclang()
-if _lib and not clang.Config.loaded:
-    clang.Config.set_library_file(_lib)
+# Re-exported: resolves the bundled clang/native/libclang.so (never system lib).
+_find_libclang = _libclang_compat._find_libclang
+
+_lib = _libclang_compat.ensure_libclang()
 
 
 # ── Data types ────────────────────────────────────────────────────────────────

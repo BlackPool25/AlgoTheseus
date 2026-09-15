@@ -136,7 +136,7 @@ export function TraceFlow() {
 
   // Derive active node from current step
   const activeId = useMemo(() => {
-    const node = cfgNodes.find((n) => n.trace_indices.includes(currentStep));
+    const node = cfgNodes.find((n) => (n.trace_indices ?? []).includes(currentStep));
     return node?.id ?? activeNodeId;
   }, [cfgNodes, currentStep, activeNodeId]);
 

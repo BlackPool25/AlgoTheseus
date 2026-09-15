@@ -70,10 +70,10 @@ test.describe("T12 HeapPanel with per-object flash and alias connectors", () => 
       panel.locator('[data-heap-id="2"]').getByText("val"),
     ).toBeVisible();
     // R6.5: currentAddr ← $id — the mutated node's list arrow flashes amber…
-    await expect(page.locator('svg line[stroke="#f59e0b"]')).toHaveCount(1);
+    await expect(page.locator('[data-ll-highlight="true"]')).toHaveCount(1);
     // …while the creation step (no mutation) highlights nothing.
     await goToStep(page, 1);
-    await expect(page.locator('svg line[stroke="#f59e0b"]')).toHaveCount(0);
+    await expect(page.locator('[data-ll-highlight="true"]')).toHaveCount(0);
   });
 
   test("33: alias connector visible for multi-inbound id, $cycle badge on self-ref", async ({ page }) => {

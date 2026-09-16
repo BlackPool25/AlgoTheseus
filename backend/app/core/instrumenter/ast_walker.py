@@ -79,6 +79,120 @@ _LOOP_KINDS: tuple = tuple(
 )
 
 
+# Wave 2b: guarded token fallback for UNEXPOSED/macro nodes. get_tokens can
+# raise on cursors with degenerate extents — never let it escape the walker.
+_UNEXPOSED_KINDS: tuple = tuple(
+    k
+    for k in (
+        getattr(clang.CursorKind, "UNEXPOSED_DECL", None),
+        getattr(clang.CursorKind, "UNEXPOSED_EXPR", None),
+        getattr(clang.CursorKind, "UNEXPOSED_STMT", None),
+    )
+    if k is not None
+)
+
+# Class-template definition kinds (getattr-guarded like _RANGE_FOR_KIND).
+_CLASS_TEMPLATE_KINDS: tuple = tuple(
+    k
+    for k in (
+        getattr(clang.CursorKind, "CLASS_TEMPLATE", None),
+        getattr(clang.CursorKind, "CLASS_TEMPLATE_PARTIAL_SPECIALIZATION", None),
+    )
+    if k is not None
+)
+
+# Function-template definitions (v1: skip-with-reason, same as class templates).
+_FUNCTION_TEMPLATE_KINDS: tuple = tuple(
+    k
+    for k in (getattr(clang.CursorKind, "FUNCTION_TEMPLATE", None),)
+    if k is not None
+)
+
+# Try/catch + lambda kinds (getattr-guarded; bodies recurse like COMPOUND).
+_TRY_CATCH_KINDS: tuple = tuple(
+    k
+    for k in (
+        getattr(clang.CursorKind, "CXX_TRY_STMT", None),
+        getattr(clang.CursorKind, "CXX_CATCH_STMT", None),
+    )
+    if k is not None
+)
+_LAMBDA_KIND: clang.CursorKind | None = getattr(
+    clang.CursorKind, "LAMBDA_EXPR", None
+)
+
+
+def _safe_get_tokens(cursor: clang.Cursor) -> list[str]:
+    """Guarded get_tokens wrapper: token spellings, [] on any libclang failure.
+
+    Never raises — callers use this where cursor kind is None/UNEXPOSED and
+    cursor.extent/location cannot be trusted.
+    """
+    try:
+        return [t.spelling for t in cursor.get_tokens()]
+    except (AttributeError, TypeError, RuntimeError, ValueError, AssertionError):
+        return []
+
+
+def _fallback_user_lines(cursor: clang.Cursor, source_path: str) -> tuple[int, int] | None:
+    """Re-lex a kind-None/UNEXPOSED cursor's user-file line range from tokens.
+
+    Returns (first_line, last_line) only when token locations resolve inside
+    the user file with sane lines. Returns None (skip-with-reason — the
+    caller must not splice) when tokens fail, no user-file tokens exist, or
+    the cursor is macro-expanded (location.offset == 0 with a nonzero
+    extent, mirroring ASTWalker._is_macro_expanded).
+    """
+    try:
+        toks = list(cursor.get_tokens())
+    except (AttributeError, TypeError, RuntimeError, ValueError, AssertionError):
+        return None
+    try:
+        lines = [
+            t.location.line
+            for t in toks
+            if t.location.file is not None
+            and t.location.line > 0
+            and os.path.abspath(t.location.file.name) == source_path
+        ]
+    except (AttributeError, TypeError, RuntimeError, ValueError, OSError):
+        return None
+    if not lines:
+        return None
+    try:
+        macro = (
+            cursor.location.file is not None
+            and cursor.extent.start.offset != cursor.extent.end.offset
+            and cursor.location.offset == 0
+        )
+    except (AttributeError, TypeError, RuntimeError, ValueError):
+        return None
+    if macro:
+        return None
+    first, last = min(lines), max(lines)
+    if first <= 0 or last < first or last - first > 1000:
+        return None
+    return (first, last)
+
+
+def _is_in_class_template(cursor: clang.Cursor) -> bool:
+    """True when *cursor* sits inside a class-template definition (v1: skip).
+
+    Members of a class template surface as ordinary CXX_METHOD cursors in
+    user code — without this guard the walker splices TRACE into the
+    template body (instantiated per specialization: bogus splice).
+    """
+    try:
+        node = cursor.semantic_parent
+        while node is not None:
+            if _cursor_kind(node) in _CLASS_TEMPLATE_KINDS:
+                return True
+            node = node.semantic_parent
+    except (AttributeError, TypeError, RuntimeError, ValueError):
+        return False
+    return False
+
+
 @dataclass
 class InjectionPoint:
     """A single location where a trace call will be inserted."""
@@ -376,11 +490,17 @@ class ASTWalker:
                 self._walk_cursor(child, points, loop_counters, depth, func_name, func_depth, depth_map)
             return
 
+        # v1 scope: never splice inside template definitions (per-specialization bogus splice).
+        if kind in _CLASS_TEMPLATE_KINDS or kind in _FUNCTION_TEMPLATE_KINDS:
+            return
+
         # ── Function definition ───────────────────────────────────────────────
         if kind in (clang.CursorKind.FUNCTION_DECL, clang.CursorKind.CXX_METHOD) and cursor.is_definition():
             if not self._is_user_code(cursor):
                 return
             if self._is_template_instantiation(cursor):
+                return
+            if _is_in_class_template(cursor):
                 return
 
             fn = cursor.spelling
@@ -502,6 +622,22 @@ class ASTWalker:
         """Walk a statement node inside a function body."""
         kind = _cursor_kind(cursor)
         if kind is None:
+            # Wave 2b fallback: unknown kind — re-lex user lines from tokens.
+            # Splice one STATE only if they resolve, else skip-with-reason.
+            if seen is None:
+                seen = set()
+            resolved = _fallback_user_lines(cursor, self.source_path)
+            if resolved is None:
+                return
+            if resolved[0] not in seen and resolved[0] > 0:
+                seen.add(resolved[0])
+                points.append(InjectionPoint(
+                    kind=InjectKind.STATE,
+                    line=resolved[0],
+                    col=1,
+                    func_name=func_name,
+                    depth=func_depth,
+                ))
             return
         # Allow all DECL_STMT even if the cursor location is in a system header,
         # which commonly happens with template variable declarations like
@@ -515,6 +651,24 @@ class ASTWalker:
             return
         if seen is None:
             seen = set()
+        if kind in _UNEXPOSED_KINDS and (
+            cursor.location.file is None or cursor.location.line <= 0
+        ):
+            # Wave 2b fallback: UNEXPOSED node with an unusable location —
+            # re-lex user lines from tokens; skip unless they resolve.
+            resolved = _fallback_user_lines(cursor, self.source_path)
+            if resolved is None:
+                return
+            if resolved[0] not in seen and resolved[0] > 0:
+                seen.add(resolved[0])
+                points.append(InjectionPoint(
+                    kind=InjectKind.STATE,
+                    line=resolved[0],
+                    col=1,
+                    func_name=func_name,
+                    depth=func_depth,
+                ))
+            return
 
         # STATE for this statement's own line (one per unique line).
         # Compound statements carry no state of their own — their children

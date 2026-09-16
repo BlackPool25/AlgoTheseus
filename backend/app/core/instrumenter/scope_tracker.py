@@ -137,10 +137,35 @@ class ScopeTracker:
             and os.path.abspath(loc.file.name) == self.source_path
         )
 
+    @staticmethod
+    def _is_in_class_template(cursor: clang.Cursor) -> bool:
+        """True when *cursor* sits inside a class-template definition (v1: skip).
+
+        Mirrors ast_walker._is_in_class_template so template members get no
+        scope entries either (the walker emits no points for them).
+        """
+        try:
+            node = cursor.semantic_parent
+            while node is not None:
+                node_kind = _cursor_kind(node)
+                if node_kind is not None and node_kind in (
+                    clang.CursorKind.CLASS_TEMPLATE,
+                    getattr(clang.CursorKind, "CLASS_TEMPLATE_PARTIAL_SPECIALIZATION", None),
+                ):
+                    return True
+                node = node.semantic_parent
+        except (AttributeError, TypeError, RuntimeError, ValueError):
+            return False
+        return False
+
     def _visit(self, cursor: clang.Cursor, scopes: dict[str, FunctionScope]) -> None:
         kind = _cursor_kind(cursor)
+        if kind in _TEMPLATE_DEF_KINDS:
+            return
         if kind in (clang.CursorKind.FUNCTION_DECL, clang.CursorKind.CXX_METHOD) and cursor.is_definition():
             if not self._is_user_code(cursor):
+                return
+            if self._is_in_class_template(cursor):
                 return
             fn = cursor.spelling
             scope = FunctionScope(func_name=fn)

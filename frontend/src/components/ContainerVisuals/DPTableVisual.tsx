@@ -17,7 +17,7 @@ import { useMemo, useState, useCallback } from "react";
 import {
   useVirtualizedList,
 } from "../../hooks/useVirtualizedList";
-import { renderCellValue } from "../../utils/format";
+import { renderCellValue, renderCompactCellValue } from "../../utils/format";
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
@@ -241,23 +241,26 @@ export function DPTableVisual({ value, name }: Props) {
       hoveredCell !== null && hoveredCell[0] === r && hoveredCell[1] === c;
 
     let cellClass =
-      "w-8 h-7 flex items-center justify-center text-xs font-mono border rounded-none shrink-0 transition-colors duration-150";
+      "w-8 h-7 flex items-center justify-center text-xs font-mono border rounded-sm shrink-0 transition-colors duration-150 overflow-hidden select-none tabular-nums";
 
     if (isCurrent) {
       cellClass +=
-        " border-cyan-500 bg-cyan-500/15 text-cyan-300 animate-pulse shadow-[0_0_6px_rgba(6,182,212,0.3)]";
+        " border-cyan-500 bg-cyan-500/20 text-cyan-300 animate-pulse shadow-[0_0_6px_rgba(6,182,212,0.3)] font-semibold";
     } else if (isDep) {
       cellClass +=
-        " border-blue-500 bg-blue-500/10 text-blue-300";
+        " border-blue-500 bg-blue-500/15 text-blue-300";
     } else if (isHovered) {
       cellClass +=
         " border-zinc-500 bg-zinc-700 text-zinc-200";
     } else if (val === true) {
       cellClass +=
-        " border-emerald-500 bg-emerald-500/10 text-emerald-300";
+        " border-emerald-500/40 bg-emerald-500/15 text-emerald-400 font-semibold";
+    } else if (val === false) {
+      cellClass +=
+        " border-zinc-700/80 bg-zinc-900/60 text-zinc-500";
     } else {
       cellClass +=
-        " border-zinc-600 bg-zinc-800 text-zinc-200";
+        " border-zinc-700 bg-zinc-800/80 text-zinc-200";
     }
 
     return (
@@ -271,7 +274,15 @@ export function DPTableVisual({ value, name }: Props) {
         onMouseLeave={handleCellLeave}
         title={`[${r}][${c}] = ${renderCellValue(val)}${isCurrent && formula ? `\n${formula}` : ""}`}
       >
-        {renderCellValue(val)}
+        {typeof val === "boolean" ? (
+          <span className="text-[11px] font-bold tracking-wider">
+            {val ? "T" : "F"}
+          </span>
+        ) : (
+          <span className="truncate px-0.5 text-[11px] leading-none">
+            {renderCompactCellValue(val)}
+          </span>
+        )}
       </div>
     );
   }

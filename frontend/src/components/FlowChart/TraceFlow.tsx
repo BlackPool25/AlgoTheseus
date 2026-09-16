@@ -17,7 +17,8 @@ import {
   type Node,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Crosshair, Target, Maximize2 } from "lucide-react";
 import { useCFGStore } from "../../store/cfgStore";
 import { useTraceStore } from "../../store/traceStore";
 import type { CFGNode } from "../../types/cfg";
@@ -74,27 +75,46 @@ function FlowViewController({
   currentStep,
   activeId,
   flowNodes,
+  autoFollow,
+  onToggleAutoFollow,
 }: {
   containerRef: { readonly current: HTMLDivElement | null };
   cfgNodes: CFGNode[];
   currentStep: number;
   activeId: string | null;
   flowNodes: Node[];
+  autoFollow: boolean;
+  onToggleAutoFollow: () => void;
 }) {
   const { fitView, setCenter, getViewport } = useReactFlow();
   const initialFitDone = useRef(false);
 
-  // FitView once when cfgNodes first loads (empty → non-empty)
+  // FitView once when cfgNodes first loads
   useEffect(() => {
     if (cfgNodes.length > 0 && !initialFitDone.current) {
-      fitView({ padding: 0.2, duration: 200 });
+      fitView({ padding: 0.2, duration: 250 });
       initialFitDone.current = true;
     }
   }, [cfgNodes.length, fitView]);
 
-  // On step change: smooth-pan to active node ONLY if it's off-screen
+  const centerOnNode = useCallback(
+    (nodeId: string, duration = 350) => {
+      const node = flowNodes.find((n) => n.id === nodeId);
+      if (!node) return;
+      const viewport = getViewport();
+      const cx = node.position.x + (node.measured?.width ?? 120) / 2;
+      const cy = node.position.y + (node.measured?.height ?? 50) / 2;
+      setCenter(cx, cy, {
+        zoom: Math.min(Math.max(viewport.zoom, 0.7), 1.2),
+        duration,
+      });
+    },
+    [flowNodes, getViewport, setCenter],
+  );
+
+  // On step change: smooth-pan to active node (when autoFollow is enabled and node moves off-screen)
   useEffect(() => {
-    if (!activeId || flowNodes.length === 0) return;
+    if (!autoFollow || !activeId) return;
 
     const node = flowNodes.find((n) => n.id === activeId);
     if (!node) return;
@@ -103,30 +123,68 @@ function FlowViewController({
     const el = containerRef.current;
     if (!el) return;
 
-    const rect = el.getBoundingClientRect();
-    const MARGIN = 150;
+    const width = el.clientWidth;
+    const height = el.clientHeight;
+    const MARGIN = 100;
 
-    // Convert flow coordinate to screen coordinate
     const sx = node.position.x * viewport.zoom + viewport.x;
     const sy = node.position.y * viewport.zoom + viewport.y;
 
     const isOffScreen =
       sx < -MARGIN ||
-      sx > rect.width + MARGIN ||
+      sx > width + MARGIN ||
       sy < -MARGIN ||
-      sy > rect.height + MARGIN;
+      sy > height + MARGIN;
 
     if (isOffScreen) {
-      const cx = node.position.x + (node.measured?.width ?? 100) / 2;
-      const cy = node.position.y + (node.measured?.height ?? 50) / 2;
-      setCenter(cx, cy, { zoom: viewport.zoom, duration: 400 });
+      centerOnNode(activeId, 250);
     }
-  }, [currentStep]);
+  }, [currentStep, autoFollow, activeId, centerOnNode, flowNodes, containerRef, getViewport]);
 
-  return null;
+  return (
+    <div className="absolute top-2.5 left-2.5 z-20 flex items-center gap-1 bg-viz-panel/90 backdrop-blur-xs border border-viz-line rounded-lg p-1 shadow-md text-xs select-none">
+      <button
+        onClick={onToggleAutoFollow}
+        className={`flex items-center gap-1 px-2 py-1 rounded transition-colors ${
+          autoFollow
+            ? "bg-amber-500/20 text-amber-400 font-medium"
+            : "text-viz-ink/60 hover:text-viz-ink"
+        }`}
+        title={
+          autoFollow
+            ? "Auto-follow camera: ON (click to unlock camera)"
+            : "Auto-follow camera: OFF (click to lock camera)"
+        }
+      >
+        <Crosshair className="w-3.5 h-3.5" />
+        <span className="hidden sm:inline">Follow</span>
+      </button>
+
+      {activeId && (
+        <button
+          onClick={() => centerOnNode(activeId, 350)}
+          className="flex items-center gap-1 px-2 py-1 rounded text-viz-ink/70 hover:text-viz-ink hover:bg-viz-body/60 transition-colors"
+          title="Center view on current step"
+        >
+          <Target className="w-3.5 h-3.5" />
+          <span className="hidden sm:inline">Snap</span>
+        </button>
+      )}
+
+      <button
+        onClick={() => fitView({ padding: 0.2, duration: 300 })}
+        className="flex items-center gap-1 px-2 py-1 rounded text-viz-ink/70 hover:text-viz-ink hover:bg-viz-body/60 transition-colors"
+        title="Fit whole graph in view"
+      >
+        <Maximize2 className="w-3.5 h-3.5" />
+        <span className="hidden sm:inline">Fit</span>
+      </button>
+    </div>
+  );
 }
 
 export function TraceFlow() {
+  const [autoFollow, setAutoFollow] = useState(false);
   const cfgNodes = useCFGStore((s) => s.nodes);
   const cfgEdges = useCFGStore((s) => s.edges);
   const activeNodeId = useCFGStore((s) => s.activeNodeId);
@@ -297,6 +355,8 @@ export function TraceFlow() {
         currentStep={currentStep}
         activeId={activeId}
         flowNodes={flowNodes}
+        autoFollow={autoFollow}
+        onToggleAutoFollow={() => setAutoFollow((v) => !v)}
       />
       <Background color="var(--viz-panel-bg)" gap={16} />
       {/* MiniMap legibility: node fills use the body-bg/body-text contrast

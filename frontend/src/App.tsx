@@ -1,45 +1,36 @@
 /**
- * App.tsx — Root component. Wires stores, API calls, and layout.
+ * App.tsx — Root component. Wires stores, API calls, and adaptive workbench layout.
  *
- * Layout:
- *   ┌─────────────────────────────────────────────────────┐
- *   │  Header: title + Run button                         │
- *   ├──────────────────────┬──────────────────────────────┤
- *   │  Left: CodeEditor    │  Right: CFG (TraceFlow)      │
- *   │        InputPanel    │         StatePanel           │
- *   ├──────────────────────┴──────────────────────────────┤
- *   │  Bottom: TraceScrubber                              │
- *   └─────────────────────────────────────────────────────┘
- *
- * User flow:
- *   1. User writes code + optional raw stdin.
- *   2. Clicks "Run" → POST /execute → loads trace + CFG.
- *   3. User scrubs through the trace.
+ * Layout modes:
+ *   Desktop (>= 768px): Resizable 3-pane workbench:
+ *     [Editor + Tabbed I/O Tray] | [CFG Flow Canvas] | [Variable State Inspector]
+ *   Mobile (< 768px): Single-panel adaptive view with top segmented switcher:
+ *     [Code] | [Flow Graph] | [Variables] | [Console / I/O]
+ *   Both modes retain persistent thumb-friendly playback scrubber and header.
  */
 
-import { Suspense, lazy, useMemo, useRef, useState } from "react";
+import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
+import { Code2, GitFork, Layers, Terminal } from "lucide-react";
 import { useCFGStore } from "./store/cfgStore";
 import { useTraceStore } from "./store/traceStore";
 import { useUIStore } from "./store/uiStore";
-import { THEMES, applyTheme, currentTheme, type ThemeName } from "./theme";
+import { applyTheme, currentTheme, type ThemeName } from "./theme";
 import { streamExecute } from "./utils/api";
 import type { StreamCallbacks } from "./utils/api";
 import { loadWasmToolchain, selectEngine } from "./utils/executionEngine";
-import { InputPanel } from "./components/Editor/InputPanel";
-import { TestCaseManager } from "./components/Editor/TestCaseManager";
+import { WorkbenchTray } from "./components/Editor/WorkbenchTray";
 import { TraceScrubber } from "./components/Scrubber/TraceScrubber";
 import { ProgramOutputBox } from "./components/ProgramOutputBox";
 import { Splitter } from "./components/Layout/Splitter";
+import { Header } from "./components/Layout/Header";
+import { Footer } from "./components/Layout/Footer";
 import {
   CfgSkeleton,
   EditorSkeleton,
   StatePanelSkeleton,
 } from "./components/Loading/Skeletons";
 
-// Render prioritization (perf track): Monaco is the heaviest chunk and
-// React Flow + state panel pull in large graphs, so all three split out.
-// Critical-first order stays: header (eager) -> editor shell (Suspense)
-// -> scrubber (eager, tiny) -> heavy visuals (Suspense).
+// Heavy visual modules are split out with Suspense fallbacks
 const CodeEditor = lazy(() =>
   import("./components/Editor/CodeEditor").then((m) => ({ default: m.CodeEditor })),
 );
@@ -49,14 +40,14 @@ const TraceFlow = lazy(() =>
 const StatePanel = lazy(() =>
   import("./components/StatePanel/StatePanel").then((m) => ({ default: m.StatePanel })),
 );
-import { Footer } from "./components/Layout/Footer";
 
-const MIN_EDITOR_W = 320;
-const MIN_CFG_W = 320;
+const MIN_EDITOR_W = 280;
+const MIN_CFG_W = 260;
 const MIN_STATE_W = 220;
-const MAX_STATE_W = 480;
-const MIN_INPUT_H = 140;
-const MIN_EDITOR_H = 200;
+const MIN_INPUT_H = 120;
+const MIN_EDITOR_H = 160;
+
+type MobileTab = "code" | "flow" | "state" | "console";
 
 export default function App() {
   const {
@@ -68,17 +59,27 @@ export default function App() {
     compileError,
     runtimeError,
   } = useUIStore();
-  const { reset } = useUIStore();
   const [theme, setTheme] = useState<ThemeName>(() => currentTheme());
-  // Task 19: engine selection (D1 — browser-WASM killed, server primary).
-  // `!crossOriginIsolated` (SAB disabled) => automatic fallback flag to the
-  // server path, pinned as data attributes for tests and debugging.
   const engineSel = useMemo(() => selectEngine(), []);
   const trace = useTraceStore((s) => s.trace);
-  // Per-step stdout present → ProgramOutputBox owns output; else static banner.
   const hasPerStepStdout = trace.some(
     (e) => e.type === "state" && typeof e.stdout === "string",
   );
+
+  // Responsive mobile breakpoint detection
+  const [isMobile, setIsMobile] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return window.innerWidth < 768;
+  });
+  const [mobileTab, setMobileTab] = useState<MobileTab>("code");
+
+  useEffect(() => {
+    function handleResize() {
+      setIsMobile(window.innerWidth < 768);
+    }
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
 
   async function handleExecute() {
     const uiStore = useUIStore.getState();
@@ -89,8 +90,6 @@ export default function App() {
     traceStore.reset();
     cfgStore.reset();
 
-    // Browser-WASM route (dead while D1 kill holds): lazy toolchain load
-    // surfaces a typed, retryable error panel instead of hanging.
     if (engineSel.engine === "browser-wasm") {
       loadWasmToolchain().then(
         () => undefined,
@@ -116,6 +115,10 @@ export default function App() {
           cfg.runtime_error,
           cfg.truncated,
         );
+        // On mobile, automatically show graph flow once trace loads
+        if (window.innerWidth < 768) {
+          setMobileTab("flow");
+        }
       },
       onError: (err) => {
         traceStore.streamError();
@@ -125,9 +128,6 @@ export default function App() {
           uiStore.setError(err.runtime_error ?? "Unknown streaming error");
         }
       },
-      // The stream reader resolves cleanly even when the connection drops
-      // before the final cfg line. Without this, status stays "executing"
-      // forever (no banner, Run stuck on "Running…").
       onDone: () => {
         if (!cfgReceived && useUIStore.getState().status === "executing") {
           traceStore.streamError();
@@ -146,7 +146,7 @@ export default function App() {
   const mainRef = useRef<HTMLDivElement>(null);
   const leftColRef = useRef<HTMLDivElement>(null);
 
-  // null = default size (first paint matches the old fixed layout).
+  // Desktop layout sizing state
   const [leftW, setLeftW] = useState<number | null>(null);
   const [inputH, setInputH] = useState<number | null>(null);
   const [stateW, setStateW] = useState<number | null>(null);
@@ -164,7 +164,7 @@ export default function App() {
   const dragInput = (_dx: number, dy: number) => {
     setInputH((prev) => {
       const colH = leftColRef.current?.clientHeight ?? window.innerHeight;
-      const cur = prev ?? 360;
+      const cur = prev ?? 260;
       const max = colH - MIN_EDITOR_H;
       return Math.min(Math.max(cur - dy, MIN_INPUT_H), Math.max(max, MIN_INPUT_H));
     });
@@ -172,133 +172,215 @@ export default function App() {
 
   const dragState = (dx: number) => {
     setStateW((prev) => {
-      const cur = prev ?? 260;
+      const cur = prev ?? 280;
       const rightW = mainW() - (leftColRef.current?.clientWidth || 0);
-      const max = Math.min(MAX_STATE_W, rightW - MIN_CFG_W - 8);
+      const dynamicMax = Math.max(650, window.innerWidth * 0.48);
+      const max = Math.min(dynamicMax, rightW - MIN_CFG_W - 8);
       return Math.min(Math.max(cur - dx, MIN_STATE_W), Math.max(max, MIN_STATE_W));
     });
   };
 
   return (
     <div
-      className="flex flex-col h-screen bg-viz-body text-viz-ink"
+      className="flex flex-col h-screen bg-viz-body text-viz-ink select-none font-sans"
       data-engine={engineSel.engine}
       data-fallback={engineSel.fallback}
       data-toolchain={engineSel.toolchainNote}
     >
       {/* Header */}
-      <header className="flex items-center justify-between px-4 py-2 bg-viz-body border-b border-viz-line shrink-0">
-        <div className="flex items-center gap-3">
-          <h1 className="text-sm font-semibold text-viz-ink">AlgoTheseus</h1>
-          <span className="text-xs bg-viz-panel text-viz-ink/60 px-2 py-0.5 rounded font-mono">C++ · libclang</span>
-          <span data-testid="engine-badge" title={engineSel.crossOriginIsolated ? "cross-origin isolated (SAB available)" : "SAB disabled — server fallback active"} className="text-xs bg-viz-panel text-viz-ink/60 px-2 py-0.5 rounded font-mono">engine: {engineSel.engine}</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <select
-            aria-label="Theme"
-            value={theme}
-            onChange={(e) => setTheme(applyTheme(e.target.value))}
-            className="text-xs bg-viz-panel text-viz-ink/60 px-2 py-1 rounded font-mono"
-          >
-            {THEMES.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </select>
-          {status === "done" && (
-            <button
-              onClick={() => { reset(); useTraceStore.getState().reset(); useCFGStore.getState().reset(); }}
-              className="text-xs text-viz-ink/60 hover:text-viz-ink transition-colors"
-            >
-              Reset
-            </button>
-          )}
-          <button
-            onClick={handleExecute}
-            disabled={isLoading}
-            className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm rounded px-4 py-1.5 transition-colors"
-          >
-            {isLoading ? "Running…" : "Run"}
-          </button>
-        </div>
-      </header>
+      <Header
+        theme={theme}
+        onThemeChange={(t) => setTheme(applyTheme(t))}
+        onExecute={handleExecute}
+        isLoading={isLoading}
+        engineSel={engineSel}
+      />
 
-      {/* Main content */}
-      <div ref={mainRef} className="flex flex-1 overflow-hidden">
-        {/* Left panel: editor + input */}
-        <div
-          ref={leftColRef}
-          className="flex flex-col shrink-0 min-w-0 overflow-hidden"
-          style={{ width: leftW ?? "45%" }}
+      {/* Mobile Segmented View Switcher (< 768px) */}
+      {isMobile && (
+        <nav
+          aria-label="Mobile panel switcher"
+          className="flex items-center justify-around bg-viz-panel/80 border-b border-viz-line p-1 shrink-0 z-20"
         >
-          <div className="flex-1 min-h-0 overflow-hidden at-reserve-editor">
-            <Suspense fallback={<EditorSkeleton />}>
-              <CodeEditor />
-            </Suspense>
-          </div>
-          <Splitter direction="horizontal" onDrag={dragInput} label="Resize input area" />
-          <div
-            className="flex flex-col shrink-0 overflow-hidden"
-            style={{ height: inputH ?? 360 }}
+          <button
+            onClick={() => setMobileTab("code")}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded text-xs font-medium transition-colors ${
+              mobileTab === "code"
+                ? "bg-viz-body text-amber-400 shadow-xs"
+                : "text-viz-ink/60 hover:text-viz-ink"
+            }`}
           >
-            <div className="flex-1 overflow-y-auto p-3 border-b border-viz-line">
-              <InputPanel />
-            </div>
-            <div className="overflow-y-auto p-3">
-              <TestCaseManager />
-            </div>
-          </div>
-        </div>
-
-        <Splitter direction="vertical" onDrag={dragLeft} label="Resize editor area" />
-
-        {/* Right panel: CFG + state */}
-        <div className="flex flex-1 min-w-0 overflow-hidden">
-          {/* CFG */}
-          <div className="flex-1 min-w-0 overflow-hidden at-reserve-cfg">
-            <Suspense fallback={<CfgSkeleton />}>
-              <TraceFlow />
-            </Suspense>
-          </div>
-          <Splitter direction="vertical" onDrag={dragState} label="Resize state panel" />
-          {/* State panel */}
-          <div
-            className="shrink-0 overflow-hidden border-l border-viz-line at-reserve-state"
-            style={{ width: stateW ?? 260 }}
+            <Code2 className="w-3.5 h-3.5" />
+            <span>Code</span>
+          </button>
+          <button
+            onClick={() => setMobileTab("flow")}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded text-xs font-medium transition-colors ${
+              mobileTab === "flow"
+                ? "bg-viz-body text-amber-400 shadow-xs"
+                : "text-viz-ink/60 hover:text-viz-ink"
+            }`}
           >
-            <Suspense fallback={<StatePanelSkeleton />}>
-              <StatePanel />
-            </Suspense>
+            <GitFork className="w-3.5 h-3.5" />
+            <span>Flow Graph</span>
+          </button>
+          <button
+            onClick={() => setMobileTab("state")}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded text-xs font-medium transition-colors ${
+              mobileTab === "state"
+                ? "bg-viz-body text-amber-400 shadow-xs"
+                : "text-viz-ink/60 hover:text-viz-ink"
+            }`}
+          >
+            <Layers className="w-3.5 h-3.5" />
+            <span>Variables</span>
+          </button>
+          <button
+            onClick={() => setMobileTab("console")}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded text-xs font-medium transition-colors ${
+              mobileTab === "console"
+                ? "bg-viz-body text-amber-400 shadow-xs"
+                : "text-viz-ink/60 hover:text-viz-ink"
+            }`}
+          >
+            <Terminal className="w-3.5 h-3.5" />
+            <span>I/O</span>
+          </button>
+        </nav>
+      )}
+
+      {/* Main Content Area */}
+      <div ref={mainRef} className="flex flex-1 min-h-0 overflow-hidden relative">
+        {/* Mobile View: All components stay mounted in DOM to prevent state/zoom reset */}
+        {isMobile ? (
+          <div className="flex flex-1 min-h-0 overflow-hidden relative w-full h-full">
+            <div
+              className={`flex-1 flex flex-col h-full overflow-hidden ${
+                mobileTab === "code" ? "flex" : "hidden"
+              }`}
+            >
+              <Suspense fallback={<EditorSkeleton />}>
+                <CodeEditor />
+              </Suspense>
+            </div>
+
+            <div
+              className={`flex-1 flex flex-col h-full overflow-hidden ${
+                mobileTab === "flow" ? "flex" : "hidden"
+              }`}
+            >
+              <Suspense fallback={<CfgSkeleton />}>
+                <TraceFlow />
+              </Suspense>
+            </div>
+
+            <div
+              className={`flex-1 flex flex-col h-full overflow-y-auto ${
+                mobileTab === "state" ? "flex" : "hidden"
+              }`}
+            >
+              <Suspense fallback={<StatePanelSkeleton />}>
+                <StatePanel />
+              </Suspense>
+            </div>
+
+            <div
+              className={`flex-1 flex flex-col h-full overflow-hidden ${
+                mobileTab === "console" ? "flex" : "hidden"
+              }`}
+            >
+              <WorkbenchTray />
+            </div>
           </div>
-        </div>
+        ) : (
+          /* Desktop Workbench: 3-column resizable layout */
+          <div className="flex flex-1 min-h-0 overflow-hidden w-full h-full">
+            {/* Left Panel: Editor + Tabbed Workbench Tray */}
+            <div
+              ref={leftColRef}
+              className="flex flex-col shrink-0 min-w-0 overflow-hidden"
+              style={{ width: leftW ?? "42%" }}
+            >
+              <div className="flex-1 min-h-0 overflow-hidden at-reserve-editor">
+                <Suspense fallback={<EditorSkeleton />}>
+                  <CodeEditor />
+                </Suspense>
+              </div>
+
+              <Splitter
+                direction="horizontal"
+                onDrag={dragInput}
+                label="Resize input area"
+              />
+
+              <div
+                className="flex flex-col shrink-0 overflow-hidden border-t border-viz-line"
+                style={{ height: inputH ?? 260 }}
+              >
+                <WorkbenchTray />
+              </div>
+            </div>
+
+            <Splitter
+              direction="vertical"
+              onDrag={dragLeft}
+              label="Resize editor area"
+            />
+
+            {/* Middle Panel: CFG (TraceFlow) */}
+            <div className="flex-1 min-w-0 overflow-hidden at-reserve-cfg relative">
+              <Suspense fallback={<CfgSkeleton />}>
+                <TraceFlow />
+              </Suspense>
+            </div>
+
+            <Splitter
+              direction="vertical"
+              onDrag={dragState}
+              label="Resize state panel"
+            />
+
+            {/* Right Panel: Variable State Inspector */}
+            <div
+              className="shrink-0 overflow-hidden border-l border-viz-line at-reserve-state"
+              style={{ width: stateW ?? 280 }}
+            >
+              <Suspense fallback={<StatePanelSkeleton />}>
+                <StatePanel />
+              </Suspense>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Error / compile error banner */}
+      {/* Error / Runtime Error Banner */}
       {(errorMessage || compileError || runtimeError) && (
-        <div className="px-4 py-2 bg-red-900/30 border-t border-red-800 text-xs text-red-300 font-mono whitespace-pre-wrap max-h-32 overflow-y-auto">
+        <div className="px-4 py-2.5 bg-red-950/70 border-t border-red-800/80 text-xs text-red-200 font-mono whitespace-pre-wrap max-h-36 overflow-y-auto shrink-0 shadow-lg">
+          <div className="font-semibold text-red-400 mb-0.5">Execution Error:</div>
           {compileError || runtimeError || errorMessage}
         </div>
       )}
 
-      {/* Stdout banner (retired when per-step stdout present) */}
+      {/* Stdout Banner (retired when per-step stdout present) */}
       {hasPerStepStdout ? (
         <ProgramOutputBox />
       ) : (
         stdout &&
-        status === "done" && (
-          <div className="px-4 py-2 bg-viz-body border-t border-viz-line text-xs text-viz-ink font-mono">
-            <span className="text-viz-ink/60 mr-2">stdout:</span>{stdout.trim()}
+        status === "done" &&
+        !isMobile && (
+          <div className="px-4 py-2 bg-viz-body border-t border-viz-line text-xs text-viz-ink font-mono shrink-0">
+            <span className="text-viz-ink/60 mr-2">stdout:</span>
+            {stdout.trim()}
           </div>
         )
       )}
 
-      {/* Scrubber — reserved box so late trace data never pushes layout */}
+      {/* Trace Scrubber (Timeline & Playback Controls) */}
       <div className="at-reserve-scrubber shrink-0">
         <TraceScrubber />
       </div>
 
-      {/* Persistent legal footer (all routes) */}
+      {/* Persistent Legal Footer */}
       <Footer />
     </div>
   );

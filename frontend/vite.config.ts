@@ -16,6 +16,8 @@ import path from 'path'
  *   + same-origin proxied API keep the Docker-local dev flow unbroken.
  */
 
+process.env.VITE_SITE_URL = process.env.VITE_SITE_URL || 'http://localhost:3000';
+
 // Cross-Origin-Opener/Embedder-Policy pair for SAB-gated WASM toolchain.
 // Verified against current Vite docs: server.headers / preview.headers.
 const coopCoepHeaders = {
@@ -32,6 +34,7 @@ export default defineConfig({
     alias: {
       '@': path.resolve(__dirname, './src'),
     },
+    dedupe: ['react', 'react-dom', 'react-router', 'react-router-dom'],
   },
   server: {
     host: '0.0.0.0',

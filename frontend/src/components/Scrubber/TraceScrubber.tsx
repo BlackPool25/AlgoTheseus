@@ -1,17 +1,21 @@
 /**
- * components/Scrubber/TraceScrubber.tsx — Step slider + prev/next buttons.
+ * components/Scrubber/TraceScrubber.tsx — Step slider + playback controls.
  *
  * Keyboard navigation is handled by useTraceNavigation hook.
  * Shows: "Step 3 / 16 — bsearch() line 8"
- * Shows a truncation warning if the trace was cut.
- *
- * Compressed-step groups (consecutive STATE events with identical vars) are
- * displayed as "Steps X-Y / Z (N identical steps)".  Click the ⇕ button to expand
- * or collapse the group.  When collapsed, prev/next land on the group
- * boundary (never skip over it); the slider reaches every raw step.
+ * Supports Play / Pause auto-stepping, speed toggle, and touch optimization.
  */
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  Play,
+  Pause,
+  ChevronLeft,
+  ChevronRight,
+  SkipBack,
+  SkipForward,
+  Gauge,
+} from "lucide-react";
 import { useTraceNavigation } from "../../hooks/useTraceNavigation";
 import { useUIStore } from "../../store/uiStore";
 import { useTraceStore } from "../../store/traceStore";
@@ -39,27 +43,33 @@ export function TraceScrubber() {
   const expandedGroups = useTraceStore((s) => s.expandedGroups);
   const toggleExpand = useTraceStore((s) => s.toggleExpand);
 
-  const sliderRef = useRef<HTMLInputElement>(null);
-  // RAF-throttle slider updates (INP budget): coalesce the high-frequency
-  // input events of a drag into one setStep per animation frame.
-  const pendingStepRef = useRef<number | null>(null);
-  const rafIdRef = useRef<number>(0);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [speed, setSpeed] = useState<number>(1); // 0.5x, 1x, 2x
 
+  const sliderRef = useRef<HTMLInputElement>(null);
+
+  // Auto-play timer
   useEffect(() => {
-    return () => {
-      if (rafIdRef.current !== 0) cancelAnimationFrame(rafIdRef.current);
-    };
-  }, []);
+    if (!isPlaying) return;
+    const intervalMs = Math.round(450 / speed);
+    const timer = setInterval(() => {
+      const state = useTraceStore.getState();
+      if (state.currentStep >= state.totalSteps - 1) {
+        setIsPlaying(false);
+      } else {
+        state.setStep(state.currentStep + 1);
+      }
+    }, intervalMs);
+
+    return () => clearInterval(timer);
+  }, [isPlaying, speed]);
 
   const handleSliderChange = (value: number): void => {
-    pendingStepRef.current = value;
-    if (rafIdRef.current !== 0) return;
-    rafIdRef.current = requestAnimationFrame(() => {
-      rafIdRef.current = 0;
-      const pending = pendingStepRef.current;
-      pendingStepRef.current = null;
-      if (pending !== null) setStep(pending);
-    });
+    setStep(value);
+  };
+
+  const cycleSpeed = () => {
+    setSpeed((s) => (s === 0.5 ? 1 : s === 1 ? 2 : 0.5));
   };
 
   // Find the compressed group the user is currently inside (if any, and if collapsed)
@@ -90,41 +100,113 @@ export function TraceScrubber() {
   if (totalSteps === 0) return null;
 
   return (
-    <div className="flex flex-col gap-1 px-4 py-2 bg-viz-body border-t border-zinc-800">
-      {/* Label row — shows step info + expand/collapse toggle */}
-      <div className="flex items-center justify-between">
-        <span className="text-xs text-zinc-400 font-mono">{displayLabel}</span>
-        <div className="flex items-center gap-2">
+    <div className="flex flex-col gap-1.5 px-3 md:px-5 py-2.5 bg-viz-body border-t border-viz-line select-none z-30">
+      {/* Label row — shows step info + expand/collapse toggle + speed badge */}
+      <div className="flex items-center justify-between gap-2 min-w-0">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="text-xs font-mono text-viz-ink/80 truncate">
+            {displayLabel}
+          </span>
           {activeGroup && (
             <button
               onClick={() => toggleExpand(activeGroup.startStep)}
-              className="text-[10px] text-violet-400 hover:text-violet-300 bg-violet-500/20 px-1.5 py-0.5 rounded border border-violet-500/30 transition-colors"
+              className="text-[10px] text-amber-400 hover:text-amber-300 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/30 transition-colors shrink-0 font-mono"
               title="Expand to see individual steps"
               aria-label="Expand compressed step group"
             >
-              ⇕
+              ⇕ expand group
             </button>
           )}
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0">
           {truncated && (
             <span className="text-[10px] text-orange-400 bg-orange-500/10 px-2 py-0.5 rounded border border-orange-500/30">
               ⚠ trace truncated at {totalSteps} steps
             </span>
           )}
+          <button
+            onClick={cycleSpeed}
+            className="flex items-center gap-1 text-[11px] font-mono px-2 py-0.5 rounded bg-viz-panel border border-viz-line text-viz-ink/70 hover:text-amber-400 transition-colors"
+            title="Playback speed"
+          >
+            <Gauge className="w-3 h-3" />
+            <span>{speed}x</span>
+          </button>
         </div>
       </div>
 
-      {/* Slider row */}
-      <div className="flex items-center gap-3">
+      {/* Control buttons & Timeline scrubber row */}
+      <div className="flex items-center gap-2 md:gap-3">
+        {/* Step to Start */}
+        <button
+          onClick={() => setStep(0)}
+          disabled={!canGoPrev}
+          className="p-1.5 rounded text-viz-ink/60 hover:text-viz-ink hover:bg-viz-panel disabled:opacity-20 transition-colors cursor-pointer"
+          title="Jump to first step (Home)"
+          aria-label="First step"
+        >
+          <SkipBack className="w-4 h-4" />
+        </button>
+
+        {/* Previous Step */}
         <button
           onClick={prev}
           disabled={!canGoPrev}
-          className="text-zinc-400 hover:text-white disabled:opacity-30 transition-colors text-lg leading-none"
+          className="p-1.5 rounded text-viz-ink/80 hover:text-viz-ink hover:bg-viz-panel disabled:opacity-20 transition-colors cursor-pointer"
           aria-label="Previous step"
+          title="Step back (Left Arrow)"
         >
-          ‹
+          <ChevronLeft className="w-5 h-5" />
         </button>
 
-        <div className="flex-1 relative">
+        {/* Play / Pause Toggle */}
+        <button
+          onClick={() => {
+            if (currentStep >= totalSteps - 1) {
+              setStep(0);
+            }
+            setIsPlaying((p) => !p);
+          }}
+          className={`p-1.5 md:p-2 rounded-full transition-all duration-150 cursor-pointer shadow-xs ${
+            isPlaying
+              ? "bg-amber-500 text-slate-950 hover:bg-amber-400"
+              : "bg-viz-panel hover:bg-viz-line text-amber-400 border border-viz-line"
+          }`}
+          title={isPlaying ? "Pause auto-trace" : "Auto-play trace"}
+          aria-label={isPlaying ? "Pause" : "Play"}
+        >
+          {isPlaying ? (
+            <Pause className="w-4 h-4 fill-current" />
+          ) : (
+            <Play className="w-4 h-4 fill-current ml-0.5" />
+          )}
+        </button>
+
+        {/* Next Step */}
+        <button
+          onClick={next}
+          disabled={!canGoNext}
+          className="p-1.5 rounded text-viz-ink/80 hover:text-viz-ink hover:bg-viz-panel disabled:opacity-20 transition-colors cursor-pointer"
+          aria-label="Next step"
+          title="Step forward (Right Arrow)"
+        >
+          <ChevronRight className="w-5 h-5" />
+        </button>
+
+        {/* Step to End */}
+        <button
+          onClick={() => setStep(totalSteps - 1)}
+          disabled={!canGoNext}
+          className="p-1.5 rounded text-viz-ink/60 hover:text-viz-ink hover:bg-viz-panel disabled:opacity-20 transition-colors cursor-pointer"
+          title="Jump to last step (End)"
+          aria-label="Last step"
+        >
+          <SkipForward className="w-4 h-4" />
+        </button>
+
+        {/* Scrubber slider track */}
+        <div className="flex-1 relative flex items-center py-2">
           <input
             ref={sliderRef}
             type="range"
@@ -132,7 +214,7 @@ export function TraceScrubber() {
             max={totalSteps - 1}
             value={currentStep}
             onChange={(e) => handleSliderChange(Number(e.target.value))}
-            className="w-full accent-amber-400 h-1"
+            className="w-full accent-amber-400 h-1.5 bg-viz-panel rounded-lg appearance-none cursor-pointer focus:outline-none"
             aria-label="Trace step"
           />
           {/* Compressed-group indicators on the slider track */}
@@ -141,10 +223,10 @@ export function TraceScrubber() {
               {trackMap.map((seg) => (
                 <div
                   key={seg.startStep}
-                  className="absolute h-2 w-0.5 bg-violet-500/60 rounded-full"
+                  className="absolute h-2.5 w-0.5 bg-violet-400/70 rounded-full"
                   style={{
                     left: `${seg.left * 100}%`,
-                    width: `${Math.max(seg.width * 100, 0.2)}%`,
+                    width: `${Math.max(seg.width * 100, 0.25)}%`,
                   }}
                   title={`Steps ${seg.startStep + 1}–${seg.startStep + Math.round(seg.width * totalSteps) - 1} linked`}
                 />
@@ -153,14 +235,12 @@ export function TraceScrubber() {
           )}
         </div>
 
-        <button
-          onClick={next}
-          disabled={!canGoNext}
-          className="text-zinc-400 hover:text-white disabled:opacity-30 transition-colors text-lg leading-none"
-          aria-label="Next step"
-        >
-          ›
-        </button>
+        {/* Step Counter Badge */}
+        <div className="hidden sm:flex items-center text-xs font-mono text-viz-ink/70 px-2 py-1 rounded bg-viz-panel border border-viz-line shrink-0">
+          <span className="text-amber-400 font-semibold">{currentStep + 1}</span>
+          <span className="text-viz-ink/40 mx-1">/</span>
+          <span>{totalSteps}</span>
+        </div>
       </div>
     </div>
   );

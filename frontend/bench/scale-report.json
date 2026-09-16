@@ -1,65 +1,65 @@
 {
-  "measured_at": "2026-09-15T10:00:16.671Z",
+  "measured_at": "2026-09-16T01:12:33.226Z",
   "machine": {
     "cpu_model": "AMD Ryzen 5 7600 6-Core Processor",
     "cpu_count": 12,
     "ram_gb": 30.5,
     "platform": "linux 7.1.13-200.fc44.x86_64",
-    "node": "v24.19.0"
+    "node": "v24.3.0"
   },
   "browser": {
-    "measured_at": "2026-09-15T10:00:06.225Z",
+    "measured_at": "2026-09-16T01:10:24.031Z",
     "browser": "chromium",
     "browser_version": "153.0.8010.12",
-    "wall_total_ms": 24320,
+    "wall_total_ms": 30468,
     "legs": {
       "nested-loop": {
         "total_steps": 10002,
         "payload_bytes": 1027588,
-        "load_ms": 453,
+        "load_ms": 712,
         "verdict": "measured",
-        "p95_ms": 5.105000000447035,
+        "p95_ms": 10.195000000065193,
         "repeat_p95s": [
-          33.730000000447035,
-          5.105000000447035,
-          4.41499999910593
+          12.940000000060536,
+          10.195000000065193,
+          7.029999999911524
         ],
-        "dom_collapsed": 147,
+        "dom_collapsed": 211,
         "spot_reach_pct": 100
       },
       "fib-recursion": {
         "total_steps": 65675,
         "payload_bytes": 6437269,
-        "load_ms": 5674,
+        "load_ms": 6165,
         "verdict": "measured",
-        "p95_ms": 11.214999999850988,
+        "p95_ms": 172.65500000002794,
         "repeat_p95s": [
-          13.125,
-          11.214999999850988,
-          10.524999998509884
+          182.2399999999907,
+          172.65500000002794,
+          169.5549999999348
         ],
-        "dom_collapsed": 385,
+        "dom_collapsed": 11248,
         "spot_reach_pct": 100
       },
       "hot-call": {
         "total_steps": 100002,
         "payload_bytes": 10200691,
-        "load_ms": 15939,
+        "load_ms": 12951,
         "verdict": "measured",
-        "p95_ms": 17.46000000089407,
+        "p95_ms": 33.27000000001863,
         "repeat_p95s": [
-          17.41000000014901,
-          17.46000000089407,
-          18.885000001639128
+          30.410000000032596,
+          33.27000000001863,
+          34.11999999999534
         ],
-        "dom_collapsed": 383,
+        "dom_collapsed": 300,
         "spot_reach_pct": 100
       }
     },
     "vector_guard": {
-      "median_ms": 2.5150000005960464,
-      "baseline_ms": 4.320000000298023,
-      "ratio": 0.5821759260237371,
+      "median_ms": 8.409999999916181,
+      "baseline_ms": 9.774999999906868,
+      "ratio": 0.8603580562656069,
       "pass": true
     }
   },
@@ -69,27 +69,27 @@
       "payload_bytes": 1027588,
       "payload_gate_bytes": 26214400,
       "reachability_pct": 100,
-      "browser_p95_ms": 5.105000000447035,
-      "browser_dom_collapsed": 147,
-      "browser_load_ms": 453
+      "browser_p95_ms": 10.195000000065193,
+      "browser_dom_collapsed": 211,
+      "browser_load_ms": 712
     },
     "fib-recursion": {
       "total_steps": 65675,
       "payload_bytes": 6437269,
       "payload_gate_bytes": 26214400,
       "reachability_pct": 100,
-      "browser_p95_ms": 11.214999999850988,
-      "browser_dom_collapsed": 385,
-      "browser_load_ms": 5674
+      "browser_p95_ms": 172.65500000002794,
+      "browser_dom_collapsed": 11248,
+      "browser_load_ms": 6165
     },
     "hot-call": {
       "total_steps": 100002,
       "payload_bytes": 10200691,
       "payload_gate_bytes": 26214400,
       "reachability_pct": 100,
-      "browser_p95_ms": 17.46000000089407,
-      "browser_dom_collapsed": 383,
-      "browser_load_ms": 15939
+      "browser_p95_ms": 33.27000000001863,
+      "browser_dom_collapsed": 300,
+      "browser_load_ms": 12951
     }
   },
   "fidelity_2k": {
@@ -115,22 +115,22 @@
     {
       "gate": "R7.3 reachability nested-loop",
       "verdict": "pass",
-      "detail": "10002/10002 (100%) audit 6ms"
+      "detail": "10002/10002 (100%) audit 2760ms"
     },
     {
       "gate": "R7.3 reachability fib-recursion",
       "verdict": "pass",
-      "detail": "65675/65675 (100%) audit 34ms"
+      "detail": "65675/65675 (100%) audit 37826ms"
     },
     {
       "gate": "R7.3 reachability hot-call",
       "verdict": "pass",
-      "detail": "100002/100002 (100%) audit 25ms"
+      "detail": "100002/100002 (100%) audit 83124ms"
     },
     {
       "gate": "R7.3 reachability fidelity-2k",
       "verdict": "pass",
-      "detail": "1502/1502 (100%) audit 0ms"
+      "detail": "1502/1502 (100%) audit 28ms"
     },
     {
       "gate": "R7.4 fidelity-2k",
@@ -140,37 +140,37 @@
     {
       "gate": "R7.1 scrub-p95 nested-loop",
       "verdict": "pass",
-      "detail": "median-of-medians p95=5.11ms <= 100ms (repeats 33.7/5.1/4.4)"
+      "detail": "median-of-medians p95=10.20ms <= 100ms (repeats 12.9/10.2/7.0)"
     },
     {
       "gate": "R7.2 collapsed-DOM nested-loop",
       "verdict": "pass",
-      "detail": "147 nodes <= 1000 (collapsed)"
+      "detail": "211 nodes <= 1000 (collapsed)"
     },
     {
       "gate": "R7.1 scrub-p95 fib-recursion",
-      "verdict": "pass",
-      "detail": "median-of-medians p95=11.21ms <= 100ms (repeats 13.1/11.2/10.5)"
+      "verdict": "downgrade",
+      "detail": "p95=172.66ms > 100ms — HONEST DOWNGRADE + A1/A2 canvas/cap escalation (see report note)"
     },
     {
       "gate": "R7.2 collapsed-DOM fib-recursion",
-      "verdict": "pass",
-      "detail": "385 nodes <= 1000 (collapsed)"
+      "verdict": "downgrade",
+      "detail": "11248 nodes > 1000 — HONEST DOWNGRADE + A1/A2 escalation"
     },
     {
       "gate": "R7.1 scrub-p95 hot-call",
       "verdict": "pass",
-      "detail": "median-of-medians p95=17.46ms <= 100ms (repeats 17.4/17.5/18.9)"
+      "detail": "median-of-medians p95=33.27ms <= 100ms (repeats 30.4/33.3/34.1)"
     },
     {
       "gate": "R7.2 collapsed-DOM hot-call",
       "verdict": "pass",
-      "detail": "383 nodes <= 1000 (collapsed)"
+      "detail": "300 nodes <= 1000 (collapsed)"
     },
     {
       "gate": "R7.6 vector-flash",
       "verdict": "pass",
-      "detail": "ratio=0.582 <= 1.2x (median 2.52ms vs baseline 4.32ms)"
+      "detail": "ratio=0.860 <= 1.2x (median 8.41ms vs baseline 9.77ms)"
     },
     {
       "gate": "R6.1/R6.3 heap-collapsed+single-flash",

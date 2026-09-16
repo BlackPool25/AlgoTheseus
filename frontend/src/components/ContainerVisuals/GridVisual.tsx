@@ -16,6 +16,7 @@
 import { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useVirtualizedList } from "../../hooks/useVirtualizedList";
+import { formatCompactNumber } from "../../utils/format";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -122,7 +123,7 @@ function GridCell({
       data-pos={`${row},${col}`}
       data-changing={isChanging ? "true" : "false"}
       data-highlighted={isHighlighted ? "true" : "false"}
-      className="flex items-center justify-center text-[10px] font-mono cursor-pointer rounded-sm select-none"
+      className="flex items-center justify-center text-[10px] font-mono cursor-pointer rounded-sm select-none overflow-hidden truncate px-0.5 tabular-nums"
       style={{
         width: CELL_SIZE,
         height: CELL_SIZE,
@@ -132,7 +133,7 @@ function GridCell({
       }}
       title={`[${row}, ${col}] = ${value}`}
     >
-      {regionId !== undefined ? regionId : value}
+      {regionId !== undefined ? regionId : (typeof value === "number" ? formatCompactNumber(value) : String(value))}
     </div>
   );
 

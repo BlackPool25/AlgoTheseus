@@ -6,13 +6,19 @@ type SplitterProps = {
   /** Called with the pointer movement in px since the last move event. */
   onDrag: (dx: number, dy: number) => void;
   label?: string;
+  className?: string;
 };
 
 /**
- * Tiny reusable drag divider. No dependencies — pointer events +
- * setPointerCapture. Parent owns sizes and clamping; this only reports deltas.
+ * Modern tactile drag divider with visible grab handle affordance.
+ * Pointer events + setPointerCapture with 8px hit target and smooth active glow.
  */
-export function Splitter({ direction, onDrag, label = "Resize panels" }: SplitterProps) {
+export function Splitter({
+  direction,
+  onDrag,
+  label = "Resize panels",
+  className = "",
+}: SplitterProps) {
   const [dragging, setDragging] = useState(false);
   const start = useRef({ x: 0, y: 0 });
 
@@ -49,17 +55,41 @@ export function Splitter({ direction, onDrag, label = "Resize panels" }: Splitte
       role="separator"
       aria-label={label}
       aria-orientation={vertical ? "vertical" : "horizontal"}
+      tabIndex={0}
+      title="Drag to resize panels"
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onPointerCancel={handlePointerUp}
       className={[
-        "shrink-0 bg-zinc-800 transition-colors hover:bg-zinc-600",
-        dragging ? "bg-blue-600 select-none touch-none" : "select-none touch-none",
+        "group relative shrink-0 select-none touch-none transition-colors z-20",
         vertical
-          ? "-mx-0.5 w-1 cursor-col-resize"
-          : "-my-0.5 h-1 cursor-row-resize",
+          ? "-mx-1 w-2 cursor-ew-resize flex items-center justify-center"
+          : "-my-1 h-2 cursor-ns-resize flex items-center justify-center",
+        className,
       ].join(" ")}
-    />
+    >
+      {/* Visual divider line */}
+      <div
+        className={[
+          "absolute transition-colors",
+          vertical ? "w-[1px] h-full" : "h-[1px] w-full",
+          dragging
+            ? "bg-amber-400 dark:bg-amber-400"
+            : "bg-viz-line group-hover:bg-amber-400/70",
+        ].join(" ")}
+      />
+
+      {/* Tactile center grab pill */}
+      <div
+        className={[
+          "relative z-10 rounded-full transition-all duration-150 shadow-xs",
+          vertical ? "w-1 h-7 my-auto" : "h-1 w-7 mx-auto",
+          dragging
+            ? "bg-amber-400 scale-110 shadow-[0_0_8px_rgba(245,158,11,0.5)]"
+            : "bg-viz-line/80 group-hover:bg-amber-400/90 group-hover:scale-105",
+        ].join(" ")}
+      />
+    </div>
   );
 }

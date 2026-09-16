@@ -9,7 +9,7 @@ import {
   useVirtualizedList,
   VIRTUALIZE_THRESHOLD,
 } from "../../hooks/useVirtualizedList";
-import { renderCellValue } from "../../utils/format";
+import { renderCellValue, renderCompactCellValue } from "../../utils/format";
 import { flashStyle } from "./flash";
 
 interface Props {
@@ -46,12 +46,12 @@ export function VectorVisual({ value, name, highlightIndex, changedIndices = [] 
   const changed = new Set(changedIndices);
   /** Returns border/fill classes for an index that may be highlighted. */
   function boxClass(i: number): string {
-    const base = "w-8 h-7 flex items-center justify-center text-xs font-mono truncate overflow-hidden border";
+    const base = "w-8 h-7 flex items-center justify-center text-xs font-mono truncate overflow-hidden border tabular-nums select-none";
     if (changed.has(i)) {
-      return `${base} border-viz-flash bg-viz-flash/15 text-viz-flash`;
+      return `${base} border-viz-flash bg-viz-flash/15 text-viz-flash font-semibold`;
     }
     if (i === highlightIndex) {
-      return `${base} border-viz-flash bg-viz-flash/15 text-viz-flash`;
+      return `${base} border-viz-flash bg-viz-flash/15 text-viz-flash font-semibold`;
     }
     return `${base} border-viz-line bg-viz-panel text-viz-ink`;
   }
@@ -73,7 +73,7 @@ export function VectorVisual({ value, name, highlightIndex, changedIndices = [] 
           {items.map((item, i) => (
             <div key={i} className="flex flex-col items-center shrink-0">
               <div className={boxClass(i)} style={flashStyle(changed.has(i))} title={renderCellValue(item)} {...cellAttrs(i)}>
-                {renderCellValue(item)}
+                {renderCompactCellValue(item)}
               </div>
               <div className={`text-[10px] font-mono ${i === highlightIndex || changed.has(i) ? "text-viz-flash" : "text-viz-ink/60"}`}>
                 {i}
@@ -117,7 +117,7 @@ export function VectorVisual({ value, name, highlightIndex, changedIndices = [] 
                 }}
               >
                 <div className={boxClass(virtualItem.index)} style={flashStyle(changed.has(virtualItem.index))} title={renderCellValue(item)} {...cellAttrs(virtualItem.index)}>
-                  {renderCellValue(item)}
+                  {renderCompactCellValue(item)}
                 </div>
                 <div className={`text-[10px] font-mono ${virtualItem.index === highlightIndex || changed.has(virtualItem.index) ? "text-viz-flash" : "text-viz-ink/60"}`}>
                   {virtualItem.index}

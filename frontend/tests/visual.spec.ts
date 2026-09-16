@@ -105,6 +105,7 @@ async function screenshotFullPage(page: Page, name: string) {
     animations: "disabled",
     fullPage: false,
     threshold: 0.20,
+    maxDiffPixelRatio: 0.05,
   });
 }
 

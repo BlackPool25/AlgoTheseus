@@ -23,6 +23,10 @@ Thumbs.db
 .omo/
 .codegraph/
 .serena/
+test-results/
+playwright-report/
+frontend/test-results/
+frontend/bench/fixtures/
 
 # Environment
 .env

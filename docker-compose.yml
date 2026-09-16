@@ -1,13 +1,22 @@
-# Docker Compose configuration for AlgoTheseus
-version: "3.8"
-
 services:
+  # DooD initialization: ensure shared temp directory has 1777 permissions for appuser
+  init-dood:
+    image: alpine
+    container_name: algo-theseus-init-dood
+    volumes:
+      - /tmp/algo-theseus:/tmp/algo-theseus
+    command: ["sh", "-c", "mkdir -p /tmp/algo-theseus && chmod 1777 /tmp/algo-theseus"]
+    restart: "no"
+
   # FastAPI Python backend
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: algo-theseus-backend
+    depends_on:
+      init-dood:
+        condition: service_completed_successfully
     # ports: no host exposure — backend is reached via internal Docker DNS through nginx proxy
     # DooD fix: the mounted docker.sock is root:<docker-gid> 0660, and the
     # image runs as non-root appuser (Cloud Run least-privilege). Without this

@@ -44,14 +44,23 @@ export function TraceScrubber() {
   const toggleExpand = useTraceStore((s) => s.toggleExpand);
 
   const [isPlaying, setIsPlaying] = useState(false);
-  const [speed, setSpeed] = useState<number>(1); // 0.5x, 1x, 2x
+  const [speed, setSpeed] = useState<number>(1); // 0.5x, 1x, 1.5x, 2x
 
   const sliderRef = useRef<HTMLInputElement>(null);
+
+  // Replay speed intervals:
+  // 0.5x (slow/study: 2000ms), 1x (comfortable reading: 1200ms), 1.5x (brisk: 750ms), 2x (fast: 450ms)
+  const SPEED_CONFIG: Record<number, number> = {
+    0.5: 2000,
+    1: 1200,
+    1.5: 750,
+    2: 450,
+  };
 
   // Auto-play timer
   useEffect(() => {
     if (!isPlaying) return;
-    const intervalMs = Math.round(450 / speed);
+    const intervalMs = SPEED_CONFIG[speed] ?? 1200;
     const timer = setInterval(() => {
       const state = useTraceStore.getState();
       if (state.currentStep >= state.totalSteps - 1) {
@@ -69,7 +78,12 @@ export function TraceScrubber() {
   };
 
   const cycleSpeed = () => {
-    setSpeed((s) => (s === 0.5 ? 1 : s === 1 ? 2 : 0.5));
+    setSpeed((s) => {
+      if (s === 0.5) return 1;
+      if (s === 1) return 1.5;
+      if (s === 1.5) return 2;
+      return 0.5;
+    });
   };
 
   // Find the compressed group the user is currently inside (if any, and if collapsed)
@@ -85,16 +99,23 @@ export function TraceScrubber() {
     return `${prefix} / ${totalSteps} (${activeGroup.count} identical steps) — ${rawLabel.split("—")[1]?.trim() ?? ""}`;
   }, [activeGroup, rawLabel, totalSteps]);
 
-  // Build a "track map" — fraction of total steps each compressed group occupies
+  // Build a "track map" aligned with the slider thumb travel distance (0 to totalSteps - 1)
   const trackMap = useMemo(() => {
-    if (totalSteps === 0) return [];
+    if (totalSteps <= 1) return [];
+    const maxIdx = totalSteps - 1;
     return compressedSteps
       .filter((g) => !expandedGroups.includes(g.startStep))
-      .map((g) => ({
-        left: g.startStep / totalSteps,
-        width: (g.endStep - g.startStep + 1) / totalSteps,
-        startStep: g.startStep,
-      }));
+      .map((g) => {
+        const leftPercent = (g.startStep / maxIdx) * 100;
+        const rightPercent = (g.endStep / maxIdx) * 100;
+        const widthPercent = Math.max(rightPercent - leftPercent, 1.2);
+        return {
+          leftPercent,
+          widthPercent,
+          startStep: g.startStep,
+          endStep: g.endStep,
+        };
+      });
   }, [compressedSteps, expandedGroups, totalSteps]);
 
   if (totalSteps === 0) return null;
@@ -104,7 +125,7 @@ export function TraceScrubber() {
       {/* Label row — shows step info + expand/collapse toggle + speed badge */}
       <div className="flex items-center justify-between gap-2 min-w-0">
         <div className="flex items-center gap-2 min-w-0">
-          <span className="text-xs font-mono text-viz-ink/80 truncate">
+          <span className="text-xs font-mono text-viz-ink font-medium truncate">
             {displayLabel}
           </span>
           {activeGroup && (
@@ -127,10 +148,10 @@ export function TraceScrubber() {
           )}
           <button
             onClick={cycleSpeed}
-            className="flex items-center gap-1 text-[11px] font-mono px-2 py-0.5 rounded bg-viz-panel border border-viz-line text-viz-ink/70 hover:text-amber-400 transition-colors"
-            title="Playback speed"
+            className="flex items-center gap-1.5 text-[11px] font-mono px-2.5 py-1 rounded bg-viz-panel border border-viz-line text-viz-ink/80 hover:text-amber-400 hover:border-amber-400/50 transition-colors cursor-pointer shadow-2xs"
+            title={`Playback speed: ${speed}x (click to change)`}
           >
-            <Gauge className="w-3 h-3" />
+            <Gauge className="w-3.5 h-3.5 text-amber-400" />
             <span>{speed}x</span>
           </button>
         </div>
@@ -206,7 +227,24 @@ export function TraceScrubber() {
         </button>
 
         {/* Scrubber slider track */}
-        <div className="flex-1 relative flex items-center py-2">
+        <div className="flex-1 relative flex items-center h-8 px-1 min-w-0">
+          {/* Compressed-group indicators on the slider track — inset by 8px on left & right to match thumb center travel */}
+          {trackMap.length > 0 && (
+            <div className="absolute left-[8px] right-[8px] top-1/2 -translate-y-1/2 h-1.5 pointer-events-none rounded-full overflow-hidden z-0">
+              {trackMap.map((seg) => (
+                <div
+                  key={seg.startStep}
+                  className="absolute top-0 bottom-0 bg-violet-400/70 rounded-full"
+                  style={{
+                    left: `${seg.leftPercent}%`,
+                    width: `${seg.widthPercent}%`,
+                  }}
+                  title={`Steps ${seg.startStep + 1}–${seg.endStep + 1} (identical variables)`}
+                />
+              ))}
+            </div>
+          )}
+
           <input
             ref={sliderRef}
             type="range"
@@ -214,32 +252,9 @@ export function TraceScrubber() {
             max={totalSteps - 1}
             value={currentStep}
             onChange={(e) => handleSliderChange(Number(e.target.value))}
-            className="w-full accent-amber-400 h-1.5 bg-viz-panel rounded-lg appearance-none cursor-pointer focus:outline-none"
+            className="w-full relative z-10 accent-amber-400 h-1.5 bg-viz-panel rounded-lg appearance-none cursor-pointer focus:outline-none"
             aria-label="Trace step"
           />
-          {/* Compressed-group indicators on the slider track */}
-          {trackMap.length > 0 && (
-            <div className="absolute top-1/2 left-0 right-0 -translate-y-1/2 pointer-events-none">
-              {trackMap.map((seg) => (
-                <div
-                  key={seg.startStep}
-                  className="absolute h-2.5 w-0.5 bg-violet-400/70 rounded-full"
-                  style={{
-                    left: `${seg.left * 100}%`,
-                    width: `${Math.max(seg.width * 100, 0.25)}%`,
-                  }}
-                  title={`Steps ${seg.startStep + 1}–${seg.startStep + Math.round(seg.width * totalSteps) - 1} linked`}
-                />
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Step Counter Badge */}
-        <div className="hidden sm:flex items-center text-xs font-mono text-viz-ink/70 px-2 py-1 rounded bg-viz-panel border border-viz-line shrink-0">
-          <span className="text-amber-400 font-semibold">{currentStep + 1}</span>
-          <span className="text-viz-ink/40 mx-1">/</span>
-          <span>{totalSteps}</span>
         </div>
       </div>
     </div>

@@ -23,6 +23,7 @@ from dataclasses import dataclass, field
 import clang.cindex as clang
 
 from app.core.instrumenter import _libclang_compat
+from app.core.instrumenter.diagnostics import collect_diagnostics, parse_with_diagnostics
 
 _libclang_compat.ensure_libclang()
 
@@ -115,6 +116,7 @@ class ScopeTracker:
         # W0.1 pin: same shared default as the walker (see ast_walker).
         self.extra_args = extra_args if extra_args is not None else _libclang_compat.default_extra_args()
         self._index = clang.Index.create()
+        self.last_diagnostics: list[str] = []
 
     def build(self) -> dict[str, FunctionScope]:
         """Parse the source and return a scope map per function.
@@ -122,7 +124,8 @@ class ScopeTracker:
         Returns:
             Dict mapping function name → FunctionScope.
         """
-        tu = self._index.parse(self.source_path, args=self.extra_args)
+        tu = parse_with_diagnostics(self._index, self.source_path, self.extra_args)
+        self.last_diagnostics = collect_diagnostics(tu)
         scopes: dict[str, FunctionScope] = {}
         self._visit(tu.cursor, scopes)
         return scopes

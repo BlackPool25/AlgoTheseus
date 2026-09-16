@@ -265,9 +265,13 @@ EDGE_SOURCES: dict[str, str] = {
         "int main(){" + "if(1){" * 50 + "int x=1;" + "}" * 50 + "return 0;}\n"
     ),
     "empty_file": "",
-    "garbage_source": "this is not c++ {{{{\n",
     "no_main": "int helper(int x){return x*2;}\n",
 }
+
+# Wave 2a diagnostics gate: garbage is a broken TU, so it raises the typed
+# gate error (with file:line) instead of returning a string. Still never
+# hangs — the timeout wrapper proves it.
+GARBAGE_SOURCE = "this is not c++ {{{{\n"
 
 
 def _run_with_timeout(func, timeout_s: int = 60):
@@ -292,3 +296,16 @@ def test_instrumenter_edge_graceful(edge: str, caplog: pytest.LogCaptureFixture)
     with caplog.at_level("WARNING"):
         result = _run_with_timeout(lambda: instrument(src))
     assert isinstance(result, str), f"{edge}: instrument must return str"
+
+
+def test_garbage_source_raises_typed_parse_error() -> None:
+    import re
+
+    import pytest
+
+    from app.core.instrumenter import InstrumentParseError
+    from app.core.instrumenter.injector import instrument
+
+    with pytest.raises(InstrumentParseError) as excinfo:
+        _run_with_timeout(lambda: instrument(GARBAGE_SOURCE))
+    assert re.search(r":\d+", str(excinfo.value))

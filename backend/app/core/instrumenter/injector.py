@@ -32,7 +32,10 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 from .ast_walker import InjectionPoint, InjectKind, walk
+from .diagnostics import InstrumentParseError
 from .scope_tracker import FunctionScope, build_scope_map
+
+__all__ = ["InstrumentParseError", "instrument"]
 
 
 def _make_vars_args(var_names: list[str]) -> str:

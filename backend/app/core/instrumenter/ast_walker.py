@@ -31,6 +31,7 @@ import clang.cindex as clang
 # Toolchain pin lives in _libclang_compat (bundled clang/native/libclang.so +
 # registration of cursor kinds missing from the wheel's cindex.py, e.g. 437).
 from app.core.instrumenter import _libclang_compat
+from app.core.instrumenter.diagnostics import collect_diagnostics, parse_with_diagnostics
 
 # Re-exported: resolves the bundled clang/native/libclang.so (never system lib).
 _find_libclang = _libclang_compat._find_libclang
@@ -111,6 +112,7 @@ class WalkResult:
     # Top-level TU variable names (user globals, decl order); injector feeds
     # these to every STATE for the v2 `g` snapshot with change-dedup.
     global_vars: list[str] = field(default_factory=list)
+    diagnostics: list[str] = field(default_factory=list)
 
 
 # ── Walker ────────────────────────────────────────────────────────────────────
@@ -137,19 +139,8 @@ class ASTWalker:
         Returns:
             WalkResult with injection_points and loop_counters.
         """
-        tu = self._index.parse(
-            self.source_path,
-            args=self.extra_args,
-            options=(
-                clang.TranslationUnit.PARSE_DETAILED_PROCESSING_RECORD |
-                clang.TranslationUnit.PARSE_SKIP_FUNCTION_BODIES
-            ),
-        )
-        # Re-parse without SKIP_FUNCTION_BODIES to get full AST
-        tu = self._index.parse(
-            self.source_path,
-            args=self.extra_args,
-        )
+        tu = parse_with_diagnostics(self._index, self.source_path, self.extra_args)
+        diagnostics = collect_diagnostics(tu)
 
         points: list[InjectionPoint] = []
         loop_counters: dict[str, list[str]] = {}
@@ -181,6 +172,7 @@ class ASTWalker:
             injection_points=points,
             loop_counters=loop_counters,
             global_vars=global_vars,
+            diagnostics=diagnostics,
         )
 
     def _collect_user_functions(self, cursor: clang.Cursor, result: set[str]) -> None:

@@ -215,6 +215,20 @@ def _state_insert_line(point_line: int, lines: list[str]) -> int:
     reporting — only the physical placement moves.
     """
     n = len(lines)
+    code0 = re.sub(r'"(?:\\.|[^"\\])*"', '""', lines[point_line - 1].split("//")[0])
+    if re.search(r"\[[^\]]*\]\s*\(.*\)\s*\{\s*$", code0):
+        # Lambda-initializer DECL (`auto f = [...]{`): the statement only
+        # completes at the closing `};` — placing after the header lands
+        # inside the lambda body (self-reference before `auto` deduction).
+        k = point_line + 1
+        bdepth = 1  # header opened one brace; body `;` lines must not stop the scan
+        while k <= n and k - point_line <= 100:
+            codek = re.sub(r'"(?:\\.|[^"\\])*"', '""', lines[k - 1].split("//")[0])
+            bdepth += codek.count("{") - codek.count("}")
+            if bdepth <= 0 and codek.strip().endswith(";"):
+                return k
+            k += 1
+        return point_line
     depth = 0
     k = point_line
     while k <= n:
@@ -384,6 +398,9 @@ def instrument(source: str, source_path: str | None = None) -> str:
                 )
 
         elif point.kind == InjectKind.STATE:
+            # Braceless do-body / bare-do header: any splice splits `do <body> while (...)` — skip (header-adjacent STATEs keep it observable).
+            if _is_braceless_do_body(point.line, lines) or _is_braceless_do_header(point.line, lines):
+                continue
             insert_line = _state_insert_line(point.line, lines)
             line_text = lines[insert_line - 1] if insert_line <= len(lines) else ""
             if "return" in line_text:

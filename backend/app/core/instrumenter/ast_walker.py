@@ -877,15 +877,39 @@ class ASTWalker:
                 self._walk_stmt(body, points, loop_counters, func_name, func_depth, seen)
             return
 
+        # ── Try/catch + lambda → recurse like COMPOUND ─────────────────────────
+        # v1 scope: no TRACE on the header itself (skip-not-brace-wrap); bodies
+        # recurse so inner statements get STATE. Params/conditions are skipped.
+        if kind in _TRY_CATCH_KINDS or (_LAMBDA_KIND is not None and kind == _LAMBDA_KIND):
+            for child in cursor.get_children():
+                ck = _cursor_kind(child)
+                if ck == clang.CursorKind.COMPOUND_STMT or ck in _TRY_CATCH_KINDS or (
+                    _LAMBDA_KIND is not None and ck == _LAMBDA_KIND
+                ):
+                    self._walk_stmt(child, points, loop_counters, func_name, func_depth, seen)
+            return
+
+        # v1 scope: never splice inside template definitions (members instantiate per specialization).
+        if kind in _CLASS_TEMPLATE_KINDS or kind in _FUNCTION_TEMPLATE_KINDS:
+            return
+
         # ── Compound statement → recurse ──────────────────────────────────────
         if kind == clang.CursorKind.COMPOUND_STMT:
             for child in cursor.get_children():
                 self._walk_stmt(child, points, loop_counters, func_name, func_depth, seen)
             return
 
-        # Default: expression / assignment / call / DECL_STMT inside a nested
-        # body. STATE for its line was already emitted above; nothing more to
-        # recurse into (children are expressions, not statements).
+        # Lambdas nested in declarations/initializers (e.g. `auto f = [...]{};`):
+        # the lambda body recurses like COMPOUND; nothing else descended into.
+        for child in cursor.get_children():
+            ck = _cursor_kind(child)
+            if ck in _TRY_CATCH_KINDS or (_LAMBDA_KIND is not None and ck == _LAMBDA_KIND):
+                self._walk_stmt(child, points, loop_counters, func_name, func_depth, seen)
+            elif ck is not None and (ck in _UNEXPOSED_KINDS or ck == clang.CursorKind.VAR_DECL):
+                for gchild in child.get_children():
+                    gk = _cursor_kind(gchild)
+                    if gk in _TRY_CATCH_KINDS or (_LAMBDA_KIND is not None and gk == _LAMBDA_KIND):
+                        self._walk_stmt(gchild, points, loop_counters, func_name, func_depth, seen)
         return
 
 

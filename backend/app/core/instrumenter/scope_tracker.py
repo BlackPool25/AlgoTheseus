@@ -295,10 +295,31 @@ class ScopeTracker:
                 # location in STL headers — record at the user-code VAR_DECL
                 # line instead so the entry lands on the real source line.
                 line = self._decl_line(stmt)
+                try:
+                    scope_end = cursor.extent.end.line
+                except (AttributeError, ValueError):
+                    scope_end = 0
                 self._record_pre(scope, line, visible)
-                new_vars = self._collect_decl_vars(stmt, visible, depth)
+                new_vars = self._collect_decl_vars(
+                    stmt, visible, depth, decl_line=line, extent_end=scope_end
+                )
                 self._record_line(scope, line, visible)
                 self._add_post_decls(scope, line, new_vars)
+                # Lambdas in initializers (`auto f = [...]{};`): body recurses like COMPOUND.
+                by_name = {v.name: v for v in new_vars}
+                for child in stmt.get_children():
+                    lam_visible = visible
+                    if (
+                        child.kind == clang.CursorKind.VAR_DECL
+                        and child.spelling in by_name
+                        and self._subtree_has_callable(child)
+                    ):
+                        # The lambda body runs inside this var's own initializer
+                        # (`auto` deduction still open): referencing it there is
+                        # ill-formed, so hide it from the lambda's scope.
+                        hidden = by_name[child.spelling]
+                        lam_visible = [v for v in visible if v is not hidden]
+                    self._walk_nested_lambda(child, scope, lam_visible, depth)
             else:
                 line = stmt.location.line
                 self._record_pre(scope, line, visible)
@@ -321,6 +342,20 @@ class ScopeTracker:
                     clang.CursorKind.DO_STMT,
                 ):
                     self._walk_cond(stmt, stmt_kind, scope, visible, depth)
+
+                elif stmt_kind in _TRY_CATCH_KINDS or (
+                    _LAMBDA_KIND is not None and stmt_kind == _LAMBDA_KIND
+                ):
+                    self._walk_try(stmt, scope, visible, depth)
+
+                elif stmt_kind == clang.CursorKind.SWITCH_STMT:
+                    self._walk_switch(stmt, scope, visible, depth)
+
+                elif stmt_kind in (
+                    clang.CursorKind.CASE_STMT,
+                    clang.CursorKind.DEFAULT_STMT,
+                ):
+                    self._walk_case(stmt, stmt_kind, scope, visible, depth)
 
     def _collect_decl_vars(
         self,
@@ -461,6 +496,84 @@ class ScopeTracker:
             else:
                 self._walk_braceless_body(body, scope, visible, depth + 1)
 
+    def _walk_nested_lambda(
+        self,
+        node: clang.Cursor,
+        scope: FunctionScope,
+        visible: list[ScopeVar],
+        depth: int,
+    ) -> None:
+        for child in node.get_children():
+            ck = _cursor_kind(child)
+            if ck in _TRY_CATCH_KINDS or (_LAMBDA_KIND is not None and ck == _LAMBDA_KIND):
+                self._walk_try(child, scope, visible, depth)
+
+    @staticmethod
+    def _subtree_has_callable(node: clang.Cursor) -> bool:
+        for child in node.get_children():
+            ck = _cursor_kind(child)
+            if ck in _TRY_CATCH_KINDS or (_LAMBDA_KIND is not None and ck == _LAMBDA_KIND):
+                return True
+            if ScopeTracker._subtree_has_callable(child):
+                return True
+        return False
+
+    def _walk_try(
+        self,
+        stmt: clang.Cursor,
+        scope: FunctionScope,
+        visible: list[ScopeVar],
+        depth: int,
+    ) -> None:
+        for child in stmt.get_children():
+            ck = _cursor_kind(child)
+            if ck == clang.CursorKind.COMPOUND_STMT:
+                self._walk_body(child, scope, visible, depth + 1)
+            elif ck in _TRY_CATCH_KINDS or (
+                _LAMBDA_KIND is not None and ck == _LAMBDA_KIND
+            ):
+                self._walk_try(child, scope, visible, depth)
+
+    def _walk_switch(
+        self,
+        stmt: clang.Cursor,
+        scope: FunctionScope,
+        visible: list[ScopeVar],
+        depth: int,
+    ) -> None:
+        for child in stmt.get_children():
+            if _cursor_kind(child) == clang.CursorKind.COMPOUND_STMT:
+                self._walk_body(child, scope, visible, depth + 1)
+                return
+
+    def _walk_case(
+        self,
+        stmt: clang.Cursor,
+        stmt_kind: clang.CursorKind,
+        scope: FunctionScope,
+        visible: list[ScopeVar],
+        depth: int,
+    ) -> None:
+        children = list(stmt.get_children())
+        bodies = children[1:] if stmt_kind == clang.CursorKind.CASE_STMT else children
+        for node in bodies:
+            if _cursor_kind(node) == clang.CursorKind.COMPOUND_STMT:
+                self._walk_body(node, scope, visible, depth + 1)
+            elif _cursor_kind(node) == clang.CursorKind.DECL_STMT:
+                line = self._decl_line(node)
+                try:
+                    scope_end = stmt.extent.end.line
+                except (AttributeError, ValueError):
+                    scope_end = 0
+                self._record_pre(scope, line, visible)
+                new_vars = self._collect_decl_vars(
+                    node, visible, depth + 1, decl_line=line, extent_end=scope_end
+                )
+                self._record_line(scope, line, visible)
+                self._add_post_decls(scope, line, new_vars)
+            else:
+                self._walk_braceless_body(node, scope, visible, depth + 1)
+
     def _walk_braceless_body(
         self,
         node: clang.Cursor,
@@ -483,6 +596,17 @@ class ScopeTracker:
             clang.CursorKind.DO_STMT,
         ):
             self._walk_cond(node, kind, scope, visible, depth)
+        elif kind in _TRY_CATCH_KINDS or (
+            _LAMBDA_KIND is not None and kind == _LAMBDA_KIND
+        ):
+            self._walk_try(node, scope, visible, depth)
+        elif kind == clang.CursorKind.SWITCH_STMT:
+            self._walk_switch(node, scope, visible, depth)
+        elif kind in (
+            clang.CursorKind.CASE_STMT,
+            clang.CursorKind.DEFAULT_STMT,
+        ):
+            self._walk_case(node, kind, scope, visible, depth)
         elif kind == clang.CursorKind.COMPOUND_STMT:
             self._walk_body(node, scope, visible, depth + 1)
 

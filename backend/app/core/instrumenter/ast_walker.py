@@ -478,6 +478,26 @@ class ASTWalker:
             var_names=list(var_names or []),
         ))
 
+    @staticmethod
+    def _loop_body_is_braced(cursor: clang.Cursor, kind: clang.CursorKind) -> bool:
+        """True when a loop statement's body is a braced compound statement.
+
+        S8: header STATE is safe only for braced loops (placement lands
+        inside the body, loop var in scope). Braceless single-statement
+        bodies must skip header STATE — any splice between header and body
+        detaches the body, and post-body placement leaves the header var
+        dead. Body is children[-1] for for/while/range-for, children[0]
+        for do.
+        """
+        try:
+            children = list(cursor.get_children())
+        except (AttributeError, TypeError, RuntimeError):
+            return False
+        if not children:
+            return False
+        body = children[0] if kind == clang.CursorKind.DO_STMT else children[-1]
+        return _cursor_kind(body) == clang.CursorKind.COMPOUND_STMT
+
     def _walk_stmt(
         self,
         cursor: clang.Cursor,
@@ -506,12 +526,18 @@ class ASTWalker:
 
         # STATE for this statement's own line (one per unique line).
         # Compound statements carry no state of their own — their children
-        # emit via recursion below. All other kinds (DECL_STMT,
-        # assignments, call/operator exprs, IF/LOOP headers, RETURN) get a
-        # STATE point here; existing handlers below add their BRANCH /
-        # LOOP_ITER / FUNC_EXIT points on top. The injector skips STATE on
-        # `return` lines and before `else`, matching top-level behaviour.
-        if kind != clang.CursorKind.COMPOUND_STMT:
+        # emit via recursion below. S8: loop headers emit STATE only when
+        # braced (body is COMPOUND_STMT) — placement lands inside the body
+        # with the loop var in scope. Braceless loop headers skip here; the
+        # single-statement body still emits its own STATE via the loop
+        # handler below. All other kinds (DECL_STMT, assignments,
+        # call/operator exprs, IF headers, RETURN) get a STATE point here;
+        # existing handlers below add their BRANCH / LOOP_ITER / FUNC_EXIT
+        # points on top. The injector skips STATE on `return` lines and
+        # before `else`, matching top-level behaviour.
+        if kind != clang.CursorKind.COMPOUND_STMT and (
+            kind not in _LOOP_KINDS or self._loop_body_is_braced(cursor, kind)
+        ):
             # A declaration names its own vars so the injector's scope merge
             # captures them even where the scope map has no entry yet.
             decl_names: list[str] = []
@@ -675,9 +701,14 @@ class ASTWalker:
             self._loop_counter_seq += 1
             loop_counters.setdefault(func_name, []).append(counter_var)
 
-            # Find the loop body (last child for while/for, first for do)
+            # Loop body is children[0] for do, children[-1] otherwise (braceless parity).
             children = list(cursor.get_children())
-            body = children[-1] if children else None
+            if not children:
+                body = None
+            elif kind == clang.CursorKind.DO_STMT:
+                body = children[0]
+            else:
+                body = children[-1]
 
             if body and body.kind == clang.CursorKind.COMPOUND_STMT:
                 # Inject LOOP_ITER at the start of the body

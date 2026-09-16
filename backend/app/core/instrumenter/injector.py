@@ -66,6 +66,7 @@ def _trace_state(
     point: InjectionPoint,
     scope: FunctionScope | None,
     global_vars: list[str] | None = None,
+    insert_line: int | None = None,
 ) -> str:
     # Post-declaration snapshot: a STATE after `int x = 5;` sees x.
     var_names = list(point.var_names)
@@ -74,6 +75,36 @@ def _trace_state(
         for v in visible:
             if v.name not in var_names:
                 var_names.append(v.name)
+    if scope:
+        place = insert_line if insert_line is not None else point.line
+        post = scope.vars_at_line_post.get(point.line, [])
+        filtered: list[str] = []
+        for name in var_names:
+            ranges = scope.loop_var_ranges.get(name)
+            if ranges:
+                decl_lines = [v.decl_line for v in post if v.name == name]
+                # Only the loop's own var is lifetime-bound (its decl sits
+                # inside a loop interval). Outer/shadowing same-name decls
+                # (decl outside all intervals) are different vars — keep.
+                if decl_lines and any(
+                    h <= d <= e for h, e in ranges for d in decl_lines
+                ):
+                    # Emission lands AFTER `place`; inside the loop only
+                    # while the body is still open (half-open [h, e)).
+                    if not any(h <= place < e for h, e in ranges):
+                        continue
+            decl_lines = [v.decl_line for v in post if v.name == name]
+            if decl_lines and min(decl_lines) > point.line:
+                continue
+            extents = [
+                (v.decl_line, v.extent_end)
+                for v in post
+                if v.name == name and v.extent_end > 0
+            ]
+            if extents and not any(d <= place < e for d, e in extents):
+                continue
+            filtered.append(name)
+        var_names = filtered
     vars_args = _make_vars_args(var_names)
     # Globals shadowed by a same-named local read as the local — drop them
     # from the globals pack so `g` never mislabels a local value.
@@ -116,6 +147,57 @@ def _trace_loop_iter(point: InjectionPoint) -> str:
         f'__TRACE_LOOP_ITER({point.line}, "{point.func_name}", {point.depth}, '
         f'{point.counter_var}++);'
     )
+
+
+_IF_HEADER_RE = re.compile(r"(else\s+)?if\s*\(")
+
+
+def _is_braceless_then_body(point_line: int, lines: list[str]) -> bool:
+    """True when line *point_line* is the single-statement body of a braceless if.
+
+    The previous non-blank line is a bare `if (...)` / `else if (...)`
+    header (no `{`): inserting anything between that header and this line
+    detaches the body and orphans a trailing `else` (S5).
+    """
+    j = point_line - 2
+    while j >= 0 and not lines[j].strip():
+        j -= 1
+    if j < 0:
+        return False
+    prev = lines[j].strip()
+    return "{" not in prev and _IF_HEADER_RE.match(prev) is not None
+
+
+def _is_braceless_do_body(point_line: int, lines: list[str]) -> bool:
+    """True when line *point_line* is the body of a braceless `do ... while`.
+
+    Any splice between the body and its trailing `while (...)` detaches the
+    continuation (and before-placement detaches the body from `do`): skip.
+    """
+    j = point_line - 2
+    while j >= 0 and not lines[j].strip():
+        j -= 1
+    if j < 0:
+        return False
+    prev = lines[j].strip()
+    return "{" not in prev and (prev == "do" or prev.startswith("do ") or prev.startswith("do\t"))
+
+
+def _is_braceless_do_header(point_line: int, lines: list[str]) -> bool:
+    """True when *point_line* is a bare `do` header with a braceless body.
+
+    Its STATE would slide onto the body line (statement-complete scan) and
+    split `do <body> while (...)`: skip.
+    """
+    if point_line < 1 or point_line > len(lines):
+        return False
+    here = lines[point_line - 1].strip()
+    if "{" in here or not (here == "do" or here.startswith("do ") or here.startswith("do\t")):
+        return False
+    j = point_line
+    while j < len(lines) and not lines[j].strip():
+        j += 1
+    return j < len(lines) and "{" not in lines[j]
 
 
 def _state_insert_line(point_line: int, lines: list[str]) -> int:
@@ -307,21 +389,27 @@ def instrument(source: str, source_path: str | None = None) -> str:
                 # vars needs no return-expr evaluation, so no temp var is
                 # needed here; FUNC_EXIT (walker-ordered after STATE) still
                 # handles the return value via the safe-expr/temp-var paths.
-                add_before(point.line, _trace_state(point, scope, walk_result.global_vars))
+                add_before(point.line, _trace_state(point, scope, walk_result.global_vars, point.line))
                 continue
             next_line = lines[insert_line].strip() if insert_line < len(lines) else ""
             if next_line.startswith("else"):
                 # Splicing after this line would split the if/else chain
                 # (compile break). The else branch gets its own STATE points
                 # from the walker over the same parent scope, so snapshot
-                # BEFORE this line (chain-safe) — except when this line is
-                # itself an `else` one-liner, where before-placement splits
-                # the chain too; then skip (else-body STATE covers it).
+                # BEFORE this line (chain-safe) — except when before-placement
+                # splits the chain too; then skip (BRANCH on the header keeps
+                # the region observable, and the else-body STATE covers it):
+                #  * this line is itself an `else` one-liner;
+                #  * this line is a braceless then-body (prev line is a bare
+                #    `if (...)` / `else if (...)` header): inserting between
+                #    header and body detaches the body and orphans `else` (S5).
                 if line_text.lstrip().startswith("else"):
                     continue
-                add_before(point.line, _trace_state(point, scope, walk_result.global_vars))
+                if _is_braceless_then_body(point.line, lines):
+                    continue
+                add_before(point.line, _trace_state(point, scope, walk_result.global_vars, point.line))
                 continue
-            add_after(insert_line, _trace_state(point, scope, walk_result.global_vars))
+            add_after(insert_line, _trace_state(point, scope, walk_result.global_vars, insert_line))
 
         elif point.kind == InjectKind.BRANCH:
             add_before(point.line, _trace_branch(point))

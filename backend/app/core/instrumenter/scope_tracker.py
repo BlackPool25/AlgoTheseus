@@ -45,14 +45,38 @@ _RANGE_FOR_KIND: clang.CursorKind | None = getattr(
     clang.CursorKind, "CXX_FOR_RANGE_STMT", None
 )
 
+_TRY_CATCH_KINDS: tuple = tuple(
+    k
+    for k in (
+        getattr(clang.CursorKind, "CXX_TRY_STMT", None),
+        getattr(clang.CursorKind, "CXX_CATCH_STMT", None),
+    )
+    if k is not None
+)
+_LAMBDA_KIND: clang.CursorKind | None = getattr(
+    clang.CursorKind, "LAMBDA_EXPR", None
+)
+
+_TEMPLATE_DEF_KINDS: tuple = tuple(
+    k
+    for k in (
+        getattr(clang.CursorKind, "CLASS_TEMPLATE", None),
+        getattr(clang.CursorKind, "CLASS_TEMPLATE_PARTIAL_SPECIALIZATION", None),
+        getattr(clang.CursorKind, "FUNCTION_TEMPLATE", None),
+    )
+    if k is not None
+)
+
 
 @dataclass
 class ScopeVar:
     """A variable visible at a particular point in the source."""
     name: str
     unique_id: str      # name + scope depth suffix for disambiguation
-    decl_line: int      # line where it was declared
+    decl_line: int      # user-file line where it was declared (see _decl_line)
     scope_depth: int    # nesting depth (0 = function params, 1 = function body, ...)
+    extent_end: int = 0  # enclosing-scope end line; live iff decl <= place < end.
+    # 0 = unbounded (function params, alive for the whole body).
 
 
 @dataclass
@@ -71,6 +95,11 @@ class FunctionScope:
     # from decls on that same line — never leaks out-of-scope names.
     # Mirrors vars_at_line content.
     vars_at_line_post: dict[int, list[ScopeVar]] = field(default_factory=dict)
+    # Loop-var lifetime intervals per name: name → [(header_line, body_end)].
+    # A header-declared var (for-init / range-for) is only alive within its
+    # own loop span; the injector drops it when the STATE placement falls
+    # outside ALL intervals (nested same-name loops append intervals).
+    loop_var_ranges: dict[str, list[tuple[int, int]]] = field(default_factory=dict)
 
 
 class ScopeTracker:
@@ -304,12 +333,27 @@ class ScopeTracker:
         """Walk FOR_STMT / CXX_FOR_RANGE_STMT: loop-var scope + body."""
         loop_visible = list(visible)
         loop_new: list[ScopeVar] = []
+        header_line = stmt.location.line
+
+        # Body is the last child; a lone statement is a braceless body (R3).
+        children = list(stmt.get_children())
+        body = children[-1] if children else None
+        try:
+            raw_end = body.extent.end.line if body is not None else 0
+        except (AttributeError, ValueError):
+            raw_end = 0
+        loop_end = max(header_line, raw_end) if raw_end else 0
 
         # Capture init declarations (`for (int i = 0; ...)`) and the range-for
         # loop var (direct VAR_DECL child of CXX_FOR_RANGE_STMT).
-        for child in stmt.get_children():
+        for child in children:
             if child.kind == clang.CursorKind.DECL_STMT:
-                loop_new.extend(self._collect_decl_vars(child, loop_visible, depth))
+                loop_new.extend(
+                    self._collect_decl_vars(
+                        child, loop_visible, depth,
+                        decl_line=header_line, extent_end=loop_end,
+                    )
+                )
             elif child.kind == clang.CursorKind.VAR_DECL and child.spelling:
                 uid = child.spelling
                 if any(v.name == child.spelling for v in loop_visible):
@@ -317,25 +361,42 @@ class ScopeTracker:
                 sv = ScopeVar(
                     name=child.spelling,
                     unique_id=uid,
-                    decl_line=child.location.line,
+                    decl_line=header_line,
                     scope_depth=depth,
+                    extent_end=loop_end,
                 )
                 loop_visible.append(sv)
                 loop_new.append(sv)
 
         # The loop header line carries the loop vars (replace-by-name so a
         # loop var shadows an outer same-named var); outer visible is untouched.
-        self._add_post_decls(scope, stmt.location.line, loop_new)
+        self._add_post_decls(scope, header_line, loop_new)
 
-        # Body is the last child; a lone statement is a braceless body (R3).
-        children = list(stmt.get_children())
-        if not children:
+        if body is None:
             return
-        body = children[-1]
+        self._record_loop_range(scope, stmt, body, loop_new)
         if _cursor_kind(body) == clang.CursorKind.COMPOUND_STMT:
             self._walk_body(body, scope, loop_visible, depth + 1)
         else:
             self._walk_braceless_body(body, scope, loop_visible, depth + 1)
+
+    def _record_loop_range(
+        self,
+        scope: FunctionScope,
+        stmt: clang.Cursor,
+        body: clang.Cursor,
+        loop_new: list[ScopeVar],
+    ) -> None:
+        header_line = stmt.location.line
+        try:
+            body_end = body.extent.end.line
+        except (AttributeError, ValueError):
+            return
+        if not loop_new or header_line <= 0 or not body_end:
+            return
+        end = max(header_line, body_end)
+        for v in loop_new:
+            scope.loop_var_ranges.setdefault(v.name, []).append((header_line, end))
 
     def _walk_cond(
         self,

@@ -234,7 +234,14 @@ class ScopeTracker:
         line: int,
         visible: list[ScopeVar],
     ) -> None:
-        """Record the pre-declaration snapshot for a line (excludes own decls)."""
+        """Record the pre-declaration snapshot for a line (excludes own decls).
+
+        First statement on the line wins: later same-line DECL_STMTs see
+        earlier siblings, but that merged view must not leak back into the
+        line's pre snapshot (`int a=1; int b=2;` → pre holds neither).
+        """
+        if line in scope.vars_at_line_pre:
+            return
         self._merge_names(scope.vars_at_line_pre, line, visible)
 
     def _record_line(
@@ -316,7 +323,12 @@ class ScopeTracker:
                     self._walk_cond(stmt, stmt_kind, scope, visible, depth)
 
     def _collect_decl_vars(
-        self, decl_stmt: clang.Cursor, visible: list[ScopeVar], depth: int
+        self,
+        decl_stmt: clang.Cursor,
+        visible: list[ScopeVar],
+        depth: int,
+        decl_line: int | None = None,
+        extent_end: int = 0,
     ) -> list[ScopeVar]:
         """Append VAR_DECL children of a DECL_STMT to `visible` (shadow-safe).
 
@@ -331,8 +343,9 @@ class ScopeTracker:
                 sv = ScopeVar(
                     name=c.spelling,
                     unique_id=uid,
-                    decl_line=c.location.line,
+                    decl_line=decl_line if decl_line is not None else c.location.line,
                     scope_depth=depth,
+                    extent_end=extent_end,
                 )
                 visible.append(sv)
                 new_vars.append(sv)

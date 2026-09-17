@@ -22,6 +22,10 @@ interface UIStore {
   compileError: string | null;
   runtimeError: string | null;
   truncated: boolean;
+  warnings: string[];
+  batchTestIds: string[];
+  selectedBatchIds: string[];
+  batchLabels: Record<string, string>;
 
   setCode: (code: string) => void;
   setRawInput: (input: string) => void;
@@ -29,11 +33,20 @@ interface UIStore {
     stdout: string,
     compileError: string | null,
     runtimeError: string | null,
-    truncated?: boolean
+    truncated?: boolean,
+    warnings?: string[]
   ) => void;
   setStatus: (status: AppStatus) => void;
   setError: (msg: string) => void;
+  clearError: () => void;
   reset: () => void;
+  addBatchTestId: (id: string) => void;
+  removeBatchTestId: (id: string) => void;
+  clearBatchTestIds: () => void;
+  toggleSelectedBatchId: (id: string) => void;
+  setSelectedBatchIds: (ids: string[]) => void;
+  setBatchLabel: (id: string, label: string) => void;
+  addBatchCase: (id: string, label?: string) => void;
 }
 
 const DEFAULT_CODE = `#include <vector>
@@ -68,21 +81,34 @@ export const useUIStore = create<UIStore>((set) => ({
   compileError: null,
   runtimeError: null,
   truncated: false,
+  warnings: [],
+  batchTestIds: [],
+  selectedBatchIds: [],
+  batchLabels: {},
 
   setCode: (code) => set({ code }),
   setRawInput: (rawInput) => set({ rawInput }),
 
-  setExecuteResult: (stdout, compileError, runtimeError, truncated = false) =>
+  setExecuteResult: (stdout, compileError, runtimeError, truncated = false, warnings = []) =>
     set({
       stdout,
       compileError,
       runtimeError,
       truncated,
+      warnings,
       status: compileError || runtimeError ? "error" : "done",
     }),
 
   setStatus: (status) => set({ status }),
   setError: (msg) => set({ status: "error", errorMessage: msg }),
+  clearError: () =>
+    set({
+      errorMessage: null,
+      compileError: null,
+      runtimeError: null,
+      warnings: [],
+      status: "idle",
+    }),
 
   reset: () =>
     set({
@@ -92,5 +118,45 @@ export const useUIStore = create<UIStore>((set) => ({
       compileError: null,
       runtimeError: null,
       truncated: false,
+      warnings: [],
     }),
+
+  addBatchTestId: (id) =>
+    set((s) =>
+      s.batchTestIds.includes(id)
+        ? s
+        : {
+            batchTestIds: [...s.batchTestIds, id],
+            selectedBatchIds: [...s.selectedBatchIds, id],
+          },
+    ),
+  removeBatchTestId: (id) =>
+    set((s) => ({
+      batchTestIds: s.batchTestIds.filter((x) => x !== id),
+      selectedBatchIds: s.selectedBatchIds.filter((x) => x !== id),
+      batchLabels: Object.fromEntries(
+        Object.entries(s.batchLabels).filter(([k]) => k !== id),
+      ),
+    })),
+  clearBatchTestIds: () =>
+    set({ batchTestIds: [], selectedBatchIds: [], batchLabels: {} }),
+  toggleSelectedBatchId: (id) =>
+    set((s) => ({
+      selectedBatchIds: s.selectedBatchIds.includes(id)
+        ? s.selectedBatchIds.filter((x) => x !== id)
+        : [...s.selectedBatchIds, id],
+    })),
+  setSelectedBatchIds: (ids) => set({ selectedBatchIds: ids }),
+  setBatchLabel: (id, label) =>
+    set((s) => ({ batchLabels: { ...s.batchLabels, [id]: label } })),
+  addBatchCase: (id, label) =>
+    set((s) => ({
+      batchTestIds: s.batchTestIds.includes(id)
+        ? s.batchTestIds
+        : [...s.batchTestIds, id],
+      selectedBatchIds: s.selectedBatchIds.includes(id)
+        ? s.selectedBatchIds
+        : [...s.selectedBatchIds, id],
+      batchLabels: label ? { ...s.batchLabels, [id]: label } : s.batchLabels,
+    })),
 }));

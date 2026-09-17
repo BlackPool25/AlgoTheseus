@@ -8,7 +8,9 @@
 
 import { useTraceStore } from "../store/traceStore";
 
-export function ProgramOutputBox() {
+export const SHOW_OUTPUT_EVENT = "algo:show-output";
+
+export function ProgramOutputBox({ variant = "full" }: { variant?: "full" | "status" }) {
   const { trace, currentStep, currentEvent } = useTraceStore();
 
   let stdout: string | null = null;
@@ -24,6 +26,23 @@ export function ProgramOutputBox() {
 
   const truncated =
     currentEvent?.type === "state" && currentEvent.stdout_truncated === true;
+
+  if (variant === "status") {
+    const text = stdout.trim() === "" ? "(no output yet)" : stdout.trim();
+    return (
+      <button
+        data-testid="program-output"
+        onClick={() => window.dispatchEvent(new CustomEvent(SHOW_OUTPUT_EVENT))}
+        className="w-full px-4 py-1.5 bg-viz-body border-t border-viz-line text-[11px] text-viz-ink/60 font-mono truncate text-left hover:text-viz-ink transition-colors"
+        title="View program output in the Output tab"
+      >
+        <span className="mr-2">program output:</span>
+        <span className="text-viz-ink/80">{text}</span>
+        <span className="ml-2 text-amber-400/80">· view in Output tab →</span>
+        {truncated && <span className="text-amber-400 ml-2">[truncated]</span>}
+      </button>
+    );
+  }
 
   return (
     <div

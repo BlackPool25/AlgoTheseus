@@ -22,6 +22,7 @@ import { Crosshair, Target, Maximize2 } from "lucide-react";
 import { useCFGStore } from "../../store/cfgStore";
 import { useTraceStore } from "../../store/traceStore";
 import type { CFGNode } from "../../types/cfg";
+import type { TraceEvent } from "../../types/trace";
 import { layoutCFG } from "../../utils/cfgLayout";
 import { TraceEdge } from "./edges/TraceEdge";
 import { BranchNode } from "./nodes/BranchNode";
@@ -63,6 +64,65 @@ function filterForExpansion(
   }
 
   return cfgNodes.filter((n) => !hiddenIds.has(n.id));
+}
+
+/**
+ * First scalar (or first) `k = v` assignment from a vars record, compacted
+ * for node width. Null when the record is empty.
+ */
+function scalarAssignment(vars: Record<string, unknown>): string | null {
+  const entries = Object.entries(vars);
+  if (entries.length === 0) return null;
+  const scalar = entries.find(
+    ([, v]) => typeof v === "number" || typeof v === "string" || typeof v === "boolean",
+  );
+  const [k, v] = scalar ?? entries[0];
+  const vs = typeof v === "string" ? v : (JSON.stringify(v) ?? String(v));
+  const short = vs.length > 24 ? `${vs.slice(0, 24)}…` : vs;
+  return `${k} = ${short}`;
+}
+
+function shortValue(v: unknown): string {
+  const s = typeof v === "string" ? v : (JSON.stringify(v) ?? String(v));
+  return s.length > 24 ? `${s.slice(0, 24)}…` : s;
+}
+
+/**
+ * Enrich a CFG node label with an explicit `variable = value` suffix drawn
+ * from the trace payload at the node's first trace index (no backend
+ * change). Labels that already carry `=` (e.g. `arr[mid] == target`) pass
+ * through; bare labels (`body`, `found`, `→ 3`) gain a truthful suffix so
+ * no node ever reads as a bare value.
+ */
+function enrichNodeLabel(node: CFGNode, trace: TraceEvent[]): string {
+  const base = node.label;
+  if (base.includes("=")) return base;
+  const idx = node.trace_indices?.[0];
+  const rep = idx != null ? trace[idx] : undefined;
+  if (!rep) return base;
+  const desc =
+    typeof (rep as { step_desc?: unknown }).step_desc === "string"
+      ? (rep as { step_desc: string }).step_desc
+      : null;
+  if (desc && desc.includes("=")) return `${base} · ${desc}`;
+  switch (rep.type) {
+    case "state": {
+      const a = scalarAssignment(rep.vars);
+      return a ? `${base} · ${a}` : `${base} · step = ${idx + 1}`;
+    }
+    case "enter": {
+      const a = scalarAssignment(rep.params);
+      return a ? `${base} · ${a}` : `${base} · step = ${idx + 1}`;
+    }
+    case "exit":
+      return `${base} · return = ${shortValue(rep.return_val)}`;
+    case "branch":
+      return `${base} · taken = ${rep.taken ? "true" : "false"}`;
+    case "iter":
+      return `${base} · iter = ${rep.iteration}`;
+    default:
+      return base;
+  }
 }
 
 /**
@@ -190,6 +250,7 @@ export function TraceFlow() {
   const activeNodeId = useCFGStore((s) => s.activeNodeId);
   const expandedNodeIds = useCFGStore((s) => s.expandedNodeIds);
   const currentStep = useTraceStore((s) => s.currentStep);
+  const trace = useTraceStore((s) => s.trace);
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Derive active node from current step
@@ -316,7 +377,21 @@ export function TraceFlow() {
     // Mark active node
     const nodesWithActive = nodes.map((n) => ({
       ...n,
-      data: { ...n.data, isActive: n.id === activeId },
+      data: {
+        ...n.data,
+        label: enrichNodeLabel(
+          visibleNodes.find((c) => c.id === n.id) ?? {
+            id: n.id,
+            type: "line",
+            lines: [],
+            label: String((n.data as { label?: unknown }).label ?? ""),
+            children: [],
+            trace_indices: [],
+          },
+          trace,
+        ),
+        isActive: n.id === activeId,
+      },
     }));
 
     // Mark active edges (edges leading to the active node)
@@ -326,7 +401,7 @@ export function TraceFlow() {
     }));
 
     return { nodes: nodesWithActive, edges: edgesWithActive };
-  }, [visibleNodes, visibleEdges, activeId]);
+  }, [visibleNodes, visibleEdges, activeId, trace]);
 
   if (cfgNodes.length === 0) {
     return (

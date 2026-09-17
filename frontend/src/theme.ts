@@ -7,13 +7,11 @@
 
 export const THEMES = [
   "zinc-dark",
-  "light",
   "high-contrast",
   "colorblind-safe",
   "papyrus",
   "catppuccin-mocha",
   "gruvbox-dark",
-  "nord",
 ] as const;
 
 export type ThemeName = (typeof THEMES)[number];
@@ -30,9 +28,7 @@ export interface ThemeMeta {
 
 export const THEME_CATALOG: readonly ThemeMeta[] = [
   { id: "zinc-dark", name: "Theseus Dark (Signature)", category: "Signature", bg: "#18181b", accent: "#f59e0b" },
-  { id: "light", name: "Theseus Light", category: "Signature", bg: "#fdf6e3", accent: "#268bd2" },
   { id: "catppuccin-mocha", name: "Catppuccin Mocha", category: "Developer", bg: "#1e1e2e", accent: "#cba6f7" },
-  { id: "nord", name: "Nord Frost", category: "Developer", bg: "#2e3440", accent: "#88c0d0" },
   { id: "gruvbox-dark", name: "Gruvbox Dark", category: "Developer", bg: "#282828", accent: "#fe8019" },
   { id: "papyrus", name: "Papyrus Warm", category: "Developer", bg: "#f5edd8", accent: "#8a5a00" },
   { id: "high-contrast", name: "High Contrast", category: "Accessibility", bg: "#000000", accent: "#ffff00" },
@@ -95,7 +91,6 @@ export function currentTheme(): ThemeName {
 export function monacoThemeFor(theme: ThemeName): "vs-dark" | "vs" | "hc-black" {
   if (theme === "high-contrast") return "hc-black";
   if (
-    theme === "light" ||
     theme === "papyrus" ||
     theme === "colorblind-safe"
   ) {

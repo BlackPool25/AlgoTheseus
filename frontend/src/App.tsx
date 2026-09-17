@@ -10,6 +10,7 @@
  */
 
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import { Code2, GitFork, Layers, Terminal } from "lucide-react";
 import { useCFGStore } from "./store/cfgStore";
 import { useTraceStore } from "./store/traceStore";
@@ -20,7 +21,7 @@ import type { StreamCallbacks } from "./utils/api";
 import { loadWasmToolchain, selectEngine } from "./utils/executionEngine";
 import { WorkbenchTray } from "./components/Editor/WorkbenchTray";
 import { TraceScrubber } from "./components/Scrubber/TraceScrubber";
-import { ProgramOutputBox } from "./components/ProgramOutputBox";
+import { ProgramOutputBox, SHOW_OUTPUT_EVENT } from "./components/ProgramOutputBox";
 import { Splitter } from "./components/Layout/Splitter";
 import { Header } from "./components/Layout/Header";
 import { Footer } from "./components/Layout/Footer";
@@ -58,10 +59,12 @@ export default function App() {
     stdout,
     compileError,
     runtimeError,
+    warnings,
   } = useUIStore();
   const [theme, setTheme] = useState<ThemeName>(() => currentTheme());
   const engineSel = useMemo(() => selectEngine(), []);
   const trace = useTraceStore((s) => s.trace);
+  const cfgNodeCount = useCFGStore((s) => s.nodes.length);
   const hasPerStepStdout = trace.some(
     (e) => e.type === "state" && typeof e.stdout === "string",
   );
@@ -72,6 +75,17 @@ export default function App() {
     return window.innerWidth < 768;
   });
   const [mobileTab, setMobileTab] = useState<MobileTab>("code");
+  const [ioSeen, setIoSeen] = useState(true);
+
+  useEffect(() => {
+    if (status === "executing") setIoSeen(false);
+  }, [status]);
+
+  useEffect(() => {
+    if (mobileTab === "console") setIoSeen(true);
+  }, [mobileTab]);
+
+  const showIoDot = !ioSeen && (status === "done" || status === "error");
 
   useEffect(() => {
     function handleResize() {
@@ -79,6 +93,16 @@ export default function App() {
     }
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  // Fixed output bar is a status link only — the Output tab owns the full
+  // output. Jumping focuses the tray (mobile: switch to the console tab).
+  useEffect(() => {
+    const jump = () => {
+      if (window.innerWidth < 768) setMobileTab("console");
+    };
+    window.addEventListener(SHOW_OUTPUT_EVENT, jump);
+    return () => window.removeEventListener(SHOW_OUTPUT_EVENT, jump);
   }, []);
 
   async function handleExecute() {
@@ -114,6 +138,7 @@ export default function App() {
           null,
           cfg.runtime_error,
           cfg.truncated,
+          cfg.warnings ?? [],
         );
         // On mobile, automatically show graph flow once trace loads
         if (window.innerWidth < 768) {
@@ -151,6 +176,14 @@ export default function App() {
   const [inputH, setInputH] = useState<number | null>(null);
   const [stateW, setStateW] = useState<number | null>(null);
 
+  // Desktop idle collapse: empty Variables + Flow Graph panels merge into a
+  // single collapsed affordance (one CTA, no near-duplicate placeholders) so
+  // the I/O tray below the editor can grow into the freed vertical space.
+  // Mobile keeps its tabbed panels untouched.
+  const desktopIdle =
+    !isMobile && status === "idle" && trace.length === 0 && cfgNodeCount === 0;
+  const trayH = inputH ?? (desktopIdle ? 400 : 260);
+
   const mainW = () => mainRef.current?.clientWidth ?? window.innerWidth;
 
   const dragLeft = (dx: number) => {
@@ -182,7 +215,7 @@ export default function App() {
 
   return (
     <div
-      className="flex flex-col h-screen bg-viz-body text-viz-ink select-none font-sans"
+      className="flex flex-col h-screen h-dvh bg-viz-body text-viz-ink select-none font-sans"
       data-engine={engineSel.engine}
       data-fallback={engineSel.fallback}
       data-toolchain={engineSel.toolchainNote}
@@ -237,7 +270,7 @@ export default function App() {
           </button>
           <button
             onClick={() => setMobileTab("console")}
-            className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded text-xs font-medium transition-colors ${
+            className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded text-xs font-medium transition-colors relative ${
               mobileTab === "console"
                 ? "bg-viz-body text-amber-400 shadow-xs"
                 : "text-viz-ink/60 hover:text-viz-ink"
@@ -245,6 +278,13 @@ export default function App() {
           >
             <Terminal className="w-3.5 h-3.5" />
             <span>I/O</span>
+            {showIoDot && mobileTab !== "console" && (
+              <span
+                aria-label="New run output"
+                title="Run finished — new output"
+                className="w-2 h-2 rounded-full bg-amber-400"
+              />
+            )}
           </button>
         </nav>
       )}
@@ -293,7 +333,9 @@ export default function App() {
             </div>
           </div>
         ) : (
-          /* Desktop Workbench: 3-column resizable layout */
+          /* Desktop Workbench: 3-column resizable layout (idle collapses the
+             empty Flow + Variables panes into one affordance with a single
+             CTA; the per-panel placeholders stay mounted on mobile only) */
           <div className="flex flex-1 min-h-0 overflow-hidden w-full h-full">
             {/* Left Panel: Editor + Tabbed Workbench Tray */}
             <div
@@ -315,12 +357,33 @@ export default function App() {
 
               <div
                 className="flex flex-col shrink-0 overflow-hidden border-t border-viz-line"
-                style={{ height: inputH ?? 260 }}
+                style={{ height: trayH }}
               >
-                <WorkbenchTray />
+              <WorkbenchTray segmented />
               </div>
             </div>
 
+            {desktopIdle ? (
+              <div
+                data-testid="idle-trace-affordance"
+                className="flex-1 min-w-0 flex flex-col items-center justify-center gap-3 bg-viz-body border-l border-viz-line px-6 text-center"
+              >
+                <button
+                  onClick={handleExecute}
+                  aria-label="Run program to see execution trace"
+                  className="text-sm text-amber-400 hover:text-amber-300 font-medium transition-colors"
+                >
+                  Run to see execution trace <span aria-hidden="true">→</span>
+                </button>
+                <Link
+                  to="/algorithms"
+                  className="text-xs text-viz-ink/50 hover:text-viz-ink transition-colors"
+                >
+                  Browse the Algorithms guide <span aria-hidden="true">→</span>
+                </Link>
+              </div>
+            ) : (
+            <>
             <Splitter
               direction="vertical"
               onDrag={dragLeft}
@@ -349,21 +412,45 @@ export default function App() {
                 <StatePanel />
               </Suspense>
             </div>
+            </>
+            )}
           </div>
         )}
       </div>
 
       {/* Error / Runtime Error Banner */}
       {(errorMessage || compileError || runtimeError) && (
-        <div className="px-4 py-2.5 bg-red-950/70 border-t border-red-800/80 text-xs text-red-200 font-mono whitespace-pre-wrap max-h-36 overflow-y-auto shrink-0 shadow-lg">
+        <div className="relative px-4 py-2.5 pr-12 bg-red-950/70 border-t border-red-800/80 text-xs text-red-200 font-mono whitespace-pre-wrap max-h-36 overflow-y-auto shrink-0 shadow-lg">
+          <button
+            onClick={() => useUIStore.getState().clearError()}
+            aria-label="Dismiss error"
+            className="absolute top-1 right-1 flex items-center justify-center w-10 h-10 min-w-[40px] min-h-[40px] text-red-400 hover:text-red-200 transition-colors"
+          >
+            ✕
+          </button>
           <div className="font-semibold text-red-400 mb-0.5">Execution Error:</div>
           {compileError || runtimeError || errorMessage}
         </div>
       )}
 
-      {/* Stdout Banner (retired when per-step stdout present) */}
+      {/* Non-fatal warnings (e.g. skipped template bodies) — run succeeded */}
+      {warnings.length > 0 && status === "done" && (
+        <div className="relative px-4 py-2.5 pr-12 bg-amber-950/70 border-t border-amber-800/80 text-xs text-amber-200 font-mono whitespace-pre-wrap max-h-36 overflow-y-auto shrink-0 shadow-lg">
+          <button
+            onClick={() => useUIStore.getState().clearError()}
+            aria-label="Dismiss warning"
+            className="absolute top-1 right-1 flex items-center justify-center w-10 h-10 min-w-[40px] min-h-[40px] text-amber-400 hover:text-amber-200 transition-colors"
+          >
+            ✕
+          </button>
+          <div className="font-semibold text-amber-400 mb-0.5">Warning:</div>
+          {warnings.join("\n")}
+        </div>
+      )}
+
+      {/* Stdout status link (retired when per-step stdout present) */}
       {hasPerStepStdout ? (
-        <ProgramOutputBox />
+        <ProgramOutputBox variant="status" />
       ) : (
         stdout &&
         status === "done" &&

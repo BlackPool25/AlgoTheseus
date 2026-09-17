@@ -68,6 +68,20 @@ export function useContainerType(value: unknown): ContainerKind {
     }
   }
 
+  // Vector of plain structs (e.g. vector<Edge>): {$addr, items: [{u,v,w}...]}
+  // Must NOT steal the linked-list shape ($addr+next without items stays
+  // linked_list via the check above) or stack/queue shapes (top/front+items
+  // return earlier).
+  if ("$addr" in obj && "items" in obj && Array.isArray(obj.items)) {
+    if (
+      obj.items.every(
+        (el) => typeof el === "object" && el !== null && !Array.isArray(el),
+      )
+    ) {
+      return "vector";
+    }
+  }
+
   // Opaque pointer address
   if ("$addr" in obj) return "struct";
 

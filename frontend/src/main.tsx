@@ -18,6 +18,7 @@ import { Terms } from "./routes/Terms";
 import { Contact } from "./routes/Contact";
 import { NotFound } from "./routes/NotFound";
 import { Visualize } from "./routes/Visualize";
+import { Algorithms } from "./routes/Algorithms";
 
 // Restore persisted data-theme before first paint (never unstyled).
 initTheme();
@@ -43,6 +44,7 @@ createRoot(document.getElementById("root")!).render(
         <Route path="/privacy" element={<Privacy />} />
         <Route path="/terms" element={<Terms />} />
         <Route path="/contact" element={<Contact />} />
+        <Route path="/algorithms" element={<Algorithms />} />
         <Route path="/visualize/:slug" element={<Visualize />} />
         <Route path="*" element={<NotFound />} />
       </Routes>

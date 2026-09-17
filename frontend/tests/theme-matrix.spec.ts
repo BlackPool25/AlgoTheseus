@@ -1,7 +1,7 @@
 /**
  * tests/theme-matrix.spec.ts — todo 31 Wave-7 frontend matrix.
  *
- * 8 themes x 3 canonical fixtures (bsearch, print-loop, linked-list) = 24
+ * 6 themes x 3 canonical fixtures (bsearch, print-loop, linked-list) = 18
  * cells. Each cell asserts the key testids render under that palette and
  * saves one screenshot to .omo/evidence/matrix-<theme>-<fixture>.png for
  * HUMAN eyeball — never pixel-exact gold-compared.
@@ -72,6 +72,20 @@ async function goToStep(page: Page, step: number) {
 }
 
 /** Store step = the slider's live value (value={currentStep} in TraceScrubber). */
+
+async function themeSelect(page: Page) {
+  const visible = page.locator('select[aria-label="Theme"]:visible');
+  if ((await visible.count()) === 0) {
+    const gear = page.getByRole("button", { name: "Settings" });
+    if (await gear.isVisible().catch(() => false)) {
+      await gear.click();
+    }
+  }
+  return page.locator('select[aria-label="Theme"]:visible');
+}
+
+/** Store step = the slider's live value (value={currentStep} in TraceScrubber). */
+
 const storeStep = (page: Page) =>
   page.evaluate(() => {
     const el = document.querySelector<HTMLInputElement>(
@@ -92,7 +106,7 @@ function mulberry32(seed: number) {
   };
 }
 
-// ── 24-cell theme x fixture matrix ───────────────────────────────────────────
+// ── 18-cell theme x fixture matrix ───────────────────────────────────────────
 
 type FixtureName = "bsearch" | "print-loop" | "linked-list";
 
@@ -117,7 +131,13 @@ for (const theme of THEMES) {
       await setupWithMock(page, FIXTURE_NDJSON[fixture]());
       const tag = `[palette=${theme} fixture=${fixture}]`;
 
-      await page.getByLabel("Theme").selectOption(theme);
+      await (await themeSelect(page)).selectOption(theme);
+      // Close the Settings menu: its open backdrop (z-40 overlay) would
+      // otherwise intercept pointer events on the page below.
+      const backdrop = page.locator("header div.fixed.inset-0.z-40");
+      if (await backdrop.isVisible().catch(() => false)) {
+        await backdrop.click();
+      }
       await expect(
         page.evaluate(() => document.documentElement.dataset.theme),
         `${tag} data-theme not applied`,

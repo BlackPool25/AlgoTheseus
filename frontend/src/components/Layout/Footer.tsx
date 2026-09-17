@@ -1,9 +1,11 @@
 import { Link } from "react-router-dom";
 
-/** Persistent footer on every route: Privacy / Terms / Contact + GitHub. */
+/** Persistent footer on every route: Privacy / Terms / Contact + GitHub.
+    Desktop-only: on mobile these links live in the header kebab menu.
+    The Stars badge stays suppressed until the repo count is non-zero. */
 export function Footer() {
   return (
-    <footer className="shrink-0 border-t border-viz-line bg-viz-body px-4 py-2">
+    <footer className="hidden md:block shrink-0 border-t border-viz-line bg-viz-body px-4 py-2">
       <nav
         aria-label="Legal"
         className="mx-auto flex w-full max-w-3xl items-center justify-center gap-5 text-xs text-viz-ink/60"
@@ -24,19 +26,6 @@ export function Footer() {
           className="underline-offset-2 hover:text-viz-ink hover:underline"
         >
           GitHub
-        </a>
-        <a
-          href="https://github.com/BlackPool25/AlgoTheseus"
-          target="_blank"
-          rel="noopener noreferrer"
-          aria-label="Star AlgoTheseus on GitHub / Contribute"
-          title="Star / Contribute"
-        >
-          <img
-            src="https://img.shields.io/github/stars/BlackPool25/AlgoTheseus?style=social"
-            alt="Star AlgoTheseus on GitHub"
-            loading="lazy"
-          />
         </a>
       </nav>
     </footer>

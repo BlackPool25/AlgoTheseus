@@ -24,8 +24,26 @@ interface Props {
 /** Box width (w-8 = 32px) + gap-0.5 (2px) */
 const ITEM_SIZE = 34;
 
+/** Unwrap vector items from a plain array or a {$addr, items:[...]} struct-vector shape. */
+function extractItems(value: unknown): unknown[] | null {
+  if (Array.isArray(value)) return value as unknown[];
+  if (typeof value === "object" && value !== null) {
+    const obj = value as Record<string, unknown>;
+    if ("items" in obj && Array.isArray(obj.items)) return obj.items as unknown[];
+  }
+  return null;
+}
+
+/** Metadata keys ($id, $addr, …) are tracer bookkeeping, not struct fields. */
+function structEntries(item: unknown): [string, unknown][] {
+  if (typeof item !== "object" || item === null || Array.isArray(item)) return [];
+  return Object.entries(item as Record<string, unknown>).filter(
+    ([k]) => !k.startsWith("$"),
+  );
+}
+
 export function VectorVisual({ value, name, highlightIndex, changedIndices = [] }: Props) {
-  const items = Array.isArray(value) ? (value as unknown[]) : null;
+  const items = extractItems(value);
   // Unconditional: hooks must run in the same order every render, even for
   // the primitive-fallback path below (count 0 renders nothing virtualised).
   const { parentRef, virtualizer } = useVirtualizedList({
@@ -62,6 +80,50 @@ export function VectorVisual({ value, name, highlightIndex, changedIndices = [] 
       "data-index": String(i),
       "data-flash": changed.has(i) ? "true" : "false",
     };
+  }
+
+  /** Row classes for struct elements — same highlight language as boxClass. */
+  function rowClass(i: number): string {
+    const base = "flex items-center gap-1.5 px-1.5 h-7 text-xs font-mono truncate overflow-hidden border tabular-nums select-none min-w-0";
+    if (changed.has(i)) {
+      return `${base} border-viz-flash bg-viz-flash/15 text-viz-flash font-semibold`;
+    }
+    if (i === highlightIndex) {
+      return `${base} border-viz-flash bg-viz-flash/15 text-viz-flash font-semibold`;
+    }
+    return `${base} border-viz-line bg-viz-panel text-viz-ink`;
+  }
+
+  /* ── Struct-element path: one index-labelled row per object element ── */
+  const allPrimitive = items.every((item) => typeof item !== "object" || item === null);
+  if (!allPrimitive) {
+    return (
+      <div className="flex flex-col gap-1">
+        <div className="text-xs text-viz-ink/60">{name}: vector</div>
+        <div className="flex flex-col gap-0.5 overflow-x-auto pb-1">
+          {items.map((item, i) => {
+            const entries = structEntries(item);
+            return (
+              <div key={i} className="flex items-center gap-1.5 min-w-0">
+                <div className={`text-[10px] font-mono w-6 shrink-0 text-right ${i === highlightIndex || changed.has(i) ? "text-viz-flash" : "text-viz-ink/60"}`}>
+                  {i}
+                </div>
+                <div className={rowClass(i)} style={flashStyle(changed.has(i))} title={entries.map(([k, v]) => `${k}=${renderCellValue(v)}`).join(" ") || renderCellValue(item)} {...cellAttrs(i)}>
+                  {entries.length > 0
+                    ? entries.map(([k, v]) => (
+                        <span key={k} className="truncate">
+                          <span className="opacity-60">{k}=</span>
+                          {renderCompactCellValue(v)}
+                        </span>
+                      ))
+                    : renderCompactCellValue(item)}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
   }
 
   /* ── Non-virtualised path (≤ threshold) ── */

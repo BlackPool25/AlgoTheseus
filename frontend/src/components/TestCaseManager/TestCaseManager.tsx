@@ -7,6 +7,7 @@
 
 import { useCallback, useState, useRef } from "react";
 import { api, type UploadedFile } from "../../utils/api";
+import { useUIStore } from "../../store/uiStore";
 
 // ── Constants ──────────────────────────────────────────────────────────────
 
@@ -43,6 +44,7 @@ export function TestCaseManager() {
   const [error, setError] = useState<string | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const addBatchTestId = useUIStore((s) => s.addBatchTestId);
 
   // ── File validation ───────────────────────────────────────────────────
 
@@ -125,11 +127,12 @@ export function TestCaseManager() {
       setResult({ testId: res.test_id, files: res.files });
       setStatus("done");
       setFiles([]);
+      addBatchTestId(res.test_id);
     } catch (e) {
       setError(String(e));
       setStatus("error");
     }
-  }, [files]);
+  }, [files, addBatchTestId]);
 
   // ── Reset ────────────────────────────────────────────────────────────
 

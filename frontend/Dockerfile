@@ -17,6 +17,10 @@ RUN bun install --frozen-lockfile
 
 # Copy frontend source and build
 COPY . ./
+# Vite bakes VITE_API_URL at build time. Docker builds pass it via
+# --build-arg VITE_API_URL=<api-url>; empty keeps the same-origin dev fallback.
+ARG VITE_API_URL=""
+ENV VITE_API_URL=${VITE_API_URL}
 RUN bun run build
 
 # ============================================================

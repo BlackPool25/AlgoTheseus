@@ -121,11 +121,11 @@ export function TraceScrubber() {
   if (totalSteps === 0) return null;
 
   return (
-    <div className="flex flex-col gap-1.5 px-3 md:px-5 py-2.5 bg-viz-body border-t border-viz-line select-none z-30">
+    <div className="flex flex-col gap-1.5 px-3 md:px-5 py-2.5 at-safe-bottom bg-viz-body border-t border-viz-line select-none z-30">
       {/* Label row — shows step info + expand/collapse toggle + speed badge */}
       <div className="flex items-center justify-between gap-2 min-w-0">
         <div className="flex items-center gap-2 min-w-0">
-          <span className="text-xs font-mono text-viz-ink font-medium truncate">
+          <span data-testid="step-counter" className="text-sm font-mono text-viz-ink font-semibold truncate">
             {displayLabel}
           </span>
           {activeGroup && (

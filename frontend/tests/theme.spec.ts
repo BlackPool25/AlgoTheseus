@@ -1,7 +1,7 @@
 /**
  * tests/theme.spec.ts — todo 24 multi-palette theme system.
  *
- * - Switcher lists the 8 frozen palettes; selecting one sets data-theme.
+ * - Switcher lists the 6 frozen palettes; selecting one sets data-theme.
  * - Choice persists via localStorage across reload.
  * - Unknown data-theme falls back to zinc-dark with a console warning.
  * - One canonical-trace screenshot per palette lands in .omo/evidence/.
@@ -44,36 +44,57 @@ async function goToStep(page: Page, step: number) {
 const themeOf = (page: Page) =>
   page.evaluate(() => document.documentElement.dataset.theme);
 
+/**
+ * Settings-first Theme select (desktop IA): at desktop viewport the Theme
+ * <select> mounts only inside the desktop-only Settings gear menu
+ * (Header.tsx, `hidden md:flex`); on mobile it stays top-level. Opens the
+ * gear only when no Theme select is already visible, so the helper is a
+ * no-op on mobile and idempotent when the menu is already open (e.g.
+ * across reload the menu closes, so callers just call again).
+ */
+async function themeSelect(page: Page) {
+  const visible = page.locator('select[aria-label="Theme"]:visible');
+  if ((await visible.count()) === 0) {
+    const gear = page.getByRole("button", { name: "Settings" });
+    if (await gear.isVisible().catch(() => false)) {
+      await gear.click();
+    }
+  }
+  return page.locator('select[aria-label="Theme"]:visible');
+}
+
 test.describe("Theme switcher", () => {
-  test("switcher lists 8 palettes, default is zinc-dark", async ({ page }) => {
+  test("switcher lists 6 palettes, default is zinc-dark", async ({ page }) => {
     await setupWithMock(page);
-    const select = page.getByLabel("Theme");
+    const select = await themeSelect(page);
     await expect(select).toBeVisible();
     await expect(select).toHaveValue("zinc-dark");
     expect(await themeOf(page)).toBe("zinc-dark");
-    const options = await select.locator("option").allTextContents();
-    expect(options).toEqual([...THEMES]);
+    const values = await select
+      .locator("option")
+      .evaluateAll((els) => els.map((el) => (el as HTMLOptionElement).value));
+    expect(values).toEqual([...THEMES]);
   });
 
   test("selecting a theme applies data-theme and persists it", async ({
     page,
   }) => {
     await setupWithMock(page);
-    const select = page.getByLabel("Theme");
-    await select.selectOption("nord");
-    expect(await themeOf(page)).toBe("nord");
+    const select = await themeSelect(page);
+    await select.selectOption("papyrus");
+    expect(await themeOf(page)).toBe("papyrus");
     expect(
       await page.evaluate(() => localStorage.getItem("algo-theseus-theme")),
-    ).toBe("nord");
+    ).toBe("papyrus");
   });
 
   test("theme survives reload via localStorage", async ({ page }) => {
     await setupWithMock(page);
-    await page.getByLabel("Theme").selectOption("gruvbox-dark");
+    await (await themeSelect(page)).selectOption("gruvbox-dark");
     await page.reload();
     await expect(page.getByRole("button", { name: /^Run$/ })).toBeVisible();
     expect(await themeOf(page)).toBe("gruvbox-dark");
-    await expect(page.getByLabel("Theme")).toHaveValue("gruvbox-dark");
+    await expect(await themeSelect(page)).toHaveValue("gruvbox-dark");
   });
 
   test("unknown data-theme falls back to default with console warning", async ({
@@ -97,15 +118,15 @@ test.describe("Theme switcher", () => {
   }) => {
     await page.addInitScript(() => {
       localStorage.removeItem("algo-theseus-theme");
-      localStorage.setItem("dsa-viz-theme", "nord");
+      localStorage.setItem("dsa-viz-theme", "papyrus");
     });
     await page.goto("/");
     await expect(page.getByRole("button", { name: /^Run$/ })).toBeVisible();
-    expect(await themeOf(page)).toBe("nord");
-    await expect(page.getByLabel("Theme")).toHaveValue("nord");
+    expect(await themeOf(page)).toBe("papyrus");
+    await expect(await themeSelect(page)).toHaveValue("papyrus");
     expect(
       await page.evaluate(() => localStorage.getItem("algo-theseus-theme")),
-    ).toBe("nord");
+    ).toBe("papyrus");
     expect(
       await page.evaluate(() => localStorage.getItem("dsa-viz-theme")),
     ).toBeNull();
@@ -140,19 +161,19 @@ test.describe("Theme switcher", () => {
     expect(await themeOf(page)).toBe("zinc-dark");
   });
 
-  test("light theme visibly re-skins the app shell and editor", async ({
+  test("papyrus theme visibly re-skins the app shell and editor", async ({
     page,
   }) => {
     await setupWithMock(page);
     await page.waitForSelector(".monaco-editor", { timeout: 20000 });
-    await page.getByLabel("Theme").selectOption("light");
+    await (await themeSelect(page)).selectOption("papyrus");
     await page.waitForTimeout(500);
     const headerBg = await page.evaluate(
       () => getComputedStyle(document.querySelector("header")!).backgroundColor,
     );
-    // light --viz-body-bg #fdf6e3 (header uses bg-viz-body, byte-identical
+    // papyrus --viz-body-bg #f5edd8 (header uses bg-viz-body, byte-identical
     // to bg-zinc-900 #18181b under zinc-dark).
-    expect(headerBg).toBe("rgb(253, 246, 227)");
+    expect(headerBg).toBe("rgb(245, 237, 216)");
     const editorBg = await page.evaluate(
       () =>
         getComputedStyle(document.querySelector(".monaco-editor")!)
@@ -165,7 +186,7 @@ test.describe("Theme switcher", () => {
   test("canonical-trace screenshot per palette", async ({ page }) => {
     await setupWithMock(page);
     await goToStep(page, STEPS.VECTOR);
-    const select = page.getByLabel("Theme");
+    const select = await themeSelect(page);
     for (const name of THEMES) {
       await select.selectOption(name);
       await page.waitForTimeout(400);

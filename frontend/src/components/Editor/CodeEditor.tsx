@@ -222,22 +222,35 @@ export function CodeEditor() {
         onChange={(v) => setCode(v ?? "")}
         onMount={handleMount}
         options={{
+          automaticLayout: true,
           fontSize: 13,
           minimap: { enabled: false },
-          scrollBeyondLastLine: false,
+          scrollBeyondLastLine: true,
           glyphMargin: true,
           lineNumbers: "on",
           wordWrap: "on",
+          wrappingIndent: "deepIndent",
+          wrappingStrategy: "advanced",
+          scrollbar: {
+            horizontal: "visible",
+            vertical: "visible",
+            horizontalScrollbarSize: 6,
+            verticalScrollbarSize: 8,
+            useShadows: false,
+          },
+          stickyScroll: { enabled: false },
+          renderWhitespace: "none",
+          smoothScrolling: true,
         }}
       />
       {gutter && twoArrow && (
-        <div className="absolute bottom-2 right-2 flex items-center gap-1 z-10">
+        <div className="absolute bottom-2 right-2 flex items-center gap-1 z-10 opacity-70">
           {gutter.prev != null && gutter.prev !== gutter.next && (
-            <span data-testid="gutter-prev" className="gutter-prev-chip">
+            <span data-testid="gutter-prev" className="gutter-prev-chip text-[10px] font-normal">
               ◀ line {gutter.prev}
             </span>
           )}
-          <span data-testid="gutter-next" className="gutter-next-chip">
+          <span data-testid="gutter-next" className="gutter-next-chip text-[10px] font-normal">
             ▶ line {gutter.next}
           </span>
         </div>

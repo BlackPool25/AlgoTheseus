@@ -46,7 +46,7 @@ export class RootErrorBoundary extends Component<Props, State> {
   render(): ReactNode {
     if (this.state.hasError) {
       return (
-        <div className="flex flex-col items-center justify-center min-h-screen bg-viz-body text-viz-ink px-4">
+        <div className="flex flex-col items-center justify-center min-h-screen min-h-dvh bg-viz-body text-viz-ink px-4">
           <h1 className="text-sm font-semibold">AlgoTheseus</h1>
           <p className="mt-1 text-xs font-mono text-viz-ink/60">C++ · libclang</p>
           <div

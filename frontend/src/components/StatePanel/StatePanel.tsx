@@ -25,6 +25,23 @@ import { HeapPanel } from "../ContainerVisuals/HeapPanel";
 import type { HeapDiffShape } from "../ContainerVisuals/HeapPanel";
 import { buildFramesWithVars } from "./frameVars";
 
+/**
+ * $id/$ref identity tags inside a frame var value (backend T11b heap
+ * identity). Scans the JSON form so nested refs count without recursion.
+ */
+function collectIdentityIds(value: unknown): string[] {
+  const out = new Set<string>();
+  try {
+    const s = JSON.stringify(value) ?? "";
+    const re = /"\$(?:id|ref)"\s*:\s*(\d+)/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(s)) !== null) out.add(m[1]);
+  } catch {
+    /* unstringifiable — no identity */
+  }
+  return [...out];
+}
+
 export function StatePanel() {
   const { trace, currentStep, currentEvent, lastLiveByFrame, callStack } = useTraceStore();
   const [globalsOpen, setGlobalsOpen] = useState(true);
@@ -139,12 +156,12 @@ export function StatePanel() {
           <span className="text-xs font-mono text-viz-ink">{currentEvent.func}()</span>
         </div>
         {display.carried && display.staleStep !== null && (
-          <div className="text-[11px] text-zinc-600 mt-0.5">
-            showing last state · step {display.staleStep}
+          <div className="text-[10px] font-mono text-viz-ink/40 mt-0.5">
+            showing last state · step {display.staleStep + 1}
           </div>
         )}
         {highlight.caption && (
-          <div className="text-[11px] font-mono text-zinc-500 mt-0.5">
+          <div className="text-[10px] font-mono text-viz-ink/40 mt-0.5">
             {highlight.caption}
           </div>
         )}
@@ -189,36 +206,68 @@ export function StatePanel() {
       {/* Per-frame var tables (nested stacks only; flat list below is untouched) */}
       {showFrameTables && (
         <div className="border-b border-viz-line">
-          {framesDisplay.map((frame) => {
+          {framesDisplay.map((frame, frameIdx) => {
             const frameEntries = Object.entries(frame.vars);
+            const isCurrentFrame =
+              frame.func === currentEvent.func && frame.depth === currentEvent.depth;
             return (
               <div
                 key={`${frame.func}@${frame.depth}`}
                 data-testid="frame-table"
                 data-frame={`${frame.func}@${frame.depth}`}
+                className={isCurrentFrame ? undefined : "opacity-60"}
               >
-                <div className="px-3 py-1 flex items-center gap-1">
-                  <span className="text-[10px] font-medium text-viz-ink/60 uppercase tracking-wide">
+                <div className="px-3 py-1 flex items-center gap-1 min-w-0">
+                  <span className="text-[10px] font-medium text-viz-ink/60 uppercase tracking-wide shrink-0">
                     Frame
                   </span>
-                  <span className="text-[11px] font-mono text-amber-400">
+                  <span className="text-[11px] font-mono text-amber-400 truncate">
                     {frame.func}()
                   </span>
-                  <span className="text-[10px] text-viz-ink/60 ml-auto">
+                  {isCurrentFrame && (
+                    <span className="text-[10px] text-viz-ink/60 shrink-0">
+                      · current
+                    </span>
+                  )}
+                  <span className="text-[10px] text-viz-ink/60 ml-auto shrink-0">
                     depth {frame.depth}
                   </span>
                 </div>
                 {frameEntries.length === 0 ? (
                   <div className="px-3 py-1 text-xs text-viz-ink/60">No vars in frame</div>
                 ) : (
-                  frameEntries.map(([name, value]) => (
-                    <VariableRow
-                      key={`${frame.func}:${name}`}
-                      name={name}
-                      value={value}
-                      status="normal"
-                    />
-                  ))
+                  frameEntries.map(([name, value]) => {
+                    const ids = collectIdentityIds(value);
+                    const owner =
+                      ids.length > 0
+                        ? framesDisplay
+                            .slice(0, frameIdx)
+                            .find((f) =>
+                              Object.values(f.vars).some((v) =>
+                                collectIdentityIds(v).some((id) => ids.includes(id)),
+                              ),
+                            )
+                        : undefined;
+                    if (owner) {
+                      return (
+                        <div
+                          key={`${frame.func}:${name}`}
+                          data-testid="same-object-ref"
+                          className="px-3 py-1 text-[11px] font-mono text-viz-ink/50 truncate"
+                        >
+                          {name}: same object as {owner.func}()
+                        </div>
+                      );
+                    }
+                    return (
+                      <VariableRow
+                        key={`${frame.func}:${name}`}
+                        name={name}
+                        value={value}
+                        status="normal"
+                      />
+                    );
+                  })
                 )}
               </div>
             );
@@ -226,8 +275,20 @@ export function StatePanel() {
         </div>
       )}
 
-      {/* Variable list */}
+      {/* Variable list — flat current-frame rows; owner-labeled so it never
+          reads as a second frame's vars next to the per-frame tables above. */}
       <div className="flex-1 overflow-y-auto">
+        {showFrameTables && (
+          <div className="px-3 py-1 flex items-center gap-1 min-w-0 border-t border-viz-line">
+            <span className="text-[10px] font-medium text-viz-ink/60 uppercase tracking-wide shrink-0">
+              Frame
+            </span>
+            <span className="text-[11px] font-mono text-amber-400 truncate">
+              {currentEvent.func}()
+            </span>
+            <span className="text-[10px] text-viz-ink/60 shrink-0">· current</span>
+          </div>
+        )}
         {rows.length === 0 ? (
           <div className="px-3 py-2 text-xs text-viz-ink/60">No variables in scope</div>
         ) : (

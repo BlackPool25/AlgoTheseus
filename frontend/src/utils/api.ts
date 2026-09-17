@@ -25,8 +25,9 @@ import type { CFGEdge, CFGNode } from "../types/cfg";
 import type { TraceEvent } from "../types/trace";
 
 // Empty string = same origin, routed through Vite proxy to the backend.
-// Set VITE_API_URL to override (e.g. in production).
-const BASE_URL = import.meta.env.VITE_API_URL ?? "";
+// Set VITE_API_URL at build time to override (Cloudflare Pages dashboard
+// env; baked in by Vite — an empty/unset value keeps the dev fallback).
+const BASE_URL = (import.meta.env.VITE_API_URL ?? "").trim();
 
 export interface ExecuteRequest {
   code: string;
@@ -39,6 +40,7 @@ export interface ExecuteResponse {
   runtime_error: string | null;
   timed_out: boolean;
   truncated: boolean;
+  warnings: string[];
   trace: TraceEvent[];
   cfg_nodes: CFGNode[];
   cfg_edges: CFGEdge[];
@@ -57,7 +59,7 @@ export interface UploadTestcasesResponse {
 }
 
 async function post<T>(path: string, body: unknown): Promise<T> {
-  const res = await fetch(`${BASE_URL}${path}`, {
+  const res = await fetchWith429Retry(`${BASE_URL}${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -70,7 +72,7 @@ async function post<T>(path: string, body: unknown): Promise<T> {
 }
 
 async function postFormData<T>(path: string, formData: FormData): Promise<T> {
-  const res = await fetch(`${BASE_URL}${path}`, {
+  const res = await fetchWith429Retry(`${BASE_URL}${path}`, {
     method: "POST",
     body: formData,
   });
@@ -93,6 +95,7 @@ export interface ExecuteBatchResponseItem {
   runtime_error: string | null;
   timed_out: boolean;
   truncated: boolean;
+  warnings: string[];
   trace: TraceEvent[];
   cfg_nodes: CFGNode[];
   cfg_edges: CFGEdge[];
@@ -104,7 +107,7 @@ export interface ExecuteBatchResponseItem {
 /** A parsed chunk from the NDJSON stream. */
 export type StreamChunk =
   | { type: "event"; data: TraceEvent }
-  | { type: "cfg"; stdout: string; runtime_error: string | null; timed_out: boolean; truncated: boolean; cfg_nodes: CFGNode[]; cfg_edges: CFGEdge[]; total_steps: number }
+  | { type: "cfg"; stdout: string; runtime_error: string | null; timed_out: boolean; truncated: boolean; warnings: string[]; cfg_nodes: CFGNode[]; cfg_edges: CFGEdge[]; total_steps: number }
   | { type: "error"; compile_error?: string; runtime_error?: string };
 
 /** Callbacks invoked as NDJSON lines arrive from the streaming /execute endpoint. */
@@ -115,6 +118,7 @@ export interface StreamCallbacks {
     runtime_error: string | null;
     timed_out: boolean;
     truncated: boolean;
+    warnings: string[];
     cfg_nodes: CFGNode[];
     cfg_edges: CFGEdge[];
     total_steps: number;
@@ -181,6 +185,7 @@ export function streamExecute(
                 runtime_error: chunk.runtime_error,
                 timed_out: chunk.timed_out,
                 truncated: chunk.truncated,
+                warnings: chunk.warnings ?? [],
                 cfg_nodes: chunk.cfg_nodes,
                 cfg_edges: chunk.cfg_edges,
                 total_steps: chunk.total_steps,
@@ -205,12 +210,123 @@ export function streamExecute(
   return abort;
 }
 
+// ── 429 retry + batch coalescing (Wave7 4.2) ────────────────────────────────
+// Backend 429 contract (Wave6 3.2): 429 + integer Retry-After seconds on
+// rate-limit and sandbox-saturation rejections.
+
+/** Options for fetchWith429Retry. */
+export interface RetryOptions {
+  /** Max 429 retries before returning the 429 response. Default 3. */
+  maxRetries?: number;
+  /** Upper bound of random jitter added to each backoff. Default 250ms. */
+  jitterMs?: number;
+  /** Injectable fetch for tests. Defaults to global fetch. */
+  fetchFn?: typeof fetch;
+}
+
+function parseRetryAfterMs(value: string | null): number | null {
+  if (value === null) return null;
+  const secs = Number.parseInt(value.trim(), 10);
+  if (!Number.isFinite(secs) || secs < 0) return null;
+  return secs * 1000;
+}
+
+/**
+ * Fetch wrapper that honors integer Retry-After on 429 (up to maxRetries
+ * retries with jitterMs jitter), then returns the final response for the
+ * caller to handle. Non-429 responses pass through untouched.
+ */
+export async function fetchWith429Retry(
+  input: string | URL | Request,
+  init?: RequestInit,
+  opts: RetryOptions = {},
+): Promise<Response> {
+  const maxRetries = opts.maxRetries ?? 3;
+  const jitterMs = opts.jitterMs ?? 250;
+  const fetchFn = opts.fetchFn ?? fetch;
+  for (let attempt = 0; ; attempt++) {
+    const res = await fetchFn(input, init);
+    if (res.status !== 429 || attempt >= maxRetries) return res;
+    const baseMs = parseRetryAfterMs(res.headers.get("Retry-After")) ?? 1000;
+    await sleep(baseMs + Math.random() * jitterMs);
+  }
+}
+
+/** 50ms window in which identical batch requests share one POST. */
+const BATCH_WINDOW_MS = 50;
+
+interface PendingBatch {
+  req: ExecuteBatchRequest;
+  resolve: Array<(value: ExecuteBatchResponseItem[]) => void>;
+  reject: Array<(reason: unknown) => void>;
+  timer: ReturnType<typeof setTimeout>;
+}
+
+const pendingBatches = new Map<string, PendingBatch>();
+
+function batchKey(req: ExecuteBatchRequest): string {
+  return `${req.code} ${[...req.test_ids].sort().join(" ")}`;
+}
+
+function flushBatch(key: string): void {
+  const pending = pendingBatches.get(key);
+  if (!pending) return;
+  pendingBatches.delete(key);
+  api.executeBatch(pending.req).then(
+    (res) => {
+      for (const resolve of pending.resolve) resolve(res);
+    },
+    (err: unknown) => {
+      for (const reject of pending.reject) reject(err);
+    },
+  );
+}
+
+/**
+ * Coalesce identical executeBatch requests (same code + test_ids) fired
+ * within a 50ms window into a single POST /execute-batch whose shared
+ * promise resolves every caller. Different payloads flush independently.
+ */
+export function batchedExecuteBatch(
+  req: ExecuteBatchRequest,
+): Promise<ExecuteBatchResponseItem[]> {
+  const key = batchKey(req);
+  const pending = pendingBatches.get(key);
+  if (pending) {
+    return new Promise<ExecuteBatchResponseItem[]>((resolve, reject) => {
+      pending.resolve.push(resolve);
+      pending.reject.push(reject);
+    });
+  }
+  const slot: PendingBatch = {
+    req,
+    resolve: [],
+    reject: [],
+    timer: setTimeout(() => flushBatch(key), BATCH_WINDOW_MS),
+  };
+  pendingBatches.set(key, slot);
+  return new Promise<ExecuteBatchResponseItem[]>((resolve, reject) => {
+    slot.resolve.push(resolve);
+    slot.reject.push(reject);
+  });
+}
+
 export const api = {
-  execute: (req: ExecuteRequest) =>
-    post<ExecuteResponse>("/execute", req),
+  /** Default prod path: async /jobs with sync /execute fallback. */
+  execute: (req: ExecuteRequest) => executeViaJobs(req),
 
   executeBatch: (req: ExecuteBatchRequest) =>
     post<ExecuteBatchResponseItem[]>("/execute-batch", req),
+
+  /** Debounced coalescing wrapper around executeBatch (shares one POST). */
+  batchedExecuteBatch: (req: ExecuteBatchRequest) => batchedExecuteBatch(req),
+
+  /** Raw 429-aware fetch for callers that manage their own responses. */
+  fetchWith429Retry: (
+    input: string | URL | Request,
+    init?: RequestInit,
+    opts?: RetryOptions,
+  ) => fetchWith429Retry(input, init, opts),
 
   uploadTestcases: (files: File[]) => {
     const formData = new FormData();

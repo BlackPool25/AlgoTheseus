@@ -36,19 +36,6 @@
   --viz-alias-edge: #a1a1aa;
 }
 
-[data-theme="light"] {
-  --viz-body-bg: #fdf6e3;
-  --viz-body-text: #586e75;
-  --viz-panel-bg: #eee8d5;
-  --viz-panel-border: #93a1a1;
-  --viz-accent: #268bd2;
-  --viz-gutter-prev: #c9e6ca;
-  --viz-gutter-next: #dc322f;
-  --viz-exception: #dc322f;
-  --viz-flash: #b58900;
-  --viz-alias-edge: #657b83;
-}
-
 [data-theme="high-contrast"] {
   --viz-body-bg: #000000;
   --viz-body-text: #ffffff;
@@ -85,7 +72,7 @@
   --viz-gutter-next: #c0392b;
   --viz-exception: #a93226;
   --viz-flash: #d4a017;
-  --viz-alias-edge: #7a6a4f;
+  --viz-alias-edge: #5f5340;
 }
 
 [data-theme="catppuccin-mocha"] {
@@ -111,20 +98,7 @@
   --viz-gutter-next: #fb4934;
   --viz-exception: #fb4934;
   --viz-flash: #fabd2f;
-  --viz-alias-edge: #83a598;
-}
-
-[data-theme="nord"] {
-  --viz-body-bg: #2e3440;
-  --viz-body-text: #eceff4;
-  --viz-panel-bg: #3b4252;
-  --viz-panel-border: #4c566a;
-  --viz-accent: #88c0d0;
-  --viz-gutter-prev: #a3be8c;
-  --viz-gutter-next: #bf616a;
-  --viz-exception: #bf616a;
-  --viz-flash: #ebcb8b;
-  --viz-alias-edge: #81a1c1;
+  --viz-alias-edge: #93b8ab;
 }
 
 body {
@@ -132,6 +106,7 @@ body {
   background: var(--viz-body-bg);
   color: var(--viz-body-text);
   min-height: 100vh;
+  min-height: 100dvh;
 }
 
 ::-webkit-scrollbar {
@@ -174,12 +149,12 @@ body {
 }
 
 .gutter-next-line {
-  background: rgba(233, 63, 52, 0.10) !important;
+  background: rgba(245, 158, 11, 0.10) !important;
 }
 
 .gutter-next-glyph::after {
   content: "▶";
-  color: var(--viz-gutter-next, #e93f34);
+  color: var(--viz-flash, #f59e0b);
   font-size: 10px;
   padding-left: 2px;
 }
@@ -203,7 +178,7 @@ body {
 }
 
 .gutter-next-chip {
-  color: var(--viz-gutter-next, #e93f34);
+  color: var(--viz-flash, #f59e0b);
 }
 
 /* Skeleton shimmer (perf track): pure-CSS pulse via theme tokens, no deps. */
@@ -245,6 +220,21 @@ body {
 
 .at-reserve-state {
   min-height: 240px;
+}
+
+/* Mobile browser-chrome guard: bottom-anchored chrome rides above the
+   dynamic Brave bottom bar / home indicator. env() is 0px where
+   unsupported, so desktop (dvh == vh) is pixel-identical. Base values
+   mirror the Tailwind paddings they extend (py-2.5 = 0.625rem on the
+   scrubber, p-2 = 0.5rem on the sticky run bar) so 360–390px vertical
+   rhythm is unchanged — only the OS inset is added. Unlayered CSS wins
+   over Tailwind v4 @layer utilities, so the calc bottom padding holds. */
+.at-safe-bottom {
+  padding-bottom: calc(0.625rem + env(safe-area-inset-bottom, 0px));
+}
+
+.at-safe-bottom-sm {
+  padding-bottom: calc(0.5rem + env(safe-area-inset-bottom, 0px));
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Discussions Q&A
+    url: TODO(discussions-url)
+    about: Ask usage questions and share ideas with the community.
+  - name: Security policy
+    url: ../SECURITY.md
+    about: Do NOT open a public issue for vulnerabilities. Read the policy and report privately.

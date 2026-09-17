@@ -1,0 +1,67 @@
+name: Bug report
+description: Report a reproducible problem with AlgoTheseus.
+labels: [bug]
+body:
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: OS and browser, or Docker setup if running the sandbox locally.
+      placeholder: e.g. Ubuntu 24.04 + Chrome 126, or Docker 26 + algo-theseus-sandbox:latest
+    validations:
+      required: true
+  - type: textarea
+    id: snippet
+    attributes:
+      label: Minimal C++ snippet
+      description: Smallest complete program that reproduces the bug.
+      placeholder: Paste a minimal main.cpp here.
+      render: cpp
+    validations:
+      required: true
+  - type: textarea
+    id: stdin
+    attributes:
+      label: stdin / test-case input
+      description: Exact stdin fed to the program (or input1.in contents).
+      placeholder: Paste stdin here. Leave blank for no input.
+      render: text
+    validations:
+      required: false
+  - type: textarea
+    id: expected-actual
+    attributes:
+      label: Expected vs actual behavior
+      description: What you expected, and what happened instead.
+      placeholder: Expected ... but got ...
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Commands run, starting from a clean checkout if possible.
+      value: |
+        1. `cd backend && uv run pytest tests/ -v`
+        2. `cd frontend && npx playwright test`
+        3. ...
+      render: bash
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Relevant backend, frontend, or Docker logs (strip secrets first).
+      render: text
+    validations:
+      required: false
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I searched existing issues and this is not a duplicate.
+          required: true
+        - label: I included a minimal snippet plus expected vs actual behavior.
+          required: true

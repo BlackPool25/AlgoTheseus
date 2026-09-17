@@ -53,13 +53,11 @@ const STATE_FILL: Record<NodeState, string> = {
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-interface GraphData {
-  adj: number[][];
-  state?: number[];
-  distances?: (number | null)[];
-  times?: { disc: number; fin?: number }[];
-  parent?: (number | null)[];
-}
+import {
+  normalizeEdge,
+  parseGraphValue,
+  type AdjEntry,
+} from "../../utils/graphParse";
 
 interface Props {
   value: unknown;
@@ -68,45 +66,7 @@ interface Props {
 
 type EdgeKind = "tree" | "back" | "cross" | "forward";
 
-// ── Input parsing ────────────────────────────────────────────────────────────
-
-function parseGraphValue(value: unknown): GraphData | null {
-  if (!value) return null;
-
-  // 2D array → plain adjacency list
-  if (
-    Array.isArray(value) &&
-    value.length > 0 &&
-    value.every((item) => Array.isArray(item))
-  ) {
-    return { adj: value as number[][] };
-  }
-
-  // Enriched object with _type discriminator
-  if (typeof value === "object" && !Array.isArray(value)) {
-    const obj = value as Record<string, unknown>;
-    if (
-      (obj._type === "graph" || obj.adj !== undefined) &&
-      Array.isArray(obj.adj)
-    ) {
-      return {
-        adj: obj.adj as number[][],
-        state: Array.isArray(obj.state) ? (obj.state as number[]) : undefined,
-        distances: Array.isArray(obj.dist)
-          ? (obj.dist as (number | null)[])
-          : undefined,
-        times: Array.isArray(obj.times)
-          ? (obj.times as { disc: number; fin?: number }[])
-          : undefined,
-        parent: Array.isArray(obj.parent)
-          ? (obj.parent as (number | null)[])
-          : undefined,
-      };
-    }
-  }
-
-  return null;
-}
+// ── Input parsing lives in utils/graphParse (unit-tested) ────────────────────
 
 // ── Layout ───────────────────────────────────────────────────────────────────
 
@@ -130,7 +90,7 @@ function circularLayout(
 
 function forceLayout(
   n: number,
-  adj: number[][],
+  adj: AdjEntry[][],
 ): { x: number; y: number }[] {
   const positions = Array.from({ length: n }, (_, i) => ({
     x: Math.cos((2 * Math.PI * i) / n) * 100,
@@ -161,8 +121,10 @@ function forceLayout(
     }
     // Attraction along edges
     for (let u = 0; u < n; u++) {
-      for (const v of adj[u]) {
-        if (v <= u) continue;
+      for (const entry of adj[u]) {
+        const norm = normalizeEdge(entry);
+        if (norm === null || norm.v <= u) continue;
+        const v = norm.v;
         const dx = positions[v].x - positions[u].x;
         const dy = positions[v].y - positions[u].y;
         const dist = Math.sqrt(dx * dx + dy * dy) || 1;
@@ -336,10 +298,17 @@ export function GraphAlgorithmVisual({ value, name }: Props) {
     for (let u = 0; u < n; u++) {
       const neighbors = adj[u];
       if (!neighbors) continue;
-      for (const v of neighbors) {
-        if (typeof v !== "number" || v < 0 || v >= n) continue;
+      for (const entry of neighbors) {
+        const norm = normalizeEdge(entry);
+        if (norm === null) continue;
+        const { v, weight } = norm;
+        if (v < 0 || v >= n) continue;
 
         const kind = classifyEdge(u, v, parent, times);
+        const label =
+          weight !== undefined
+            ? (kind !== "tree" ? `${weight} · ${kind}` : String(weight))
+            : (kind !== "tree" ? kind : undefined);
 
         flowEdges.push({
           id: `e${u}-${v}`,
@@ -348,7 +317,7 @@ export function GraphAlgorithmVisual({ value, name }: Props) {
           type: "graphEdge",
           style: edgeStyle(kind),
           markerEnd: { type: MarkerType.ArrowClosed as const, color: edgeStyle(kind).stroke ?? "var(--viz-alias-edge)", width: 14, height: 14 },
-          label: kind !== "tree" ? kind : undefined,
+          label,
           labelStyle: { fontSize: 9, fill: "var(--viz-alias-edge)" },
           labelBgStyle: { fill: "var(--viz-body-bg)", fontSize: 9 },
           animated: false,

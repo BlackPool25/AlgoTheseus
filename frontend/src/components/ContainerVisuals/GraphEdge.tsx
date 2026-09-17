@@ -1,4 +1,9 @@
-import { BaseEdge, getStraightPath, type EdgeProps } from "@xyflow/react";
+import {
+  BaseEdge,
+  EdgeLabelRenderer,
+  getStraightPath,
+  type EdgeProps,
+} from "@xyflow/react";
 
 const NODE_R = 20;
 
@@ -30,13 +35,37 @@ function getClippedPath(
 
 export function GraphEdge(props: EdgeProps) {
   const [path] = getClippedPath(props.sourceX, props.sourceY, props.targetX, props.targetY);
+  const showLabel =
+    typeof props.label === "string" || typeof props.label === "number";
+  const labelX = (props.sourceX + props.targetX) / 2;
+  const labelY = (props.sourceY + props.targetY) / 2;
 
   return (
-    <BaseEdge
-      id={props.id}
-      path={path}
-      style={props.style}
-      markerEnd={props.markerEnd}
-    />
+    <>
+      <BaseEdge
+        id={props.id}
+        path={path}
+        style={props.style}
+        markerEnd={props.markerEnd}
+      />
+      {showLabel ? (
+        <EdgeLabelRenderer>
+          <div
+            className="nodrag nopan text-[9px] font-mono"
+            style={{
+              position: "absolute",
+              transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
+              background: "var(--viz-body-bg)",
+              color: "var(--viz-alias-edge)",
+              padding: "0 3px",
+              borderRadius: 3,
+              pointerEvents: "none",
+            }}
+          >
+            {props.label}
+          </div>
+        </EdgeLabelRenderer>
+      ) : null}
+    </>
   );
 }

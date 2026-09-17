@@ -37,6 +37,7 @@ FROM python:3.11-slim-bookworm
 # Rule: adding a compile flag (e.g. -flto/-static/-fsanitize) requires
 # restoring the matching piece here first.
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    ccache \
     curl \
     g++ \
     && rm -rf /var/lib/apt/lists/ \
@@ -71,6 +72,12 @@ COPY app/ ./app/
 # expected). Compose overrides SANDBOX_MODE for local DooD dev.
 ENV SANDBOX_MODE=subprocess \
     CACHE_DIR=/tmp/algo-theseus-cache
+# ccache via the Debian compiler shim: identical instrumented sources (batch
+# fan-out, retries, repeated assignments) compile in ~10-50ms. Ephemeral
+# under /tmp by design — a cold MISS repopulates it, never a failure.
+ENV PATH="/usr/lib/ccache:${PATH}" \
+    CCACHE_DIR=/tmp/algo-theseus-ccache \
+    CCACHE_MAXSIZE=500M
 
 # Cloud Run: least privilege — non-root at runtime. Compose unaffected
 # (same paths; /tmp stays world-writable; default CMD unchanged below).

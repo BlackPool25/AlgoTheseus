@@ -12,6 +12,7 @@ import logging
 import os
 import subprocess
 import tempfile
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -30,9 +31,17 @@ from app.core.rate_limit import limiter
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# The default asyncio executor is min(32, cpu+4) threads — 6 on a 2-vCPU
+# Cloud Run instance. Every sandbox/cache/instrument hop rides it, so MISS
+# storms queue behind 6 threads (the 429 admission probe only senses this).
+# One shared 32-thread pool: MISS throughput without oversubscribing g++,
+# which has its own spawn caps. Single worker => single loop => set once.
+_LOOP_EXECUTOR = ThreadPoolExecutor(max_workers=32, thread_name_prefix="algo-loop")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    asyncio.get_running_loop().set_default_executor(_LOOP_EXECUTOR)
     # Sync by design: Cloud Run startup windows are minutes, so a +1-2s
     # ready delay buys a deterministic (non-cold) first request.
     try:

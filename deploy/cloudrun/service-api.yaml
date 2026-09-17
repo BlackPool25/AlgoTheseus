@@ -18,9 +18,8 @@ spec:
   template:
     metadata:
       annotations:
-        autoscaling.knative.dev/minScale: "1" # Wave8: keep 1 warm instance to absorb burst cold-start
+        autoscaling.knative.dev/minScale: "0" # scale-to-zero: no idle baseline cost, cold start on first request
         autoscaling.knative.dev/maxScale: "20" # Wave8: doubled from 10 for burst headroom
-        run.googleapis.com/cpu-throttling: "false" # keep CPU during g++ jail + streaming
         run.googleapis.com/startup-cpu-boost: "true" # blunt cold starts (~60s SnapDeploy / ~1min Render)
     spec:
       containerConcurrency: 20 # Wave8: raised from 15; single uvicorn handles 20 concurrent without pool exhaustion
@@ -37,6 +36,8 @@ spec:
               value: /tmp/algo-theseus-cache # ephemeral: restart wipes it, cold MISS expected
             - name: MAX_BATCH_SANDBOXES
               value: "4" # Wave8: doubled from 2; gen2 handles 4 concurrent sandbox spawns
+            - name: CACHE_TTL_SECONDS
+              value: "86400" # 24h: assignment/canonical code reuses across days, disk is free
             - name: SANDBOX_MAX_CONCURRENT
               value: "6" # Wave8: cap total in-flight sandbox executions per instance
             - name: REDIS_URL

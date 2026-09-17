@@ -19,7 +19,6 @@ spec:
       annotations:
         autoscaling.knative.dev/minScale: "0" # scale on queue depth, not traffic
         autoscaling.knative.dev/maxScale: "20"
-        run.googleapis.com/cpu-throttling: "false"
         run.googleapis.com/startup-cpu-boost: "true"
     spec:
       containerConcurrency: 1 # MUST stay 1: one execution at a time per instance
@@ -39,6 +38,8 @@ spec:
               value: /tmp/algo-theseus-cache # ephemeral per instance
             - name: MAX_BATCH_SANDBOXES
               value: "2"
+            - name: CACHE_TTL_SECONDS
+              value: "86400" # 24h: match the API service
             - name: REDIS_URL
               valueFrom:
                 secretKeyRef:
@@ -47,7 +48,7 @@ spec:
           resources:
             limits:
               cpu: "2"
-              memory: 4Gi
+              memory: 2Gi # concurrency 1 + fan-out 2: peak ~2 concurrent cc1plus fit easily
   traffic:
     - percent: 100
       latestRevision: true

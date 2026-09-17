@@ -62,6 +62,7 @@ from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import ORJSONResponse, StreamingResponse
 
+from app.core.budget import consume_budget
 from app.core.executor.cache import (
     TOOLCHAIN_FLAGS,
     SharedCache,
@@ -70,6 +71,7 @@ from app.core.executor.cache import (
 )
 from app.core.executor.docker_runner import RunResult, _apply_output_guard, run_in_sandbox
 from app.core.executor.sandbox_config import MAX_TRACE_LINES
+from app.core.executor.subprocess_runner import compile_source_sync
 from app.core.instrumenter.injector import instrument
 from app.core.rate_limit import EXECUTE_BATCH_LIMIT, EXECUTE_LIMIT, limiter
 from app.core.stdin.parser import parse_stdin
@@ -331,6 +333,30 @@ async def _run_sandbox_guarded(instrumented: str, stdin_data: str) -> RunResult:
         raise SandboxSaturatedError(SATURATED_DETAIL)
     try:
         return await run_in_sandbox(instrumented, stdin_data)
+    finally:
+        sem.release()
+
+
+async def _compile_shared_guarded(instrumented: str) -> tuple[bytes | None, str | None, bool]:
+    """Compile once for a whole batch, fail-fast when the pool is saturated."""
+    sem = get_sandbox_sem()
+    if not _try_acquire_slot(sem):
+        raise SandboxSaturatedError(SATURATED_DETAIL)
+    try:
+        return await asyncio.to_thread(compile_source_sync, instrumented)
+    finally:
+        sem.release()
+
+
+async def _run_binary_guarded(
+    instrumented: str, binary_bytes: bytes | None, stdin_data: str
+) -> RunResult:
+    """Run-phase-only sandbox run on a prebuilt binary, fail-fast on saturation."""
+    sem = get_sandbox_sem()
+    if not _try_acquire_slot(sem):
+        raise SandboxSaturatedError(SATURATED_DETAIL)
+    try:
+        return await run_in_sandbox(instrumented, stdin_data, binary_bytes=binary_bytes)
     finally:
         sem.release()
 
@@ -816,6 +842,7 @@ async def execute(
     Returns compile_error if compilation fails (trace will be empty).
     Returns runtime_error if the program crashes or times out.
     """
+    await consume_budget(1)  # free-tier hard cap: 503 past the monthly/daily budget
     try:
         resolved = await _resolve(req, kind="single")
     except SandboxSaturatedError:
@@ -955,21 +982,21 @@ async def execute_batch(
             )
         test_inputs.append((test_id, input_file.read_text(encoding="utf-8")))
 
+    # Free-tier hard cap: one budget unit per case (conservative — the shared
+    # compile makes cases cheaper than 1 unit, but never the reverse).
+    await consume_budget(len(test_inputs))
+
     # ── Instrument once (same code, reused across all test cases) ─────────────
     batch_warnings: list[str] = []
     try:
-        instrumented = await asyncio.to_thread(
-            instrument, req.code, None, batch_warnings
-        )
+        instrumented = await asyncio.to_thread(instrument, req.code, None, batch_warnings)
     except Exception as e:
         logger.exception("Instrumentation failed")
         raise HTTPException(status_code=422, detail=f"Instrumentation error: {e}")
 
     # Debug dump
     try:
-        Path("/tmp/dsa_last_instrumented.cpp").write_text(
-            instrumented, encoding="utf-8"
-        )
+        Path("/tmp/dsa_last_instrumented.cpp").write_text(instrumented, encoding="utf-8")
     except Exception:
         logger.debug("Failed to write instrumented debug file", exc_info=True)
 

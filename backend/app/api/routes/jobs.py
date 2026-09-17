@@ -10,6 +10,7 @@ import time
 
 from fastapi import APIRouter, HTTPException, Request, Response
 
+from app.core.budget import consume_budget
 from app.core.queue.backends import get_queue
 from app.core.queue.jobs import JobStatusResponse, JobSubmitResponse
 from app.core.rate_limit import JOBS_LIMIT, limiter
@@ -26,6 +27,7 @@ async def submit_job(
     req: ExecuteRequest,
 ) -> JobSubmitResponse:
     """Enqueue a C++ execution job. Returns 202 with the polling handle."""
+    await consume_budget(1)  # free-tier hard cap counts at enqueue (conservative)
     payload = req.model_dump()
     payload["created"] = time.time()
     job_id = await get_queue().enqueue(payload)

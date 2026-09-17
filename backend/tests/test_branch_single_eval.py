@@ -19,8 +19,8 @@ from pathlib import Path
 
 import pytest
 
-from app.models.request import ExecuteRequest
 from app.core.instrumenter.injector import instrument
+from app.models.request import ExecuteRequest
 
 TRACER_H = Path(__file__).parent.parent / "app" / "core" / "instrumenter" / "tracer.h"
 
@@ -31,7 +31,13 @@ bool once() { if (n > 0) return false; n++; return true; }
 int main() { int m = 0; if (once()) m += 5; std::cout << m; return 0; }
 """
 
-KRUSKAL = Path("/tmp/lldbg/kruskal.cpp").read_text(encoding="utf-8")
+KRUSKAL_PATH = Path("/tmp/lldbg/kruskal.cpp")
+
+
+def _load_kruskal() -> str:
+    if not KRUSKAL_PATH.exists():
+        pytest.skip(f"kruskal fixture absent: {KRUSKAL_PATH}")
+    return KRUSKAL_PATH.read_text(encoding="utf-8")
 
 
 def _compile_and_run(src: str, timeout: int = 15) -> subprocess.CompletedProcess:
@@ -58,9 +64,7 @@ def _compile_and_run(src: str, timeout: int = 15) -> subprocess.CompletedProcess
             timeout=60,
             check=False,
         )
-        assert (
-            compile_result.returncode == 0
-        ), f"compile error:\n{compile_result.stderr}"
+        assert compile_result.returncode == 0, f"compile error:\n{compile_result.stderr}"
         return subprocess.run(
             [str(binary)],
             capture_output=True,
@@ -74,9 +78,7 @@ def test_side_effecting_if_condition_evaluates_once():
     """Given if(once()) with stateful once() / When instrumented+run / Then m == 5."""
     proc = _compile_and_run(ONCE_REPRO)
     assert proc.returncode == 0, f"nonzero exit:\n{proc.stderr}"
-    assert (
-        proc.stdout.strip() == "5"
-    ), f"condition evaluated more than once, stdout={proc.stdout!r}"
+    assert proc.stdout.strip() == "5", f"condition evaluated more than once, stdout={proc.stdout!r}"
 
 
 async def test_kruskal_mst_weight_via_resolve(monkeypatch):
@@ -84,12 +86,12 @@ async def test_kruskal_mst_weight_via_resolve(monkeypatch):
     import app.api.routes.execute as execute_mod
 
     monkeypatch.setenv("SANDBOX_MODE", "subprocess")
-    req = ExecuteRequest(code=KRUSKAL, raw_stdin="")
+    req = ExecuteRequest(code=_load_kruskal(), raw_stdin="")
     resolved = await execute_mod._resolve(req, kind="single")
     assert resolved.run_result is not None
-    assert (
-        resolved.run_result.exit_code == 0
-    ), f"exit={resolved.run_result.exit_code} compile_error={resolved.run_result.compile_error}"
-    assert "MST weight: 19" in (
-        resolved.run_result.stdout or ""
-    ), f"stdout={resolved.run_result.stdout!r}"
+    assert resolved.run_result.exit_code == 0, (
+        f"exit={resolved.run_result.exit_code} compile_error={resolved.run_result.compile_error}"
+    )
+    assert "MST weight: 19" in (resolved.run_result.stdout or ""), (
+        f"stdout={resolved.run_result.stdout!r}"
+    )

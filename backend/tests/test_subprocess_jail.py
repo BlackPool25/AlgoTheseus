@@ -136,18 +136,11 @@ def test_symlink_escape_and_privileged_write_blocked():
     assert r.stdout in ("contained", "read-via-link")
 
 
+@pytest.mark.serial_only  # snapshots shared /tmp/algo-theseus: must run without parallel workers
 def test_jail_dir_cleaned_up():
-    before = (
-        set(os.listdir("/tmp/algo-theseus"))
-        if os.path.isdir("/tmp/algo-theseus")
-        else set()
-    )
+    before = set(os.listdir("/tmp/algo-theseus")) if os.path.isdir("/tmp/algo-theseus") else set()
     _run(HELLO)
-    after = (
-        set(os.listdir("/tmp/algo-theseus"))
-        if os.path.isdir("/tmp/algo-theseus")
-        else set()
-    )
+    after = set(os.listdir("/tmp/algo-theseus")) if os.path.isdir("/tmp/algo-theseus") else set()
     assert after - before == set()
 
 
@@ -160,9 +153,7 @@ def test_stdout_byte_cap_bounds_output_flood():
     assert elapsed <= EXECUTION_TIMEOUT_SECONDS + 10
 
 
-@pytest.mark.skipif(
-    os.geteuid() != 0, reason="priv-drop provable only when test runs as root"
-)
+@pytest.mark.skipif(os.geteuid() != 0, reason="priv-drop provable only when test runs as root")
 def test_child_runs_as_nobody_when_root():
     src = (
         "#include <cstdio>\n#include <unistd.h>\n"

@@ -16,15 +16,15 @@ import subprocess
 import tempfile
 from pathlib import Path
 
+import pytest
+
 from app.core.instrumenter import serializer_gen
 
 TRACER_H = Path(__file__).parent.parent / "app" / "core" / "instrumenter" / "tracer.h"
 FIXTURES = Path(__file__).parent / "fixtures"
 
 
-def _compile_and_run_extra(
-    source: str, timeout: int = 5
-) -> subprocess.CompletedProcess:
+def _compile_and_run_extra(source: str, timeout: int = 5) -> subprocess.CompletedProcess:
     """Compile *source* (already containing tracer.h include + generated code)
     and run it. Returns the CompletedProcess (stdout/stderr/rc)."""
     with tempfile.TemporaryDirectory() as tmp:
@@ -49,9 +49,7 @@ def _compile_and_run_extra(
             timeout=30,
             check=False,
         )
-        assert (
-            compile_result.returncode == 0
-        ), f"Compile error:\n{compile_result.stderr}"
+        assert compile_result.returncode == 0, f"Compile error:\n{compile_result.stderr}"
         return subprocess.run(
             [str(binary)],
             capture_output=True,
@@ -160,6 +158,7 @@ int main() {
     assert a["$addr"] == b["$addr"]
 
 
+@pytest.mark.serial_only  # snapshots shared gettempdir() glob: must run without parallel workers
 def test_instrument_without_path_emits_serializers():
     """Production path: instrument() with NO source_path (as execute.py
     calls it) still generates struct serializers."""
@@ -191,9 +190,7 @@ def test_instrumented_fixture_trace_carries_id_ref_addr():
     from app.core.instrumenter.injector import instrument
 
     fixture_src = (FIXTURES / "linked_list.cpp").read_text()
-    instrumented = instrument(
-        fixture_src, source_path=str(FIXTURES / "linked_list.cpp")
-    )
+    instrumented = instrument(fixture_src, source_path=str(FIXTURES / "linked_list.cpp"))
     with tempfile.TemporaryDirectory() as tmp:
         tmp_path = Path(tmp)
         src = tmp_path / "prog.cpp"
@@ -216,12 +213,8 @@ def test_instrumented_fixture_trace_carries_id_ref_addr():
             timeout=30,
             check=False,
         )
-        assert (
-            compile_result.returncode == 0
-        ), f"Compile error:\n{compile_result.stderr}"
-        run = subprocess.run(
-            [str(binary)], capture_output=True, text=True, timeout=10, check=False
-        )
+        assert compile_result.returncode == 0, f"Compile error:\n{compile_result.stderr}"
+        run = subprocess.run([str(binary)], capture_output=True, text=True, timeout=10, check=False)
     assert run.returncode == 0, f"nonzero exit:\n{run.stderr}"
     trace_vals = [
         json.loads(line[len("TRACE:") :])
@@ -240,9 +233,7 @@ def test_instrumented_fixture_trace_carries_id_ref_addr():
         return False
 
     assert states, "expected STATE events with vars"
-    assert any(
-        has_identity(e["v"]) for e in states
-    ), "no STATE value carries $id + $addr"
+    assert any(has_identity(e["v"]) for e in states), "no STATE value carries $id + $addr"
 
 
 def test_single_field_mutation_keeps_others_identical():

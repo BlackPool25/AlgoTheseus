@@ -41,9 +41,7 @@ from app.main import app
 # Deterministic load program: the corpus binary-search fixture (proven to
 # instrument + compile + trace in this toolchain; a hand-written for-loop in
 # main mis-scopes `i` in the injector — kept out deliberately).
-LOAD_CODE = (
-    Path(__file__).parent / "fixtures" / "corpus" / "binary_search.cpp"
-).read_text()
+LOAD_CODE = (Path(__file__).parent / "fixtures" / "corpus" / "binary_search.cpp").read_text()
 LOAD_STDIN = ""
 
 OK_RUN = RunResult(
@@ -91,15 +89,11 @@ async def _post(ac: AsyncClient, code: str, stdin: str, xff: str):
 
 
 class TestConcurrentLoad:
-    async def test_8_concurrent_traces_equal_serial(
-        self, _fresh_limits, _subprocess_sandbox
-    ):
+    async def test_8_concurrent_traces_equal_serial(self, _fresh_limits, _subprocess_sandbox):
         # 8 DISTINCT programs (target 0..7): distinct cache keys force 8 real
         # concurrent sandbox compiles+runs — identical code would all HIT the
         # warm-instance cache and prove nothing about sandbox concurrency.
-        variants = [
-            LOAD_CODE.replace("bsearch(arr, 7)", f"bsearch(arr, {k})") for k in range(8)
-        ]
+        variants = [LOAD_CODE.replace("bsearch(arr, 7)", f"bsearch(arr, {k})") for k in range(8)]
         assert len(set(variants)) == 8
         xff = "10.30.1.1"
         # OOM-hardening: max 4 concurrent sandboxes (mirrors /execute-batch
@@ -110,9 +104,7 @@ class TestConcurrentLoad:
             async with _sem:
                 return await _post(ac, code, LOAD_STDIN, xff)
 
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as ac:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
             # Concurrent FIRST (cold cache → 8 real sandbox runs), serial
             # references after. Reversing the order would let every
             # concurrent request HIT the serial-warmed cache and prove
@@ -156,13 +148,9 @@ class TestRateLimitLoop:
         with (
             patch("app.api.routes.execute.run_in_sandbox", return_value=OK_RUN),
             patch("app.api.routes.execute.instrument", return_value="int main(){}"),
-            patch(
-                "app.api.routes.execute.parse_stdin", return_value=("", "no changes")
-            ),
+            patch("app.api.routes.execute.parse_stdin", return_value=("", "no changes")),
         ):
-            async with AsyncClient(
-                transport=ASGITransport(app=app), base_url="http://test"
-            ) as ac:
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
                 statuses, retry_afters = [], []
                 for _ in range(35):
                     r = await ac.post(
@@ -282,6 +270,7 @@ class TestEscapeBattery:
         assert r.exit_code == 3
         assert r.stdout in ("contained", "read-via-link")
 
+    @pytest.mark.serial_only  # snapshots shared jail root: must run without parallel workers
     def test_jail_dir_cleaned(self, _subprocess_sandbox):
         root = jail._JAIL_ROOT
         before = set(os.listdir(root)) if root.is_dir() else set()

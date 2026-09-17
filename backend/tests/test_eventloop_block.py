@@ -49,7 +49,7 @@ class _Heartbeat:
             self.gaps.append(now - last)
             last = now
 
-    async def __aenter__(self) -> _Heartbeat:
+    async def __aenter__(self) -> _Heartbeat:  # noqa: PYI034 — test helper returns self
         self._task = asyncio.create_task(self._beat())
         await asyncio.sleep(0)  # let the ticker start
         return self
@@ -69,7 +69,9 @@ def heavy_pipeline(monkeypatch):
     """Slow blocking instrument (libclang stand-in) + 100k-line sandbox hit."""
     import time as _time
 
-    def slow_instrument(code: str) -> str:
+    def slow_instrument(
+        code: str, source_path: str | None = None, warnings_out: list | None = None
+    ) -> str:
         _time.sleep(0.6)  # blocking libclang-style CPU work
         return code + "\n// __TRACE_ x\n"
 
@@ -87,9 +89,7 @@ async def test_resolve_heartbeat_under_250ms(heavy_pipeline):
         resolved = await execute_mod._resolve(req, kind="single")
     assert resolved.run_result is not None
     assert len(resolved.run_result.trace_raw) == _N
-    assert (
-        hb.max_gap < _MAX_GAP
-    ), f"loop stalled {hb.max_gap*1000:.0f}ms during _resolve"
+    assert hb.max_gap < _MAX_GAP, f"loop stalled {hb.max_gap * 1000:.0f}ms during _resolve"
 
 
 async def test_worker_payload_heartbeat_under_250ms(heavy_pipeline):
@@ -100,19 +100,14 @@ async def test_worker_payload_heartbeat_under_250ms(heavy_pipeline):
     async with _Heartbeat() as hb:
         result = await worker_mod._run_payload(payload)
     assert result["total_steps"] == 1  # 100k identical STATEs group into one
-    assert (
-        hb.max_gap < _MAX_GAP
-    ), f"loop stalled {hb.max_gap*1000:.0f}ms during _run_payload"
+    assert hb.max_gap < _MAX_GAP, f"loop stalled {hb.max_gap * 1000:.0f}ms during _run_payload"
 
 
 async def test_stream_order_preserved(heavy_pipeline):
     """NDJSON streaming order unchanged: events in order, cfg last."""
     req = ExecuteRequest(code="int main(){return 0;}", raw_stdin="", compressed=True)
     resolved = await execute_mod._resolve(req, kind="single")
-    lines = [
-        json.loads(line.decode())
-        async for line in execute_mod._stream_resolved(resolved)
-    ]
+    lines = [json.loads(line.decode()) async for line in execute_mod._stream_resolved(resolved)]
     # compressed streaming collapses identical STATEs into one group event;
     # order contract: all events first, cfg last.
     assert len(lines) == 2

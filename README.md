@@ -119,6 +119,35 @@ docker compose up --build
 
 Open **[http://localhost:9001](http://localhost:9001)** and paste your C++ code.
 
+Contributors (local Python/Node without Docker): `scripts/setup.sh` wires the same ports; the `docker compose` quickstart above stays the canonical path.
+
+## Configuration
+
+| name | used-by | required | example | prod note |
+|---|---|---|---|---|
+| VITE_API_URL | frontend/src/utils/api.ts:28,30 | prod build: yes; local: no (same-origin fallback) | `https://<api>` | Cloudflare Pages dashboard env, baked at build time; async /jobs path rides on BASE_URL (see [frontend/README.md](frontend/README.md#production-api-cloud-run)) |
+| VITE_SITE_URL | frontend/src/routes/Visualize.tsx:13, Algorithms.tsx:13 | prod build: yes (SEO canonical/og) | `https://www.example.com` (placeholder) | Replace everywhere (sitemap, robots, _redirects) before launch |
+| SANDBOX_MODE | backend/app/core/executor/docker_runner.py:205; docker-compose.yml:31 | no (default `docker`) | TBD(owner) | Compose `${SANDBOX_MODE:-docker}`; Cloud Run: `subprocess` (see [docs/CLOUDRUN.md](docs/CLOUDRUN.md)) |
+| SANDBOX_MAX_CONCURRENT | backend/app/api/routes/execute.py:134,136 | no (default 6) | TBD(owner) | Live service-api.yaml: `"6"`; pool cap every batch nests inside |
+| MAX_BATCH_SANDBOXES | backend/app/api/routes/execute.py:943 | no (default 4) | TBD(owner) | CONFLICT: [docs/CLOUDRUN.md](docs/CLOUDRUN.md) §2 says `2`, live deploy/cloudrun/service-api.yaml says `"4"` (Wave8 bump) — value TBD(owner); fan-out cap per batch |
+| REDIS_URL | backend/app/core/executor/cache.py:273; backend/app/core/queue/backends.py:217; backend/app/core/rate_limit.py:82,132; docker-compose.yml:34 | no (fail-open: L2/in-memory when unset) | TBD(owner) | Compose `${REDIS_URL:-redis://redis:6379/0}`; prod: Secret Manager `algo-theseus-redis-url` via secretKeyRef, never inline |
+| FRONTEND_ORIGINS | backend/app/main.py:80 | no (defaults `http://localhost:5173,http://localhost:3000`) | TBD(owner) | Comma-separated CORS origins; empties ignored, never `"*"` (see [docs/CLOUDRUN.md](docs/CLOUDRUN.md)) |
+| CACHE_DIR | backend/app/core/executor/cache.py:95,117 | no (default `/tmp/algo-theseus-cache`) | TBD(owner) | Ephemeral by design; restart wipes, cold MISS expected |
+| CACHE_MAX_BYTES | backend/app/core/executor/cache.py:118 | no (code default) | TBD(owner) | L2 DiskLRU size cap; no compose/YAML override |
+| CACHE_TTL_SECONDS | backend/app/core/executor/cache.py:119,274 | no (code default) | TBD(owner) | L1/L2 TTL; no compose/YAML override |
+| TRUSTED_PROXY_COUNT | backend/app/core/rate_limit.py:51 | no (default `1`) | TBD(owner) | Rate-limit client-IP trust depth; no compose/YAML override |
+| PORT | backend/Dockerfile:84; deploy/cloudrun/service-api.yaml:32 | no (default 8000 via `${PORT:-8000}`) | TBD(owner) | Injected by Cloud Run / Render / SnapDeploy; never hardcode 8000 |
+
+## Troubleshooting
+
+Stuck? Full guide: [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md). Quick hits:
+
+- Port `9001` clash: stop the other service or remap the frontend port, then `docker compose up --build` again.
+- Sandbox image missing: `docker build -f backend/docker/Dockerfile.sandbox -t algo-theseus-sandbox:latest backend/docker/`.
+- `VITE_API_URL` mis-wire: static builds bake it at build time, so set it in the Pages dashboard and rebuild.
+- Static mirror (gh-pages) thread limits: COOP/COEP headers cap workers there; use compose for full runs.
+- Backend pytest needs Docker: sandbox tests spawn containers, so start the Docker daemon first.
+
 <br>
 
 ## Usage

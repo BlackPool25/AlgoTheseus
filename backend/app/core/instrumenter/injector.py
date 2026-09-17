@@ -55,7 +55,9 @@ def _make_vars_args(var_names: list[str]) -> str:
 def _trace_enter(point: InjectionPoint) -> str:
     params_args = _make_vars_args(point.param_names)
     sep = ", " if params_args else ""
-    return f'__TRACE_FUNC_ENTER({point.line}, "{point.func_name}", {point.depth}{sep}{params_args});'
+    return (
+        f'__TRACE_FUNC_ENTER({point.line}, "{point.func_name}", {point.depth}{sep}{params_args});'
+    )
 
 
 def _trace_exit(point: InjectionPoint) -> str:
@@ -91,20 +93,19 @@ def _trace_state(
                 # Only the loop's own var is lifetime-bound (its decl sits
                 # inside a loop interval). Outer/shadowing same-name decls
                 # (decl outside all intervals) are different vars — keep.
-                if decl_lines and any(
-                    h <= d <= e for h, e in ranges for d in decl_lines
-                ):
+                if (
+                    decl_lines
+                    and any(h <= d <= e for h, e in ranges for d in decl_lines)
                     # Emission lands AFTER `place`; inside the loop only
                     # while the body is still open (half-open [h, e)).
-                    if not any(h <= place < e for h, e in ranges):
-                        continue
+                    and not any(h <= place < e for h, e in ranges)
+                ):
+                    continue
             decl_lines = [v.decl_line for v in post if v.name == name]
             if decl_lines and min(decl_lines) > point.line:
                 continue
             extents = [
-                (v.decl_line, v.extent_end)
-                for v in post
-                if v.name == name and v.extent_end > 0
+                (v.decl_line, v.extent_end) for v in post if v.name == name and v.extent_end > 0
             ]
             if extents and not any(d <= place < e for d, e in extents):
                 continue
@@ -120,10 +121,7 @@ def _trace_state(
     # Commas inside __vars_build(...) are paren-protected, so _G takes 5 args.
     v_json = f"__vars_build({vars_args})" if vars_args else "__vars_build()"
     g_json = f"__vars_build({_make_vars_args(g_names)})"
-    return (
-        f'__TRACE_STATE_G({point.line}, "{point.func_name}", {point.depth}, '
-        f"{v_json}, {g_json});"
-    )
+    return f'__TRACE_STATE_G({point.line}, "{point.func_name}", {point.depth}, {v_json}, {g_json});'
 
 
 def _trace_branch(point: InjectionPoint, value_expr: str | None = None) -> str:
@@ -139,10 +137,7 @@ def _trace_branch(point: InjectionPoint, value_expr: str | None = None) -> str:
     val = value_expr if value_expr is not None else f"({cond_expr})"
     ops_vars = list(getattr(point, "cond_vars", []))
     if not ops_vars:
-        return (
-            f'__TRACE_BRANCH({point.line}, "{point.func_name}", {point.depth}, '
-            f'"{cond}", {val});'
-        )
+        return f'__TRACE_BRANCH({point.line}, "{point.func_name}", {point.depth}, "{cond}", {val});'
     ops_args = ", ".join(f'"{v}", {v}' for v in ops_vars)
     return (
         f'__TRACE_BRANCH_OPS({point.line}, "{point.func_name}", {point.depth}, '
@@ -162,9 +157,7 @@ def _byte_line_starts(raw: bytes) -> list[int]:
         idx += 1
 
 
-def _byte_to_line_col(
-    raw: bytes, starts: list[int], off: int
-) -> tuple[int, int] | None:
+def _byte_to_line_col(raw: bytes, starts: list[int], off: int) -> tuple[int, int] | None:
     """Map a byte offset to (1-based line, 0-based char col). None on bad input."""
     import bisect
 
@@ -180,7 +173,7 @@ def _byte_to_line_col(
 
 _CALL_LIKE_RE = re.compile(r"(?<![A-Za-z0-9_:])[A-Za-z_][A-Za-z0-9_]*\s*\(")
 _KEYWORD_CALLS = frozenset(
-    "if while for switch catch sizeof alignof decltype noexcept return".split()
+    ["if", "while", "for", "switch", "catch", "sizeof", "alignof", "decltype", "noexcept", "return"]
 )
 _COMPARISON_EQ_RE = re.compile(r"<=>|==|<=|>=|!=")
 _DQ_STRING_RE = re.compile(r'"(?:\\.|[^"\\])*"')
@@ -237,9 +230,7 @@ def _branch_cond_source(point: InjectionPoint, raw: bytes) -> str | None:
     return norm
 
 
-def _branch_header_simple(
-    raw: bytes, starts: list[int], from_line: int, ce: int
-) -> bool:
+def _branch_header_simple(raw: bytes, starts: list[int], from_line: int, ce: int) -> bool:
     """True when the if-header region holds no constexpr / init-statement.
 
     `if constexpr` cannot use a runtime temp, and `if (init; cond)` embeds a
@@ -369,9 +360,7 @@ def _is_braceless_do_body(point_line: int, lines: list[str]) -> bool:
     if j < 0:
         return False
     prev = lines[j].strip()
-    return "{" not in prev and (
-        prev == "do" or prev.startswith("do ") or prev.startswith("do\t")
-    )
+    return "{" not in prev and (prev == "do" or prev.startswith(("do ", "do\t")))
 
 
 def _is_braceless_do_header(point_line: int, lines: list[str]) -> bool:
@@ -383,9 +372,7 @@ def _is_braceless_do_header(point_line: int, lines: list[str]) -> bool:
     if point_line < 1 or point_line > len(lines):
         return False
     here = lines[point_line - 1].strip()
-    if "{" in here or not (
-        here == "do" or here.startswith("do ") or here.startswith("do\t")
-    ):
+    if "{" in here or not (here == "do" or here.startswith(("do ", "do\t"))):
         return False
     j = point_line
     while j < len(lines) and not lines[j].strip():
@@ -531,10 +518,7 @@ def _expand_single_line_bodies(source: str) -> str:
             def _in_user(node: clang.Cursor) -> bool:
                 try:
                     loc = node.location
-                    return (
-                        loc.file is not None
-                        and os.path.abspath(loc.file.name) == src_abs
-                    )
+                    return loc.file is not None and os.path.abspath(loc.file.name) == src_abs
                 except (AttributeError, ValueError, OSError):
                     return False
 
@@ -568,15 +552,50 @@ def _expand_single_line_bodies(source: str) -> str:
                 except (AttributeError, TypeError, ValueError):
                     return True
 
+            def _subtree_has_branch(node: clang.Cursor) -> bool:
+                try:
+                    kids = list(node.get_children())
+                except (AttributeError, TypeError, RuntimeError, ValueError):
+                    return False
+                for ch in kids:
+                    if _kind(ch) in (
+                        clang.CursorKind.IF_STMT,
+                        clang.CursorKind.SWITCH_STMT,
+                    ):
+                        return True
+                    if _subtree_has_branch(ch):
+                        return True
+                return False
+
             def _visit(node: clang.Cursor) -> None:
                 try:
                     children = list(node.get_children())
                 except (AttributeError, TypeError, RuntimeError, ValueError):
                     return
-                if _kind(node) == clang.CursorKind.CXX_FOR_RANGE_STMT and _in_user(node) and children:
+                # Braceless range-for bodies are wrapped only when the body
+                # subtree holds a branch (if/switch): __TRACE_BRANCH splices
+                # the condition text, so it must land inside the loop. Plain
+                # bodies stay unwrapped (S8/R3) — their STATE lands post-loop
+                # with the loop var dropped by _trace_state's lifetime filter.
+                if (
+                    _kind(node) == clang.CursorKind.CXX_FOR_RANGE_STMT
+                    and _in_user(node)
+                    and children
+                ):
                     body = children[-1]
                     bounds = _extent_ok(body)
-                    if bounds is not None and _kind(body) != clang.CursorKind.COMPOUND_STMT:
+                    if (
+                        bounds is not None
+                        and _kind(body) != clang.CursorKind.COMPOUND_STMT
+                        and (
+                            _kind(body)
+                            in (
+                                clang.CursorKind.IF_STMT,
+                                clang.CursorKind.SWITCH_STMT,
+                            )
+                            or _subtree_has_branch(body)
+                        )
+                    ):
                         start, end = bounds
                         end = _stmt_end(end)
                         wrappers[start] = wrappers.get(start, "") + "{\n"
@@ -668,13 +687,9 @@ def instrument(
         counts: dict[str, dict[str, int]] = {}
         for p in walk_result.injection_points:
             counts.setdefault(p.func_name, {})
-            counts[p.func_name][p.kind.name] = (
-                counts[p.func_name].get(p.kind.name, 0) + 1
-            )
+            counts[p.func_name][p.kind.name] = counts[p.func_name].get(p.kind.name, 0) + 1
         lines_debug = [f"{fn}: {counts[fn]}" for fn in sorted(counts.keys())]
-        Path("/tmp/dsa_injection_debug.txt").write_text(
-            "\n".join(lines_debug), encoding="utf-8"
-        )
+        Path("/tmp/dsa_injection_debug.txt").write_text("\n".join(lines_debug), encoding="utf-8")
     except (OSError, ValueError):
         logger.debug("Failed to write injection debug file", exc_info=True)
 
@@ -710,11 +725,7 @@ def instrument(
         if point.kind == InjectKind.FUNC_ENTER:
             line_text = lines[point.line - 1] if point.line <= len(lines) else ""
             # If the entire function body is on one line, skip instrumentation
-            if (
-                "{" in line_text
-                and "}" in line_text
-                and line_text.find("{") < line_text.find("}")
-            ):
+            if "{" in line_text and "}" in line_text and line_text.find("{") < line_text.find("}"):
                 single_line_funcs.add(point.func_name)
                 continue
             add_after(point.line, _trace_enter(point))
@@ -831,9 +842,7 @@ def instrument(
             # contextual conversion exactly once. while/for/else-if emit no
             # BRANCH points, so their conditions already evaluate once.
             temp = f"__trace_c_{cond_temp_seq}"
-            norm = _try_hoist_branch(
-                point, lines, raw, line_starts, temp, claimed_cond_lines
-            )
+            norm = _try_hoist_branch(point, lines, raw, line_starts, temp, claimed_cond_lines)
             if norm is None:
                 add_before(point.line, _trace_branch(point))
             else:
@@ -851,14 +860,10 @@ def instrument(
 
     # ── Fallback return tracing for functions with no FUNC_EXIT ───────────────
     funcs_with_exit = {
-        p.func_name
-        for p in walk_result.injection_points
-        if p.kind == InjectKind.FUNC_EXIT
+        p.func_name for p in walk_result.injection_points if p.kind == InjectKind.FUNC_EXIT
     }
     funcs_with_enter = {
-        p.func_name
-        for p in walk_result.injection_points
-        if p.kind == InjectKind.FUNC_ENTER
+        p.func_name for p in walk_result.injection_points if p.kind == InjectKind.FUNC_ENTER
     }
 
     for fn in funcs_with_enter - funcs_with_exit:
@@ -885,12 +890,8 @@ def instrument(
                     break
                 ret_var = f"__trace_ret_fallback_{fn}"
                 add_before(i + 1, f"auto {ret_var} = ({expr});")
-                add_before(
-                    i + 1, f'__TRACE_FUNC_EXIT({i + 1}, "{fn}", 0, ({ret_var}));'
-                )
-                lines[i] = (
-                    " " * (len(line) - len(line.lstrip())) + f"return {ret_var};\n"
-                )
+                add_before(i + 1, f'__TRACE_FUNC_EXIT({i + 1}, "{fn}", 0, ({ret_var}));')
+                lines[i] = " " * (len(line) - len(line.lstrip())) + f"return {ret_var};\n"
                 break
 
             if brace_depth <= 0:

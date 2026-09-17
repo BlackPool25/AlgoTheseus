@@ -29,6 +29,19 @@ import { buildFramesWithVars } from "./frameVars";
  * $id/$ref identity tags inside a frame var value (backend T11b heap
  * identity). Scans the JSON form so nested refs count without recursion.
  */
+/**
+ * Per-depth frame accent: distinct hue per depth (golden-angle spread) so
+ * adjacent frame headers are visually separable at a glance. Current frame
+ * renders full-strength; caller frames are dimmed via opacity on the body.
+ */
+function frameAccent(depth: number): { border: string; bg: string } {
+  const hue = (depth * 137) % 360;
+  return {
+    border: `hsl(${hue}, 75%, 55%)`,
+    bg: `hsl(${hue}, 60%, 15%)`,
+  };
+}
+
 function collectIdentityIds(value: unknown): string[] {
   const out = new Set<string>();
   try {
@@ -136,7 +149,7 @@ export function StatePanel() {
   const highlightMap = highlight.map;
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
+    <div data-testid="state-panel" className="flex flex-col h-full overflow-hidden">
       {/* Header */}
       <div className="px-3 py-2 border-b border-viz-line flex items-center justify-between">
         <span className="text-xs font-medium text-viz-ink/60 uppercase tracking-wide">
@@ -176,6 +189,9 @@ export function StatePanel() {
         </div>
       )}
 
+      {/* Unified scroll region: globals + frame tables + flat vars + heap
+          scroll together; header/badge/footer/CallStack stay fixed. */}
+      <div data-testid="state-scroll" className="flex-1 min-h-0 overflow-y-auto">
       {/* Globals section (v2 only — collapsible, above frame vars) */}
       {globalEntries.length > 0 && (
         <div data-testid="globals-section" className="border-b border-viz-line">
@@ -203,25 +219,39 @@ export function StatePanel() {
         </div>
       )}
 
-      {/* Per-frame var tables (nested stacks only; flat list below is untouched) */}
+      {/* Per-frame var tables (nested stacks only). The current frame's
+          diff-aware rows live HERE — the flat list below is hidden while
+          tables show, so each variable renders exactly once. */}
       {showFrameTables && (
         <div className="border-b border-viz-line">
           {framesDisplay.map((frame, frameIdx) => {
             const frameEntries = Object.entries(frame.vars);
             const isCurrentFrame =
               frame.func === currentEvent.func && frame.depth === currentEvent.depth;
+            const accent = frameAccent(frame.depth);
             return (
               <div
                 key={`${frame.func}@${frame.depth}`}
                 data-testid="frame-table"
                 data-frame={`${frame.func}@${frame.depth}`}
-                className={isCurrentFrame ? undefined : "opacity-60"}
+                className={frameIdx > 0 ? "border-t border-viz-line" : undefined}
               >
-                <div className="px-3 py-1 flex items-center gap-1 min-w-0">
-                  <span className="text-[10px] font-medium text-viz-ink/60 uppercase tracking-wide shrink-0">
-                    Frame
+                <div
+                  data-testid="frame-header"
+                  data-frame={`${frame.func}@${frame.depth}`}
+                  className="px-3 py-1 flex items-center gap-1.5 min-w-0 border-b border-viz-line/50"
+                  style={{
+                    borderLeft: `3px solid ${accent.border}`,
+                    background: isCurrentFrame ? accent.bg : undefined,
+                  }}
+                >
+                  <span
+                    className="text-[9px] font-mono font-bold uppercase tracking-wider rounded px-1 py-px shrink-0"
+                    style={{ background: accent.border, color: "#000" }}
+                  >
+                    FRAME
                   </span>
-                  <span className="text-[11px] font-mono text-amber-400 truncate">
+                  <span className="text-[11px] font-mono text-viz-ink truncate">
                     {frame.func}()
                   </span>
                   {isCurrentFrame && (
@@ -229,11 +259,29 @@ export function StatePanel() {
                       · current
                     </span>
                   )}
-                  <span className="text-[10px] text-viz-ink/60 ml-auto shrink-0">
+                  <span className="text-[10px] font-mono text-viz-ink/60 ml-auto shrink-0">
                     depth {frame.depth}
                   </span>
                 </div>
-                {frameEntries.length === 0 ? (
+                <div className={isCurrentFrame ? undefined : "opacity-60"}>
+                {isCurrentFrame ? (
+                  rows.length === 0 ? (
+                    <div className="px-3 py-1 text-xs text-viz-ink/60">No vars in frame</div>
+                  ) : (
+                    rows.map((row) => (
+                      <VariableRow
+                        key={row.name}
+                        name={row.name}
+                        value={row.value}
+                        status={row.status}
+                        highlightIndex={highlightMap[row.name]}
+                        heap={heap}
+                        heapDiff={heapDiff}
+                        prevValue={prevLive?.vars[row.name]}
+                      />
+                    ))
+                  )
+                ) : frameEntries.length === 0 ? (
                   <div className="px-3 py-1 text-xs text-viz-ink/60">No vars in frame</div>
                 ) : (
                   frameEntries.map(([name, value]) => {
@@ -269,16 +317,18 @@ export function StatePanel() {
                     );
                   })
                 )}
+                </div>
               </div>
             );
           })}
         </div>
       )}
 
-      {/* Variable list — flat current-frame rows. No frame header here: with
-          2+ frames the per-frame tables above already label the current
-          frame, and a second header renders it twice (bug-A). */}
-      <div className="flex-1 overflow-y-auto">
+      {/* Flat current-frame rows — legacy single-frame path only. With 2+
+          frames the current-frame table above already renders these
+          diff-aware rows, so this stays hidden to keep one copy. */}
+      {!showFrameTables && (
+      <div className="min-h-0">
         {rows.length === 0 ? (
           <div className="px-3 py-2 text-xs text-viz-ink/60">No variables in scope</div>
         ) : (
@@ -296,9 +346,11 @@ export function StatePanel() {
           ))
         )}
       </div>
+      )}
 
       {/* T12 HeapPanel (R6 lazy/opt-in: collapsed by default; hidden when heap-less) */}
       <HeapPanel heap={heap} heapDiff={heapDiff} vars={display.vars} />
+      </div>
 
       {/* Event type badge */}
       <div className="px-3 py-2 border-t border-viz-line">

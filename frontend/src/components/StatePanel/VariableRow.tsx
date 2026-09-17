@@ -120,6 +120,7 @@ export function VariableRow({ name, value, status, highlightIndex, heap, heapDif
 
   return (
     <div
+      data-testid={`var-row-${name}`}
       className={`flex flex-col gap-1 px-3 py-1.5 border-b border-viz-line/50 ${ROW_STYLE[status]}`}
     >
       {/* Name + status badge */}

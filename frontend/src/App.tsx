@@ -409,7 +409,7 @@ export default function App() {
 
             {/* Right Panel: Variable State Inspector */}
             <div
-              className="shrink-0 overflow-hidden border-l border-viz-line at-reserve-state"
+              className="shrink-0 overflow-hidden border-l border-viz-line at-reserve-state flex flex-col min-h-0 h-full"
               style={{ width: stateW ?? 280 }}
             >
               <Suspense fallback={<StatePanelSkeleton />}>

@@ -6,7 +6,7 @@ requires-python = ">=3.11"
 dependencies = [
     "fastapi==0.115.12",
     "uvicorn[standard]==0.34.3",
-    "pydantic==2.11.4",
+    "pydantic==2.13.5",
     # Toolchain pin (Task W0.1): libclang==18.1.1 bundles MATCHED Python bindings
     # (clang/cindex.py) + native lib (clang/native/libclang.so) — it IS the pin.
     # Do NOT add the obsolete PyPI `clang` package (latest release 9.0, no 18.x

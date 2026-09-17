@@ -13,9 +13,9 @@ The binary is compiled to /tmp/prog which lives on the tmpfs, so this works.
 SANDBOX_CONFIG: dict = {
     "mem_limit": "128m",
     "cpu_period": 100_000,
-    "cpu_quota": 50_000,       # 50% of one CPU core
+    "cpu_quota": 50_000,  # 50% of one CPU core
     "network_disabled": True,
-    "read_only": True,          # filesystem read-only except tmpfs mounts
+    "read_only": True,  # filesystem read-only except tmpfs mounts
     "tmpfs": {"/tmp": "size=64m,exec"},  # exec needed to run the compiled binary
     "pids_limit": 64,
     "cap_drop": ["ALL"],
@@ -28,5 +28,5 @@ SANDBOX_CONFIG: dict = {
 
 # Hard limits enforced by docker_runner.py
 EXECUTION_TIMEOUT_SECONDS: int = 10
-MAX_TRACE_LINES: int = 100_000   # truncate trace output beyond this
+MAX_TRACE_LINES: int = 100_000  # truncate trace output beyond this
 SANDBOX_IMAGE: str = "algo-theseus-sandbox:latest"

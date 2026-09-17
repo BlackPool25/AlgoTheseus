@@ -3,7 +3,9 @@
 Polls the queue (Redis list or in-memory fallback), runs the SAME
 ``_resolve(kind="single")`` → parse → CFG pipeline as POST /execute, and
 stores the ExecuteResponse payload with a 1h TTL. Reuses DiskLRUCache via
-``_resolve`` — no duplicated sandbox logic.
+``_resolve`` — no duplicated sandbox logic. Sandbox concurrency rides the
+same process-wide pool (Wave5 3.1 ``execute_mod.get_sandbox_sem``, default 6):
+no local semaphore here by design.
 
 Run with: ``uv run python -m app.worker`` (or ``python -m app.worker --once``
 for a single job, handy in tests).
@@ -35,6 +37,8 @@ async def _run_payload(payload: dict) -> dict:
         compressed=bool(payload.get("compressed", False)),
     )
     resolved = await execute_mod._resolve(req, kind="single")
+    if resolved.input_error is not None:
+        raise RuntimeError(f"Missing stdin: {resolved.input_error}")
     if resolved.instrumentation_error is not None:
         raise RuntimeError(f"Instrumentation error: {resolved.instrumentation_error}")
     if resolved.sandbox_error is not None:
@@ -44,8 +48,10 @@ async def _run_payload(payload: dict) -> dict:
     if run_result.compile_error:
         resp = ExecuteResponse(stdout="", compile_error=run_result.compile_error)
         return jsonable_encoder(resp, by_alias=False)
-    events = parse_trace(run_result.trace_raw, compressed=req.compressed)
-    cfg_nodes, cfg_edges = build_cfg(events)
+    events = await asyncio.to_thread(
+        parse_trace, run_result.trace_raw, compressed=req.compressed
+    )
+    cfg_nodes, cfg_edges = await asyncio.to_thread(build_cfg, events)
     runtime_error: str | None = None
     if run_result.timed_out:
         runtime_error = "Execution timed out (10s limit)"
@@ -57,10 +63,14 @@ async def _run_payload(payload: dict) -> dict:
             "instrumentation rules"
         )
     resp = ExecuteResponse(
-        stdout=run_result.stdout, runtime_error=runtime_error,
-        timed_out=run_result.timed_out, truncated=run_result.truncated,
+        stdout=run_result.stdout,
+        runtime_error=runtime_error,
+        timed_out=run_result.timed_out,
+        truncated=run_result.truncated,
         trace=[e.model_dump(by_alias=False) for e in events],
-        cfg_nodes=cfg_nodes, cfg_edges=cfg_edges, total_steps=len(events),
+        cfg_nodes=cfg_nodes,
+        cfg_edges=cfg_edges,
+        total_steps=len(events),
     )
     return jsonable_encoder(resp, by_alias=False)
 

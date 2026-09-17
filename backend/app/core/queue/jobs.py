@@ -18,7 +18,9 @@ class JobRecord(BaseModel):
     job_id: str = Field(description="Unique job identifier (uuid hex)")
     status: JobStatus = Field(default="queued", description="Lifecycle state")
     payload: dict[str, Any] = Field(description="ExecuteRequest JSON + created ts")
-    result: dict[str, Any] | None = Field(default=None, description="ExecuteResponse JSON")
+    result: dict[str, Any] | None = Field(
+        default=None, description="ExecuteResponse JSON"
+    )
     error: str | None = Field(default=None, description="Failure detail when error")
     created: float = Field(default_factory=time.time, description="Epoch seconds")
     updated: float = Field(default_factory=time.time, description="Epoch seconds")
@@ -36,5 +38,7 @@ class JobStatusResponse(BaseModel):
 
     job_id: str = Field(description="Job identifier")
     status: JobStatus = Field(description="Current lifecycle state")
-    result: dict[str, Any] | None = Field(default=None, description="ExecuteResponse JSON")
+    result: dict[str, Any] | None = Field(
+        default=None, description="ExecuteResponse JSON"
+    )
     error: str | None = Field(default=None, description="Failure detail when error")

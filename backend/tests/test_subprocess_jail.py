@@ -106,9 +106,9 @@ def test_socket_connect_contained_no_host_effect():
     src = (
         "#include <cstdio>\n#include <sys/socket.h>\n#include <netinet/in.h>\n"
         "#include <arpa/inet.h>\n#include <unistd.h>\n"
-        "int main(){int s=socket(AF_INET,SOCK_STREAM,0); if(s<0){std::printf(\"no-sock\"); return 3;}"
+        'int main(){int s=socket(AF_INET,SOCK_STREAM,0); if(s<0){std::printf("no-sock"); return 3;}'
         "struct sockaddr_in a; a.sin_family=AF_INET; a.sin_port=htons(9);"
-        "a.sin_addr.s_addr=inet_addr(\"127.0.0.1\");"
+        'a.sin_addr.s_addr=inet_addr("127.0.0.1");'
         'if(connect(s,(struct sockaddr*)&a,sizeof(a))!=0){std::printf("refused"); close(s); return 3;}'
         'std::printf("connected?!"); return 0;}\n'
     )
@@ -137,14 +137,22 @@ def test_symlink_escape_and_privileged_write_blocked():
 
 
 def test_jail_dir_cleaned_up():
-    before = set(os.listdir("/tmp/algo-theseus")) if os.path.isdir("/tmp/algo-theseus") else set()
+    before = (
+        set(os.listdir("/tmp/algo-theseus"))
+        if os.path.isdir("/tmp/algo-theseus")
+        else set()
+    )
     _run(HELLO)
-    after = set(os.listdir("/tmp/algo-theseus")) if os.path.isdir("/tmp/algo-theseus") else set()
+    after = (
+        set(os.listdir("/tmp/algo-theseus"))
+        if os.path.isdir("/tmp/algo-theseus")
+        else set()
+    )
     assert after - before == set()
 
 
 def test_stdout_byte_cap_bounds_output_flood():
-    src = "#include <cstdio>\nint main(){for(long i=0;i<100000L;i++) std::puts(\"0123456789abcdef\"); return 0;}\n"
+    src = '#include <cstdio>\nint main(){for(long i=0;i<100000L;i++) std::puts("0123456789abcdef"); return 0;}\n'
     start = time.monotonic()
     r = _run(src)
     elapsed = time.monotonic() - start
@@ -152,11 +160,13 @@ def test_stdout_byte_cap_bounds_output_flood():
     assert elapsed <= EXECUTION_TIMEOUT_SECONDS + 10
 
 
-@pytest.mark.skipif(os.geteuid() != 0, reason="priv-drop provable only when test runs as root")
+@pytest.mark.skipif(
+    os.geteuid() != 0, reason="priv-drop provable only when test runs as root"
+)
 def test_child_runs_as_nobody_when_root():
     src = (
         "#include <cstdio>\n#include <unistd.h>\n"
-        "int main(){std::printf(\"%d\", (int)getuid()); return 0;}\n"
+        'int main(){std::printf("%d", (int)getuid()); return 0;}\n'
     )
     r = _run(src)
     uid, _gid = jail._resolve_nobody()

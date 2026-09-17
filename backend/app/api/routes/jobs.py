@@ -21,7 +21,9 @@ router = APIRouter()
 @router.post("", response_model=JobSubmitResponse, status_code=202)
 @limiter.limit(JOBS_LIMIT)
 async def submit_job(
-    request: Request, response: Response, req: ExecuteRequest,
+    request: Request,
+    response: Response,
+    req: ExecuteRequest,
 ) -> JobSubmitResponse:
     """Enqueue a C++ execution job. Returns 202 with the polling handle."""
     payload = req.model_dump()
@@ -37,6 +39,8 @@ async def job_status(job_id: str) -> JobStatusResponse:
     if rec is None:
         raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found")
     return JobStatusResponse(
-        job_id=rec["job_id"], status=rec["status"],
-        result=rec.get("result"), error=rec.get("error"),
+        job_id=rec["job_id"],
+        status=rec["status"],
+        result=rec.get("result"),
+        error=rec.get("error"),
     )

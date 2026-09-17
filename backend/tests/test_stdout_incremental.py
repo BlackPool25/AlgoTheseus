@@ -22,9 +22,7 @@ from app.core.trace.parser import parse
 BACKEND = Path(__file__).parent.parent
 TRACER_H = BACKEND / "app" / "core" / "instrumenter" / "tracer.h"
 
-EXPECTED_OUTPUT = "".join(
-    f"cout:{i}\nprintf:{i}\n" for i in range(5)
-) + "done\n"
+EXPECTED_OUTPUT = "".join(f"cout:{i}\nprintf:{i}\n" for i in range(5)) + "done\n"
 
 
 def _line(t, **kw):
@@ -133,15 +131,32 @@ def _run_gcc_local(src: str, workdir: Path) -> tuple[str, list[str]]:
         TRACER_H.read_text(encoding="utf-8"), encoding="utf-8"
     )
     subprocess.run(
-        ["g++", "-O0", "-g", "-std=c++17", "-I", str(workdir),
-         "-o", str(workdir / "prog"), str(workdir / "prog.cpp")],
-        check=True, capture_output=True, text=True, timeout=120,
+        [
+            "g++",
+            "-O0",
+            "-g",
+            "-std=c++17",
+            "-I",
+            str(workdir),
+            "-o",
+            str(workdir / "prog"),
+            str(workdir / "prog.cpp"),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=120,
     )
     proc = subprocess.run(
-        [str(workdir / "prog")], capture_output=True, text=True, timeout=30, check=False,
+        [str(workdir / "prog")],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
     )
     trace = [
-        ln[len("TRACE:"):] for ln in proc.stderr.splitlines()
+        ln[len("TRACE:") :]
+        for ln in proc.stderr.splitlines()
         if ln.startswith("TRACE:")
     ]
     return proc.stdout, trace

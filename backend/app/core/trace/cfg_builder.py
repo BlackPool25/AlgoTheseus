@@ -43,6 +43,7 @@ from .models import (
 @dataclass
 class _BuildState:
     """Mutable state threaded through the builder."""
+
     nodes: list[CFGNode] = field(default_factory=list)
     edges: list[CFGEdge] = field(default_factory=list)
     _counter: int = 0
@@ -143,7 +144,9 @@ def build(events: list[Any]) -> tuple[list[CFGNode], list[CFGEdge]]:
                 active_funcs[fn].pop()
 
             node_id = state.new_id("func_end")
-            ret_label = f"→ {event.return_val}" if event.return_val is not None else "return"
+            ret_label = (
+                f"→ {event.return_val}" if event.return_val is not None else "return"
+            )
             node = CFGNode(
                 id=node_id,
                 type=CFGNodeType.FUNC_END,
@@ -170,10 +173,15 @@ def build(events: list[Any]) -> tuple[list[CFGNode], list[CFGEdge]]:
                 add_to_current_loop(node_id)
             else:
                 # Continue accumulating if same function and adjacent lines
-                if event.func == current_func and abs(event.line - current_line_node.lines[-1]) <= 3:
+                if (
+                    event.func == current_func
+                    and abs(event.line - current_line_node.lines[-1]) <= 3
+                ):
                     current_line_node.lines.append(event.line)
                     current_line_node.trace_indices.append(idx)
-                    current_line_node.label = f"lines {current_line_node.lines[0]}–{event.line}"
+                    current_line_node.label = (
+                        f"lines {current_line_node.lines[0]}–{event.line}"
+                    )
                 else:
                     # Discontinuity — flush and start new node
                     flush_line_node()

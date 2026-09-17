@@ -49,9 +49,22 @@ def stream_app() -> FastAPI:
     async def stream_trace():
         async def event_stream() -> AsyncGenerator[bytes, None]:
             events = [
-                {"t": "enter", "l": 5, "f": "bsearch", "d": 0, "p": {"arr": [1, 3, 5, 7, 9], "target": 7}},
+                {
+                    "t": "enter",
+                    "l": 5,
+                    "f": "bsearch",
+                    "d": 0,
+                    "p": {"arr": [1, 3, 5, 7, 9], "target": 7},
+                },
                 {"t": "state", "l": 6, "f": "bsearch", "d": 0, "v": {"lo": 0, "hi": 4}},
-                {"t": "branch", "l": 9, "f": "bsearch", "d": 0, "c": "arr[mid] == target", "tk": False},
+                {
+                    "t": "branch",
+                    "l": 9,
+                    "f": "bsearch",
+                    "d": 0,
+                    "c": "arr[mid] == target",
+                    "tk": False,
+                },
                 {"t": "iter", "l": 7, "f": "bsearch", "d": 0, "it": 0},
                 {"t": "exit", "l": 13, "f": "bsearch", "d": 0, "r": 3},
             ]
@@ -114,7 +127,9 @@ class TestStreamingResponseShape:
     async def test_streaming_each_line_is_valid_json(self, stream_app):
         """Every line in the streaming body should be valid JSON."""
         async with (
-            AsyncClient(transport=ASGITransport(app=stream_app), base_url="http://test") as ac,
+            AsyncClient(
+                transport=ASGITransport(app=stream_app), base_url="http://test"
+            ) as ac,
             ac.stream("GET", "/stream-trace") as response,
         ):
             chunks = []
@@ -135,7 +150,9 @@ class TestStreamingResponseShape:
     async def test_streaming_events_in_order(self, stream_app):
         """Events should be received in the order they were yielded."""
         async with (
-            AsyncClient(transport=ASGITransport(app=stream_app), base_url="http://test") as ac,
+            AsyncClient(
+                transport=ASGITransport(app=stream_app), base_url="http://test"
+            ) as ac,
             ac.stream("GET", "/stream-trace") as response,
         ):
             chunks = []
@@ -148,9 +165,9 @@ class TestStreamingResponseShape:
 
         expected_types = ["enter", "state", "branch", "iter", "exit"]
         for i, (event, expected_type) in enumerate(zip(events, expected_types)):
-            assert event["t"] == expected_type, (
-                f"Event {i}: expected type {expected_type!r}, got {event['t']!r}"
-            )
+            assert (
+                event["t"] == expected_type
+            ), f"Event {i}: expected type {expected_type!r}, got {event['t']!r}"
 
 
 # ── Progressive trace parsing ─────────────────────────────────────────────────
@@ -281,7 +298,7 @@ class TestProgressiveTraceParsing:
     def test_parse_malformed_line_skipped(self):
         """Malformed JSON lines should be skipped, not crash."""
         raw_lines = [
-            'not valid json',
+            "not valid json",
             '{"t":"enter","l":1,"f":"main","d":0,"p":{}}',
             '{"t":"state","l":2,"f":"main","d":0,"v":{"x":1}}',
         ]
@@ -341,9 +358,11 @@ class TestProgressiveTraceParsing:
 
     def test_parse_all_malformed(self):
         """A stream with only malformed lines should produce empty events."""
-        parsed = parse([
-            "trash",
-            "also trash",
-            "{bad json",
-        ])
+        parsed = parse(
+            [
+                "trash",
+                "also trash",
+                "{bad json",
+            ]
+        )
         assert parsed == []

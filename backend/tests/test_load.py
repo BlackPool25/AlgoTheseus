@@ -41,7 +41,9 @@ from app.main import app
 # Deterministic load program: the corpus binary-search fixture (proven to
 # instrument + compile + trace in this toolchain; a hand-written for-loop in
 # main mis-scopes `i` in the injector — kept out deliberately).
-LOAD_CODE = (Path(__file__).parent / "fixtures" / "corpus" / "binary_search.cpp").read_text()
+LOAD_CODE = (
+    Path(__file__).parent / "fixtures" / "corpus" / "binary_search.cpp"
+).read_text()
 LOAD_STDIN = ""
 
 OK_RUN = RunResult(
@@ -95,7 +97,9 @@ class TestConcurrentLoad:
         # 8 DISTINCT programs (target 0..7): distinct cache keys force 8 real
         # concurrent sandbox compiles+runs — identical code would all HIT the
         # warm-instance cache and prove nothing about sandbox concurrency.
-        variants = [LOAD_CODE.replace("bsearch(arr, 7)", f"bsearch(arr, {k})") for k in range(8)]
+        variants = [
+            LOAD_CODE.replace("bsearch(arr, 7)", f"bsearch(arr, {k})") for k in range(8)
+        ]
         assert len(set(variants)) == 8
         xff = "10.30.1.1"
         # OOM-hardening: max 4 concurrent sandboxes (mirrors /execute-batch
@@ -113,9 +117,7 @@ class TestConcurrentLoad:
             # references after. Reversing the order would let every
             # concurrent request HIT the serial-warmed cache and prove
             # nothing about sandbox concurrency.
-            results = await asyncio.gather(
-                *[_gated(code) for code in variants]
-            )
+            results = await asyncio.gather(*[_gated(code) for code in variants])
 
             serials = []
             for code in variants:
@@ -154,7 +156,9 @@ class TestRateLimitLoop:
         with (
             patch("app.api.routes.execute.run_in_sandbox", return_value=OK_RUN),
             patch("app.api.routes.execute.instrument", return_value="int main(){}"),
-            patch("app.api.routes.execute.parse_stdin", return_value=("", "no changes")),
+            patch(
+                "app.api.routes.execute.parse_stdin", return_value=("", "no changes")
+            ),
         ):
             async with AsyncClient(
                 transport=ASGITransport(app=app), base_url="http://test"
@@ -236,7 +240,7 @@ class TestEscapeBattery:
         src = (
             "#include <cstdio>\n"
             'int main(){FILE* f=std::fopen("/etc/passwd","r");'
-            'if(f){char b[16]; std::fread(b,1,16,f); std::fclose(f);}'
+            "if(f){char b[16]; std::fread(b,1,16,f); std::fclose(f);}"
             'FILE* w=std::fopen("/etc/dsa_load_escape_marker","w");'
             'if(w){std::fputs("pwned",w); std::fclose(w); std::printf("wrote-etc"); return 9;}'
             'std::printf("contained"); return 3;}\n'
@@ -250,9 +254,9 @@ class TestEscapeBattery:
         src = (
             "#include <cstdio>\n#include <sys/socket.h>\n#include <netinet/in.h>\n"
             "#include <arpa/inet.h>\n#include <unistd.h>\n"
-            "int main(){int s=socket(AF_INET,SOCK_STREAM,0); if(s<0){std::printf(\"no-sock\"); return 3;}"
+            'int main(){int s=socket(AF_INET,SOCK_STREAM,0); if(s<0){std::printf("no-sock"); return 3;}'
             "struct sockaddr_in a; a.sin_family=AF_INET; a.sin_port=htons(9);"
-            "a.sin_addr.s_addr=inet_addr(\"127.0.0.1\");"
+            'a.sin_addr.s_addr=inet_addr("127.0.0.1");'
             'if(connect(s,(struct sockaddr*)&a,sizeof(a))!=0){std::printf("refused"); close(s); return 3;}'
             'std::printf("connected?!"); return 0;}\n'
         )

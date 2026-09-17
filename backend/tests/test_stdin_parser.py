@@ -58,7 +58,7 @@ class TestExtractCinSummary:
         assert len(summary.splitlines()) == 10
 
     def test_mixed_cin_and_scanf(self):
-        code = "cin >> n;\nscanf(\"%d\", &m);\ngetline(cin, s);"
+        code = 'cin >> n;\nscanf("%d", &m);\ngetline(cin, s);'
         summary = _extract_cin_summary(code)
         assert "cin >> n" in summary
         assert "scanf" in summary
@@ -250,7 +250,9 @@ class TestParseStdin:
     async def test_complex_prose_stripping(self):
         """More realistic prose: 'Enter number of elements: 5\\nEnter values: 1 2 3 4 5'."""
         code = "int main() { int n; cin >> n; int arr[100]; for(int i=0;i<n;i++) cin >> arr[i]; }"
-        cleaned, preview = await parse_stdin(code, "Enter number of elements: 5\nEnter values: 1 2 3 4 5")
+        cleaned, preview = await parse_stdin(
+            code, "Enter number of elements: 5\nEnter values: 1 2 3 4 5"
+        )
         # Prose stripping extracts numbers, may loose newline structure
         assert "1" in cleaned
         assert "2" in cleaned

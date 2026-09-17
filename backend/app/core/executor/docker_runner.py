@@ -57,13 +57,14 @@ fi
 @dataclass
 class RunResult:
     """Structured result from a sandbox execution."""
+
     stdout: str = ""
-    stderr_clean: str = ""      # stderr lines that are NOT TRACE: prefixed
+    stderr_clean: str = ""  # stderr lines that are NOT TRACE: prefixed
     trace_raw: list[str] = field(default_factory=list)
     exit_code: int = 0
     compile_error: str | None = None
     timed_out: bool = False
-    truncated: bool = False     # True if trace was cut at MAX_TRACE_LINES
+    truncated: bool = False  # True if trace was cut at MAX_TRACE_LINES
 
 
 def _split_stderr(raw: str) -> tuple[list[str], str, bool]:
@@ -79,7 +80,7 @@ def _split_stderr(raw: str) -> tuple[list[str], str, bool]:
     for line in raw.splitlines():
         if line.startswith("TRACE:"):
             if len(trace) < MAX_TRACE_LINES:
-                trace.append(line[len("TRACE:"):])
+                trace.append(line[len("TRACE:") :])
             else:
                 truncated = True
         else:
@@ -91,6 +92,32 @@ def _is_compile_error(stderr_clean: str, exit_code: int) -> bool:
     """Heuristic: if stderr contains g++ error markers and no TRACE: lines, it's a compile error."""
     markers = ["error:", "fatal error:", "undefined reference"]
     return exit_code != 0 and any(m in stderr_clean for m in markers)
+
+
+# SIGXFSZ is 25: the file-size guard (RLIMIT_FSIZE / 64m tmpfs) kills runaway
+# output — typically an infinite loop tracing forever. subprocess reports it
+# as -25, docker waits status it as 128+25 = 153.
+_OUTPUT_GUARD_EXIT_CODES = frozenset({-25, 153})
+
+_OUTPUT_GUARD_MESSAGE = (
+    "Program stopped: its output hit the 64 MB output-size guard — usually "
+    "an infinite loop writing trace/output forever. Add a loop bound or a "
+    "break condition, then run again."
+)
+
+
+def _apply_output_guard(
+    exit_code: int, stderr_clean: str, truncated: bool
+) -> tuple[str, bool]:
+    """Map a file-size-guard death to a legible message + truncated flag."""
+    if exit_code not in _OUTPUT_GUARD_EXIT_CODES:
+        return stderr_clean, truncated
+    message = (
+        f"{stderr_clean}\n{_OUTPUT_GUARD_MESSAGE}".strip()
+        if stderr_clean
+        else _OUTPUT_GUARD_MESSAGE
+    )
+    return message, True
 
 
 def _run_container_sync(cpp_source: str, stdin_data: str) -> RunResult:
@@ -147,6 +174,7 @@ def _run_container_sync(cpp_source: str, stdin_data: str) -> RunResult:
         if _is_compile_error(stderr_clean, exit_code) and not trace_raw:
             return RunResult(compile_error=stderr_clean)
 
+        stderr_clean, truncated = _apply_output_guard(exit_code, stderr_clean, truncated)
         return RunResult(
             stdout=stdout,
             stderr_clean=stderr_clean,

@@ -9,6 +9,8 @@ a preview of each uploaded file.
 from __future__ import annotations
 
 import logging
+import shutil
+import time
 import uuid
 from pathlib import Path
 
@@ -23,6 +25,11 @@ BASE_DIR = Path("/tmp/algo-theseus/testcases")
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
 MAX_FILES = 50
 ALLOWED_EXTENSIONS = {".txt", ".in", ".out", ".ans"}
+CHUNK_SIZE = 65536  # 64 KB streaming reads (bounds per-request RAM)
+TESTCASE_TTL_SECONDS = 3600  # mtime GC horizon for testcase dirs
+_PREVIEW_HEAD_BYTES = (
+    4096  # preview probe (preview shows 200 chars; exact for files ≤ 4KB)
+)
 
 # Module-level File() default (B008: no calls in argument defaults).
 # Same object FastAPI would build at decoration time — shared on purpose.
@@ -37,6 +44,26 @@ PREVIEW_MAX_CHARS = 200
 def _ensure_base_dir() -> None:
     """Create the shared testcases directory if it doesn't exist."""
     BASE_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _purge_stale_dirs() -> None:
+    """Remove testcase dirs with mtime older than TESTCASE_TTL_SECONDS.
+
+    Best-effort: GC must never break an upload.
+    """
+    try:
+        now = time.time()
+        for child in BASE_DIR.iterdir():
+            try:
+                if (
+                    child.is_dir()
+                    and (now - child.stat().st_mtime) > TESTCASE_TTL_SECONDS
+                ):
+                    shutil.rmtree(child, ignore_errors=True)
+            except OSError:
+                logger.debug("GC skip %s", child, exc_info=True)
+    except OSError:
+        logger.debug("GC scan failed", exc_info=True)
 
 
 def _validate_extension(filename: str | None) -> str | None:
@@ -86,6 +113,7 @@ async def upload_testcases(files: list[UploadFile] = _FILES_PARAM) -> dict:
 
     # ── Ensure destination ─────────────────────────────────────────────────
     _ensure_base_dir()
+    _purge_stale_dirs()
     test_id = str(uuid.uuid4())
     dest_dir = BASE_DIR / test_id
     dest_dir.mkdir(parents=True, exist_ok=False)
@@ -104,27 +132,38 @@ async def upload_testcases(files: list[UploadFile] = _FILES_PARAM) -> dict:
                 f"Allowed: {sorted(ALLOWED_EXTENSIONS)}",
             )
 
-        # Read content (size check happens implicitly; we enforce after read)
-        content = await file.read()
-        if len(content) > MAX_FILE_SIZE:
+        # Stream to disk in 64KB chunks; reject mid-stream past the size cap
+        file_path = dest_dir / fname
+        size = 0
+        head = bytearray()
+        too_big = False
+        with open(file_path, "wb") as out:
+            while chunk := await file.read(CHUNK_SIZE):
+                size += len(chunk)
+                if size > MAX_FILE_SIZE:
+                    too_big = True
+                    break
+                out.write(chunk)
+                need = _PREVIEW_HEAD_BYTES - len(head)
+                if need > 0:
+                    head.extend(chunk[:need])
+        if too_big:
             # Clean up partial upload
-            import shutil
             shutil.rmtree(dest_dir, ignore_errors=True)
             raise HTTPException(
                 status_code=400,
                 detail=f"File '{fname}' exceeds {MAX_FILE_SIZE // (1024 * 1024)} MB limit "
-                f"({len(content)} bytes)",
+                f"({size} bytes)",
             )
 
-        # Write to disk
-        file_path = dest_dir / fname
-        file_path.write_bytes(content)
-
-        uploaded.append({
-            "name": fname,
-            "size": len(content),
-            "preview": _make_preview(content),
-        })
+        content_head = bytes(head)
+        uploaded.append(
+            {
+                "name": fname,
+                "size": size,
+                "preview": _make_preview(content_head),
+            }
+        )
 
     logger.info("Uploaded test_id=%s with %d file(s)", test_id, len(uploaded))
 

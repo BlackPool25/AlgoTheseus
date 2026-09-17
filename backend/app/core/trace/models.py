@@ -23,18 +23,18 @@ from pydantic import BaseModel, ConfigDict, Field
 
 class EventType(str, Enum):
     FUNC_ENTER = "enter"
-    FUNC_EXIT  = "exit"
-    STATE      = "state"
-    BRANCH     = "branch"
-    LOOP_ITER  = "iter"
+    FUNC_EXIT = "exit"
+    STATE = "state"
+    BRANCH = "branch"
+    LOOP_ITER = "iter"
 
 
 class _Base(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="allow")
 
     # Short-key aliases match tracer.h output: "l", "f", "d"
-    line:  int = Field(alias="l")
-    func:  str = Field(alias="f")
+    line: int = Field(alias="l")
+    func: str = Field(alias="f")
     depth: int = Field(alias="d")
 
 
@@ -107,28 +107,28 @@ class StackFrame(BaseModel):
 
 # ── CFG models ────────────────────────────────────────────────────────────────
 
+
 class CFGNodeType(str, Enum):
-    LINE       = "line"
-    BRANCH     = "branch"
-    LOOP       = "loop"
-    FUNC_CALL  = "func_call"
+    LINE = "line"
+    BRANCH = "branch"
+    LOOP = "loop"
+    FUNC_CALL = "func_call"
     FUNC_START = "func_start"
-    FUNC_END   = "func_end"
+    FUNC_END = "func_end"
 
 
 class CFGNode(BaseModel):
     """A node in the dynamic control-flow graph built from the trace."""
+
     id: str
     type: CFGNodeType
-    lines: list[int]            # source lines this node covers
-    label: str                  # display label shown in the flowchart
-    children: list[str] = []    # child node IDs (for expandable loop/recursion nodes)
-    trace_indices: list[int]    # which trace steps map to this node
+    lines: list[int]  # source lines this node covers
+    label: str  # display label shown in the flowchart
+    children: list[str] = []  # child node IDs (for expandable loop/recursion nodes)
+    trace_indices: list[int]  # which trace steps map to this node
 
 
 class CFGEdge(BaseModel):
     source: str
     target: str
     label: str = ""
-
-

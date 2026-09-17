@@ -45,10 +45,11 @@ import os
 import shutil
 import signal
 import subprocess
+import threading
 from pathlib import Path
 from uuid import uuid4
 
-from .docker_runner import RunResult, _is_compile_error, _split_stderr
+from .docker_runner import RunResult, _apply_output_guard, _is_compile_error, _split_stderr
 from .sandbox_config import EXECUTION_TIMEOUT_SECONDS
 
 _TRACER_H = Path(__file__).parent.parent / "instrumenter" / "tracer.h"
@@ -61,12 +62,18 @@ _STDOUT_CAP_BYTES = 1_000_000
 _STDERR_CAP_BYTES = 1_000_000
 
 # rlimit values mirroring sandbox_config.py.
-_RUN_RLIMIT_AS = 128 * 1024 * 1024      # mem_limit 128m equivalent
-_COMPILE_RLIMIT_AS = 2 * 1024**3        # toolchain exception, see docstring
-_RLIMIT_FSIZE = 64 * 1024 * 1024        # tmpfs 64m equivalent
-_RLIMIT_NPROC = 64                      # pids_limit approximation
+_RUN_RLIMIT_AS = 128 * 1024 * 1024  # mem_limit 128m equivalent
+_COMPILE_RLIMIT_AS = 2 * 1024**3  # toolchain exception, see docstring
+_RLIMIT_FSIZE = 64 * 1024 * 1024  # tmpfs 64m equivalent
+_RLIMIT_NPROC = 64  # pids_limit approximation
 
 _MIN_ENV = {"PATH": "/usr/bin:/bin"}
+
+# Wave5 3.1: cap concurrent g++ spawns process-wide at 50. Sync semaphore —
+# the jail runs in worker threads via asyncio.to_thread, so an asyncio
+# semaphore cannot gate it. Guards the compile step only; the run step is
+# already bounded by the asyncio sandbox pool in execute.py.
+_GXX_SPAWN_SEM = threading.Semaphore(50)
 
 _NOBODY_UID = 65534
 _NOBODY_GID = 65534
@@ -122,7 +129,9 @@ def _apply_limits(as_bytes: int, uid: int, drop_privs: bool) -> None:
     ):
         try:
             resource.setrlimit(args[0], args[1])
-        except Exception:  # noqa: BLE001, S110 — limits are defense-in-depth, never fatal
+        except (
+            Exception
+        ):  # noqa: BLE001, S110 — limits are defense-in-depth, never fatal
             pass
 
 
@@ -211,7 +220,9 @@ def _run_subprocess_sync(cpp_source: str, stdin_data: str = "") -> RunResult:
     try:
         (jail / "prog.cpp").write_text(cpp_source, encoding="utf-8")
         (jail / "input.txt").write_text(stdin_data, encoding="utf-8")
-        (jail / "tracer.h").write_text(_TRACER_H.read_text(encoding="utf-8"), encoding="utf-8")
+        (jail / "tracer.h").write_text(
+            _TRACER_H.read_text(encoding="utf-8"), encoding="utf-8"
+        )
         # Sources read-only to the jailed child; dir stays writable for the
         # tracer's fd-1 temp files (todo 10 requirement).
         for name in ("prog.cpp", "input.txt", "tracer.h"):
@@ -219,20 +230,35 @@ def _run_subprocess_sync(cpp_source: str, stdin_data: str = "") -> RunResult:
 
         prog = jail / "prog"
         compile_out, compile_err = jail / "cout.bin", jail / "cerr.bin"
-        code, compile_timed_out = _run_guarded(
-            ["g++", "-O0", "-g", "-std=c++17", "-ftemplate-depth=100", "-I", str(jail), "-o", str(prog), str(jail / "prog.cpp")],
-            cwd=jail,
-            stdin_path=None,
-            stdout_path=compile_out,
-            stderr_path=compile_err,
-            as_bytes=_COMPILE_RLIMIT_AS,
-            drop_privs=False,
-        )
+        with _GXX_SPAWN_SEM:
+            code, compile_timed_out = _run_guarded(
+                [
+                    "g++",
+                    "-O0",
+                    "-g",
+                    "-std=c++17",
+                    "-ftemplate-depth=100",
+                    "-I",
+                    str(jail),
+                    "-o",
+                    str(prog),
+                    str(jail / "prog.cpp"),
+                ],
+                cwd=jail,
+                stdin_path=None,
+                stdout_path=compile_out,
+                stderr_path=compile_err,
+                as_bytes=_COMPILE_RLIMIT_AS,
+                drop_privs=False,
+            )
         if compile_timed_out or code != 0:
             err = _read_capped(compile_err, _STDERR_CAP_BYTES)
             if compile_timed_out and not err:
                 err = f"g++ compile timed out after {EXECUTION_TIMEOUT_SECONDS}s"
-            return RunResult(compile_error=err or "g++ failed with no output", timed_out=compile_timed_out)
+            return RunResult(
+                compile_error=err or "g++ failed with no output",
+                timed_out=compile_timed_out,
+            )
 
         run_out, run_err = jail / "rout.bin", jail / "rerr.bin"
         exit_code, timed_out = _run_guarded(
@@ -250,6 +276,7 @@ def _run_subprocess_sync(cpp_source: str, stdin_data: str = "") -> RunResult:
 
         if _is_compile_error(stderr_clean, exit_code) and not trace_raw:
             return RunResult(compile_error=stderr_clean)
+        stderr_clean, truncated = _apply_output_guard(exit_code, stderr_clean, truncated)
         return RunResult(
             stdout=stdout,
             stderr_clean=stderr_clean,

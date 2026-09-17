@@ -9,10 +9,13 @@ from pydantic import BaseModel, Field
 
 class ExecuteRequest(BaseModel):
     """POST /execute — full code execution."""
+
     model_config = {"extra": "forbid"}
 
     code: str = Field(..., description="Full C++ source code")
-    raw_stdin: str = Field(default="", description="Raw stdin input (parsed server-side)")
+    raw_stdin: str = Field(
+        default="", description="Raw stdin input (parsed server-side)"
+    )
     compressed: bool = Field(
         default=False,
         description="When True, collapse consecutive STATE events with identical vars server-side to reduce payload",
@@ -21,6 +24,7 @@ class ExecuteRequest(BaseModel):
 
 class ExecuteBatchRequest(BaseModel):
     """POST /execute-batch — batch execution against multiple test cases."""
+
     model_config = {"extra": "forbid"}
 
     code: str = Field(..., description="Full C++ source code")

@@ -12,6 +12,7 @@ from app.core.trace.models import CFGEdge, CFGNode, TraceEvent
 
 class ExecuteResponse(BaseModel):
     """Response from POST /execute."""
+
     stdout: str
     compile_error: str | None = None
     runtime_error: str | None = None
@@ -19,6 +20,10 @@ class ExecuteResponse(BaseModel):
     truncated: bool = Field(
         default=False,
         description="True if trace was cut at MAX_TRACE_LINES — program may have more steps",
+    )
+    warnings: list[str] = Field(
+        default_factory=list,
+        description="Non-fatal notices (e.g. skipped template bodies) — the run still succeeded",
     )
     trace: list[TraceEvent] = Field(
         default_factory=list,
@@ -39,6 +44,7 @@ class ExecuteBatchResponseItem(BaseModel):
 
     Mirrors ExecuteResponse but adds ``test_id`` to identify the test case.
     """
+
     test_id: str
     stdout: str
     compile_error: str | None = None
@@ -47,6 +53,10 @@ class ExecuteBatchResponseItem(BaseModel):
     truncated: bool = Field(
         default=False,
         description="True if trace was cut at MAX_TRACE_LINES — program may have more steps",
+    )
+    warnings: list[str] = Field(
+        default_factory=list,
+        description="Non-fatal notices (e.g. skipped template bodies) — the run still succeeded",
     )
     trace: list[TraceEvent] = Field(
         default_factory=list,

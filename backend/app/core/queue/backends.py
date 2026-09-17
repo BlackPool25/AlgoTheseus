@@ -29,6 +29,40 @@ try:  # Optional dependency — never crash when redis is missing.
 except Exception:  # pragma: no cover - import-time fallback
     aioredis = None  # type: ignore[assignment]
 
+# Process-wide pooled async clients, one per Redis URL. redis.asyncio
+# clients own a connection pool internally, so sharing one client per URL
+# bounds total connections (max_connections=50) instead of opening +
+# closing a connection per queue operation.
+POOLED_MAX_CONNECTIONS = 50
+_pooled: dict[str, object] = {}
+
+
+def _get_client(url: str):  # type: ignore[no-untyped-def]
+    """Return the shared pooled client for a URL, creating it on first use."""
+    assert aioredis is not None
+    client = _pooled.get(url)
+    if client is None:
+        client = aioredis.from_url(
+            url,
+            decode_responses=True,
+            max_connections=POOLED_MAX_CONNECTIONS,
+            socket_connect_timeout=2,
+            socket_keepalive=True,
+            health_check_interval=30,
+        )
+        _pooled[url] = client
+    return client
+
+
+async def reset_pool() -> None:
+    """Close and drop all pooled clients (tests / shutdown)."""
+    while _pooled:
+        _, client = _pooled.popitem()
+        try:
+            await client.aclose()  # type: ignore[union-attr]
+        except Exception:
+            logger.warning("Error closing pooled redis client", exc_info=True)
+
 
 def _job_key(job_id: str) -> str:
     """Redis key for a single job record."""
@@ -85,7 +119,10 @@ class InMemoryQueue:
         return self._live(job_id)
 
     async def set_status(
-        self, job_id: str, status: str, result: dict | None = None,
+        self,
+        job_id: str,
+        status: str,
+        result: dict | None = None,
         error: str | None = None,
     ) -> None:
         """Update status/result/error on an existing record (no-op if gone)."""
@@ -102,73 +139,71 @@ class RedisQueue:
     """Redis list-based queue with SETEX result records (TTL 1h)."""
 
     def __init__(self, url: str) -> None:
-        """Bind to a Redis URL (client created lazily per operation)."""
+        """Bind to a Redis URL (pooled client shared process-wide per URL)."""
         self._url = url
 
     def _client(self):  # type: ignore[no-untyped-def]
-        """Create a short-lived async Redis client."""
-        assert aioredis is not None
-        return aioredis.from_url(self._url, decode_responses=True)
+        """Return the process-wide pooled async Redis client."""
+        return _get_client(self._url)
 
     async def enqueue(self, payload: dict) -> str:
         """Persist a queued record and push its id. Returns the job id."""
         job_id = uuid.uuid4().hex
         now = time.time()
         rec = {
-            "job_id": job_id, "status": "queued", "payload": payload,
-            "result": None, "error": None, "created": now, "updated": now,
+            "job_id": job_id,
+            "status": "queued",
+            "payload": payload,
+            "result": None,
+            "error": None,
+            "created": now,
+            "updated": now,
         }
         client = self._client()
-        try:
-            await client.setex(_job_key(job_id), RESULT_TTL_SECONDS, json.dumps(rec))
-            await client.lpush(PENDING_KEY, job_id)
-        finally:
-            await client.aclose()
+        await client.setex(_job_key(job_id), RESULT_TTL_SECONDS, json.dumps(rec))
+        await client.lpush(PENDING_KEY, job_id)
         return job_id
 
     async def dequeue(self, timeout: float = 1.0) -> tuple[str, dict] | None:
         """BRPOP the next job id and return id + payload (None on timeout)."""
         client = self._client()
-        try:
-            item = await client.brpop(PENDING_KEY, timeout=max(1, int(timeout)))
-            if not item:
-                return None
-            _, job_id = item
-            raw = await client.get(_job_key(job_id))
-            if raw is None:
-                return None
-            rec = json.loads(raw)
-            return str(job_id), rec["payload"]
-        finally:
-            await client.aclose()
+        item = await client.brpop(PENDING_KEY, timeout=max(1, int(timeout)))
+        if not item:
+            return None
+        _, job_id = item
+        raw = await client.get(_job_key(job_id))
+        if raw is None:
+            return None
+        rec = json.loads(raw)
+        return str(job_id), rec["payload"]
 
     async def get(self, job_id: str) -> dict | None:
         """Fetch a job record by id (None when unknown/expired)."""
-        client = self._client()
-        try:
-            raw = await client.get(_job_key(job_id))
-        finally:
-            await client.aclose()
+        raw = await self._client().get(_job_key(job_id))
         return json.loads(raw) if raw is not None else None
 
     async def set_status(
-        self, job_id: str, status: str, result: dict | None = None,
+        self,
+        job_id: str,
+        status: str,
+        result: dict | None = None,
         error: str | None = None,
     ) -> None:
         """Update status/result/error, refreshing the 1h TTL. No-op if gone."""
         client = self._client()
-        try:
-            raw = await client.get(_job_key(job_id))
-            if raw is None:
-                return
-            rec = json.loads(raw)
-            rec.update({
-                "status": status, "result": result, "error": error,
+        raw = await client.get(_job_key(job_id))
+        if raw is None:
+            return
+        rec = json.loads(raw)
+        rec.update(
+            {
+                "status": status,
+                "result": result,
+                "error": error,
                 "updated": time.time(),
-            })
-            await client.setex(_job_key(job_id), RESULT_TTL_SECONDS, json.dumps(rec))
-        finally:
-            await client.aclose()
+            }
+        )
+        await client.setex(_job_key(job_id), RESULT_TTL_SECONDS, json.dumps(rec))
 
 
 _queue: InMemoryQueue | RedisQueue | None = None

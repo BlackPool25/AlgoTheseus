@@ -77,7 +77,9 @@ def parse(raw_lines: list[str], compressed: bool = False) -> list[Any]:
             o = data.get("o")
             deltas.append(o if isinstance(o, str) else None)
         except ValidationError as e:
-            logger.warning("Skipping invalid trace event at line %d: %s — %s", i, data, e)
+            logger.warning(
+                "Skipping invalid trace event at line %d: %s — %s", i, data, e
+            )
             continue
 
     # Recompute dynamic depth based on enter/exit events
@@ -134,8 +136,11 @@ def _apply_gutter_lines(events: list[Any]) -> None:
         elif event.type == EventType.FUNC_EXIT:
             if event.return_line is None:
                 idx = next(
-                    (i for i in range(len(enter_stack) - 1, -1, -1)
-                     if enter_stack[i][0] == event.func),
+                    (
+                        i
+                        for i in range(len(enter_stack) - 1, -1, -1)
+                        if enter_stack[i][0] == event.func
+                    ),
                     None,
                 )
                 if idx is not None and idx > 0:
@@ -165,12 +170,14 @@ def frames_at_step(events: list[Any]) -> list[list[StackFrame]]:
 
     for event in events:
         if event.type == EventType.FUNC_ENTER:
-            stack.append(StackFrame(
-                func=event.func,
-                frame_id=next_id,
-                depth=len(stack),
-                vars=dict(getattr(event, "params", None) or {}),
-            ))
+            stack.append(
+                StackFrame(
+                    func=event.func,
+                    frame_id=next_id,
+                    depth=len(stack),
+                    vars=dict(getattr(event, "params", None) or {}),
+                )
+            )
             next_id += 1
         elif event.type == EventType.FUNC_EXIT:
             if stack and stack[-1].func == event.func:
@@ -183,9 +190,17 @@ def frames_at_step(events: list[Any]) -> list[list[StackFrame]]:
         elif event.type == EventType.STATE and stack:
             stack[-1].vars.update(event.vars or {})
 
-        frames.append([StackFrame(
-            func=f.func, frame_id=f.frame_id, depth=f.depth, vars=dict(f.vars),
-        ) for f in stack])
+        frames.append(
+            [
+                StackFrame(
+                    func=f.func,
+                    frame_id=f.frame_id,
+                    depth=f.depth,
+                    vars=dict(f.vars),
+                )
+                for f in stack
+            ]
+        )
 
     return frames
 
@@ -217,7 +232,11 @@ def heap_at_step(events: list[Any]) -> list[dict[str, dict]]:
             continue
         try:
             heap = event.heap
-            base = dict(heap) if isinstance(heap, dict) else _extract_heap_table(event.vars)
+            base = (
+                dict(heap)
+                if isinstance(heap, dict)
+                else _extract_heap_table(event.vars)
+            )
         except Exception:  # noqa: BLE001 — parse stays total on garbage
             logger.warning("heap extraction failed; using empty table")
             base = {}
@@ -238,7 +257,9 @@ def heap_diff(prev: dict | None, cur: dict | None) -> dict[str, Any]:
     new = cur if isinstance(cur, dict) else {}
     added = sorted((k for k in new if k not in old), key=_heap_id_key)
     removed = sorted((k for k in old if k not in new), key=_heap_id_key)
-    mutated = sorted((k for k in new if k in old and old[k] != new[k]), key=_heap_id_key)
+    mutated = sorted(
+        (k for k in new if k in old and old[k] != new[k]), key=_heap_id_key
+    )
     return {
         "added": added,
         "removed": removed,
@@ -305,8 +326,9 @@ def _changed_keys(old: Any, new: Any) -> list[str]:
                 **(new.get("fields") if isinstance(new.get("fields"), dict) else {}),
                 **(new.get("refs") if isinstance(new.get("refs"), dict) else {}),
             }
-            return sorted((k for k in merged if _field_val(old, k) != _field_val(new, k)),
-                          key=str)
+            return sorted(
+                (k for k in merged if _field_val(old, k) != _field_val(new, k)), key=str
+            )
         keys = set(old) | set(new)
         return sorted((str(k) for k in keys if old.get(k) != new.get(k)), key=str)
     return ["$value"]
@@ -343,8 +365,9 @@ def _extract_heap_table(vars: dict | None) -> dict[str, dict]:
                 continue
             for name, target in list(refs.items()):
                 if isinstance(target, list):
-                    refs[name] = [t if t == "unknown" or t in table else "unknown"
-                                  for t in target]
+                    refs[name] = [
+                        t if t == "unknown" or t in table else "unknown" for t in target
+                    ]
                 elif target != "unknown" and target not in table:
                     refs[name] = "unknown"
     except Exception:  # noqa: BLE001 — garbage heap payloads yield partial table
@@ -445,8 +468,7 @@ def _apply_incremental_stdout(events: list[Any], deltas: list[str | None]) -> No
                 first_iter.setdefault(event.line, i)
                 last_iter[event.line] = i
         edge_iters = set(first_iter.values()) | set(last_iter.values())
-        state_indices = [i for i, e in enumerate(events)
-                         if e.type == EventType.STATE]
+        state_indices = [i for i, e in enumerate(events) if e.type == EventType.STATE]
         boundary = {state_indices[-1]} if state_indices else set()
         for i in state_indices:
             if (i - 1) in edge_iters or (i + 1) in edge_iters:

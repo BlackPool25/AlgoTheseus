@@ -65,7 +65,8 @@ class TestExecuteRateLimit:
                 retry_afters = []
                 for _ in range(35):
                     r = await ac.post(
-                        "/execute", json=VALID_BODY,
+                        "/execute",
+                        json=VALID_BODY,
                         headers={"X-Forwarded-For": "10.23.1.1"},
                     )
                     statuses.append(r.status_code)
@@ -84,7 +85,8 @@ class TestExecuteRateLimit:
             ) as ac:
                 for _ in range(35):  # exhaust the /execute bucket for this IP
                     await ac.post(
-                        "/execute", json=VALID_BODY,
+                        "/execute",
+                        json=VALID_BODY,
                         headers={"X-Forwarded-For": "10.23.2.2"},
                     )
                 health = [
@@ -103,15 +105,19 @@ class TestExecuteRateLimit:
             ) as ac:
                 for _ in range(5):
                     r = await ac.post(
-                        "/execute", json={},
+                        "/execute",
+                        json={},
                         headers={"X-Forwarded-For": "10.23.3.3"},
                     )
                     assert r.status_code == 422
                 oks = [
-                    (await ac.post(
-                        "/execute", json=VALID_BODY,
-                        headers={"X-Forwarded-For": "10.23.3.3"},
-                    )).status_code
+                    (
+                        await ac.post(
+                            "/execute",
+                            json=VALID_BODY,
+                            headers={"X-Forwarded-For": "10.23.3.3"},
+                        )
+                    ).status_code
                     for _ in range(31)
                 ]
         assert oks[:30] == [200] * 30
@@ -154,12 +160,14 @@ class TestProxyAwareKey:
             ) as ac:
                 for _ in range(30):
                     r = await ac.post(
-                        "/execute", json=VALID_BODY,
+                        "/execute",
+                        json=VALID_BODY,
                         headers={"X-Forwarded-For": "10.23.5.5"},
                     )
                     assert r.status_code == 200
                 r = await ac.post(
-                    "/execute", json=VALID_BODY,
+                    "/execute",
+                    json=VALID_BODY,
                     headers={"X-Forwarded-For": "10.23.5.5"},
                 )
                 assert r.status_code == 429
@@ -179,7 +187,8 @@ class TestProxyAwareKey:
                     r = await ac.post("/execute", json=VALID_BODY)
                     assert r.status_code == 200
                 spoofed = await ac.post(
-                    "/execute", json=VALID_BODY,
+                    "/execute",
+                    json=VALID_BODY,
                     headers={"X-Forwarded-For": "1.2.3.4, 5.6.7.8, 9.10.11.12"},
                 )
                 assert spoofed.status_code == 429

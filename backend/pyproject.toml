@@ -16,6 +16,7 @@ dependencies = [
     "docker==7.1.0",
     "httpx==0.28.1",
     "slowapi==0.1.10",
+    "orjson>=3",
     "python-multipart>=0.0.32",
     "redis>=5",
 ]
@@ -40,3 +41,9 @@ testpaths = ["tests"]
 
 [tool.ruff]
 line-length = 100
+
+[dependency-groups]
+dev = [
+    "fakeredis>=2.38.0",
+    "lupa>=2.8",
+]

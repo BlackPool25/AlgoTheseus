@@ -27,7 +27,7 @@ _RE_CIN_VAR = re.compile(r"cin\s*>>\s*(\w+)")
 _RE_CIN_ARRAY = re.compile(r"cin\s*>>\s*(\w+)\[")
 
 # scanf("format", &var1, &var2, ...) — captures the call body
-_RE_SCANF = re.compile(r'scanf\s*\(([^)]*)\)')
+_RE_SCANF = re.compile(r"scanf\s*\(([^)]*)\)")
 
 # getline(cin, variable)
 _RE_GETLINE = re.compile(r"getline\s*\(\s*cin\s*,\s*(\w+)")
@@ -37,6 +37,7 @@ _RE_GETLINE = re.compile(r"getline\s*\(\s*cin\s*,\s*(\w+)")
 # Internal helpers
 # ---------------------------------------------------------------------------
 
+
 def _extract_cin_summary(code: str) -> str:
     """Extract input-related lines from C++ code for context.
 
@@ -45,9 +46,7 @@ def _extract_cin_summary(code: str) -> str:
     """
     lines = code.splitlines()
     input_lines = [
-        l.strip()
-        for l in lines
-        if "cin" in l or "scanf" in l or "getline" in l
+        l.strip() for l in lines if "cin" in l or "scanf" in l or "getline" in l
     ]
     return "\n".join(input_lines[:10])
 
@@ -74,7 +73,7 @@ def _extract_expected_tokens(code: str) -> list[dict]:
         # Extract format string and count % directives
         fmt_match = re.search(r'"([^"]*)"', args)
         fmt = fmt_match.group(1) if fmt_match else ""
-        directives = len(re.findall(r'%[sd]', fmt))
+        directives = len(re.findall(r"%[sd]", fmt))
         tokens.append({"type": "scanf", "format": fmt, "directives": directives})
 
     for m in _RE_GETLINE.finditer(code):
@@ -125,6 +124,7 @@ def _strip_prose(raw_input: str) -> str | None:
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
 
 async def parse_stdin(code: str, raw_input: str) -> tuple[str, str]:
     """Parse and format the user's raw stdin to match the program's expectations.

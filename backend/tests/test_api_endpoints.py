@@ -50,11 +50,14 @@ class TestExecuteEndpoint:
     @patch("app.api.routes.execute.instrument")
     @patch("app.api.routes.execute.parse_stdin")
     async def test_execute_returns_expected_shape(
-        self, mock_parse_stdin, mock_instrument, mock_run_in_sandbox,
+        self,
+        mock_parse_stdin,
+        mock_instrument,
+        mock_run_in_sandbox,
     ):
         """Happy path: instrument → run → parse trace → build CFG."""
         mock_parse_stdin.return_value = ("5\n1 3 5 7 9\n", "no changes")
-        mock_instrument.return_value = "#include \"tracer.h\"\nint main() {}"
+        mock_instrument.return_value = '#include "tracer.h"\nint main() {}'
         mock_run_in_sandbox.return_value = RunResult(
             stdout="Found at index: 3\n",
             stderr_clean="",
@@ -72,10 +75,13 @@ class TestExecuteEndpoint:
         async with AsyncClient(
             transport=ASGITransport(app=app), base_url="http://test"
         ) as ac:
-            response = await ac.post("/execute", json={
-                "code": SAMPLE_CODE,
-                "raw_stdin": "5\n1 3 5 7 9\n",
-            })
+            response = await ac.post(
+                "/execute",
+                json={
+                    "code": SAMPLE_CODE,
+                    "raw_stdin": "5\n1 3 5 7 9\n",
+                },
+            )
 
         assert response.status_code == 200
         body = response.json()
@@ -105,11 +111,14 @@ class TestExecuteEndpoint:
     @patch("app.api.routes.execute.instrument")
     @patch("app.api.routes.execute.parse_stdin")
     async def test_execute_compile_error(
-        self, mock_parse_stdin, mock_instrument, mock_run_in_sandbox,
+        self,
+        mock_parse_stdin,
+        mock_instrument,
+        mock_run_in_sandbox,
     ):
         """Compile error should populate compile_error field."""
         mock_parse_stdin.return_value = ("5", "no changes")
-        mock_instrument.return_value = "#include \"tracer.h\"\nint main() {}"
+        mock_instrument.return_value = '#include "tracer.h"\nint main() {}'
         mock_run_in_sandbox.return_value = RunResult(
             compile_error="prog.cpp:1:10: fatal error: vector: No such file or directory",
         )
@@ -117,10 +126,13 @@ class TestExecuteEndpoint:
         async with AsyncClient(
             transport=ASGITransport(app=app), base_url="http://test"
         ) as ac:
-            response = await ac.post("/execute", json={
-                "code": SAMPLE_CODE,
-                "raw_stdin": "5",
-            })
+            response = await ac.post(
+                "/execute",
+                json={
+                    "code": SAMPLE_CODE,
+                    "raw_stdin": "5",
+                },
+            )
 
         assert response.status_code == 200
         body = response.json()
@@ -132,11 +144,14 @@ class TestExecuteEndpoint:
     @patch("app.api.routes.execute.instrument")
     @patch("app.api.routes.execute.parse_stdin")
     async def test_execute_timeout(
-        self, mock_parse_stdin, mock_instrument, mock_run_in_sandbox,
+        self,
+        mock_parse_stdin,
+        mock_instrument,
+        mock_run_in_sandbox,
     ):
         """Timed-out execution sets runtime_error and timed_out=True."""
         mock_parse_stdin.return_value = ("42", "no changes")
-        mock_instrument.return_value = "#include \"tracer.h\"\nint main() {}"
+        mock_instrument.return_value = '#include "tracer.h"\nint main() {}'
         mock_run_in_sandbox.return_value = RunResult(
             stdout="",
             stderr_clean="",
@@ -149,10 +164,13 @@ class TestExecuteEndpoint:
         async with AsyncClient(
             transport=ASGITransport(app=app), base_url="http://test"
         ) as ac:
-            response = await ac.post("/execute", json={
-                "code": SAMPLE_CODE,
-                "raw_stdin": "42",
-            })
+            response = await ac.post(
+                "/execute",
+                json={
+                    "code": SAMPLE_CODE,
+                    "raw_stdin": "42",
+                },
+            )
 
         assert response.status_code == 200
         body = response.json()
@@ -164,11 +182,14 @@ class TestExecuteEndpoint:
     @patch("app.api.routes.execute.instrument")
     @patch("app.api.routes.execute.parse_stdin")
     async def test_execute_truncated(
-        self, mock_parse_stdin, mock_instrument, mock_run_in_sandbox,
+        self,
+        mock_parse_stdin,
+        mock_instrument,
+        mock_run_in_sandbox,
     ):
         """truncated flag propagates from RunResult to response."""
         mock_parse_stdin.return_value = ("100", "no changes")
-        mock_instrument.return_value = "#include \"tracer.h\"\nint main() {}"
+        mock_instrument.return_value = '#include "tracer.h"\nint main() {}'
         mock_run_in_sandbox.return_value = RunResult(
             stdout="...",
             stderr_clean="",
@@ -181,10 +202,13 @@ class TestExecuteEndpoint:
         async with AsyncClient(
             transport=ASGITransport(app=app), base_url="http://test"
         ) as ac:
-            response = await ac.post("/execute", json={
-                "code": SAMPLE_CODE,
-                "raw_stdin": "100",
-            })
+            response = await ac.post(
+                "/execute",
+                json={
+                    "code": SAMPLE_CODE,
+                    "raw_stdin": "100",
+                },
+            )
 
         assert response.status_code == 200
         body = response.json()
@@ -194,7 +218,10 @@ class TestExecuteEndpoint:
     @patch("app.api.routes.execute.instrument")
     @patch("app.api.routes.execute.parse_stdin")
     async def test_execute_instrumentation_error(
-        self, mock_parse_stdin, mock_instrument, mock_run_in_sandbox,
+        self,
+        mock_parse_stdin,
+        mock_instrument,
+        mock_run_in_sandbox,
     ):
         """Instrumentation failure → 422."""
         mock_parse_stdin.return_value = ("42", "no changes")
@@ -203,10 +230,13 @@ class TestExecuteEndpoint:
         async with AsyncClient(
             transport=ASGITransport(app=app), base_url="http://test"
         ) as ac:
-            response = await ac.post("/execute", json={
-                "code": "garbage code that breaks libclang",
-                "raw_stdin": "42",
-            })
+            response = await ac.post(
+                "/execute",
+                json={
+                    "code": "garbage code that breaks libclang",
+                    "raw_stdin": "42",
+                },
+            )
 
         assert response.status_code == 422
         assert "Instrumentation error" in response.text
@@ -215,29 +245,213 @@ class TestExecuteEndpoint:
     @patch("app.api.routes.execute.instrument")
     @patch("app.api.routes.execute.parse_stdin")
     async def test_execute_sandbox_error(
-        self, mock_parse_stdin, mock_instrument, mock_run_in_sandbox,
+        self,
+        mock_parse_stdin,
+        mock_instrument,
+        mock_run_in_sandbox,
     ):
         """Docker sandbox failure → 500."""
         mock_parse_stdin.return_value = ("42", "no changes")
-        mock_instrument.return_value = "#include \"tracer.h\"\nint main() {}"
+        mock_instrument.return_value = '#include "tracer.h"\nint main() {}'
         mock_run_in_sandbox.side_effect = RuntimeError("Docker not available")
 
         async with AsyncClient(
             transport=ASGITransport(app=app), base_url="http://test"
         ) as ac:
-            response = await ac.post("/execute", json={
-                "code": SAMPLE_CODE,
-                "raw_stdin": "42",
-            })
+            response = await ac.post(
+                "/execute",
+                json={
+                    "code": SAMPLE_CODE,
+                    "raw_stdin": "42",
+                },
+            )
 
         assert response.status_code == 500
         assert "Sandbox error" in response.text
+
+    async def test_execute_missing_stdin_returns_422(self):
+        """Program reads stdin but none provided → 422, sandbox never runs."""
+        cin_code = (
+            "#include <iostream>\n"
+            "int main() {\n"
+            "    int n;\n"
+            "    std::cin >> n;\n"
+            "    std::cout << n;\n"
+            "    return 0;\n"
+            "}\n"
+        )
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as ac:
+            with (
+                patch(
+                    "app.api.routes.execute.instrument",
+                    side_effect=AssertionError("sandbox path must not run"),
+                ),
+                patch(
+                    "app.api.routes.execute.run_in_sandbox",
+                    side_effect=AssertionError("sandbox path must not run"),
+                ),
+            ):
+                response = await ac.post(
+                    "/execute",
+                    json={
+                        "code": cin_code,
+                        "raw_stdin": "",
+                    },
+                )
+
+        assert response.status_code == 422
+        assert "stdin" in response.text.lower()
+
+    @patch("app.api.routes.execute.run_in_sandbox")
+    @patch("app.api.routes.execute.instrument")
+    @patch("app.api.routes.execute.parse_stdin")
+    async def test_execute_cin_in_comment_does_not_block(
+        self,
+        mock_parse_stdin,
+        mock_instrument,
+        mock_run_in_sandbox,
+    ):
+        """`cin` inside comments is not a stdin read → runs normally."""
+        mock_parse_stdin.return_value = (
+            "",
+            "Program reads no stdin — running directly",
+        )
+        mock_instrument.return_value = '#include "tracer.h"\nint main() {}'
+        mock_run_in_sandbox.return_value = RunResult(
+            stdout="",
+            stderr_clean="",
+            trace_raw=[],
+            exit_code=0,
+            timed_out=False,
+            truncated=False,
+        )
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as ac:
+            response = await ac.post(
+                "/execute",
+                json={
+                    "code": "// read with std::cin >> n later\nint main() { return 0; }\n",
+                    "raw_stdin": "",
+                },
+            )
+
+        assert response.status_code == 200
+
+    @patch("app.api.routes.execute.run_in_sandbox")
+    @patch("app.api.routes.execute.instrument")
+    @patch("app.api.routes.execute.parse_stdin")
+    async def test_execute_cin_in_string_literal_does_not_block(
+        self,
+        mock_parse_stdin,
+        mock_instrument,
+        mock_run_in_sandbox,
+    ):
+        """`cin >>` inside a string literal is not a stdin read → 200."""
+        mock_parse_stdin.return_value = (
+            "",
+            "Program reads no stdin — running directly",
+        )
+        mock_instrument.return_value = '#include "tracer.h"\nint main() {}'
+        mock_run_in_sandbox.return_value = RunResult(
+            stdout="cin >> n\n",
+            stderr_clean="",
+            trace_raw=[],
+            exit_code=0,
+            timed_out=False,
+            truncated=False,
+        )
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as ac:
+            response = await ac.post(
+                "/execute",
+                json={
+                    "code": '#include <iostream>\nint main() { std::cout << "cin >> n"; return 0; }\n',
+                    "raw_stdin": "",
+                },
+            )
+
+        assert response.status_code == 200
+        mock_run_in_sandbox.assert_called_once()
+
+    @pytest.mark.parametrize(
+        "code",
+        [
+            '#include <cstdio>\nint main() { int n; scanf("%d", &n); return n; }\n',
+            "#include <iostream>\n#include <string>\nint main() { std::string s; std::getline(std::cin, s); return 0; }\n",
+            "#include <cstdio>\nint main() { int c = getchar(); return c; }\n",
+            "#include <cstdio>\nint main() { int c = getc(stdin); return c; }\n",
+        ],
+    )
+    async def test_execute_stdin_read_variants_return_422(
+        self,
+        code,
+    ):
+        """scanf/getline/getchar/getc with empty stdin → 422, sandbox never runs."""
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as ac:
+            with (
+                patch(
+                    "app.api.routes.execute.instrument",
+                    side_effect=AssertionError("sandbox path must not run"),
+                ),
+                patch(
+                    "app.api.routes.execute.run_in_sandbox",
+                    side_effect=AssertionError("sandbox path must not run"),
+                ),
+            ):
+                response = await ac.post(
+                    "/execute",
+                    json={
+                        "code": code,
+                        "raw_stdin": "",
+                    },
+                )
+
+        assert response.status_code == 422
+        assert "stdin" in response.text.lower()
+
+    @patch("app.api.routes.execute.run_in_sandbox")
+    @patch("app.api.routes.execute.instrument")
+    @patch("app.api.routes.execute.parse_stdin")
+    async def test_execute_unparseable_code_reports_instrumentation_error(
+        self,
+        mock_parse_stdin,
+        mock_instrument,
+        mock_run_in_sandbox,
+    ):
+        """Garbage mentioning `cin >>` is not missing-stdin → instrumentation 422."""
+        mock_parse_stdin.return_value = ("", "no changes")
+        mock_instrument.side_effect = RuntimeError("parse failed")
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as ac:
+            response = await ac.post(
+                "/execute",
+                json={
+                    "code": "int main( { std::cin >> n; @@@\n",
+                    "raw_stdin": "",
+                },
+            )
+
+        assert response.status_code == 422
+        assert "instrumentation error" in response.text.lower()
+        assert "missing stdin" not in response.text.lower()
 
     @patch("app.api.routes.execute.run_in_sandbox")
     @patch("app.api.routes.execute.instrument")
     @patch("app.api.routes.execute.parse_stdin")
     async def test_execute_response_carries_phase2_fields(
-        self, mock_parse_stdin, mock_instrument, mock_run_in_sandbox,
+        self,
+        mock_parse_stdin,
+        mock_instrument,
+        mock_run_in_sandbox,
     ):
         """T10: API response trace events carry the phase-2 fields.
 
@@ -246,7 +460,7 @@ class TestExecuteEndpoint:
         by_alias=False, same contract the NDJSON stream uses).
         """
         mock_parse_stdin.return_value = ("3", "no changes")
-        mock_instrument.return_value = "#include \"tracer.h\"\nint main() {}"
+        mock_instrument.return_value = '#include "tracer.h"\nint main() {}'
         mock_run_in_sandbox.return_value = RunResult(
             stdout="1\n2\n",
             stderr_clean="",
@@ -265,10 +479,13 @@ class TestExecuteEndpoint:
         async with AsyncClient(
             transport=ASGITransport(app=app), base_url="http://test"
         ) as ac:
-            response = await ac.post("/execute", json={
-                "code": SAMPLE_CODE,
-                "raw_stdin": "3",
-            })
+            response = await ac.post(
+                "/execute",
+                json={
+                    "code": SAMPLE_CODE,
+                    "raw_stdin": "3",
+                },
+            )
 
         assert response.status_code == 200
         body = response.json()
@@ -353,7 +570,10 @@ class TestUploadTestcasesEndpoint:
             response = await ac.post(
                 "/upload-testcases",
                 files=[
-                    ("files", ("program.exe", b"\x7fELF...", "application/octet-stream")),
+                    (
+                        "files",
+                        ("program.exe", b"\x7fELF...", "application/octet-stream"),
+                    ),
                 ],
             )
 
@@ -362,10 +582,7 @@ class TestUploadTestcasesEndpoint:
 
     async def test_upload_too_many_files(self, temp_upload_dir):
         """More than 50 files → 400."""
-        files = [
-            ("files", (f"file{i}.txt", b"data", "text/plain"))
-            for i in range(51)
-        ]
+        files = [("files", (f"file{i}.txt", b"data", "text/plain")) for i in range(51)]
         async with AsyncClient(
             transport=ASGITransport(app=app), base_url="http://test"
         ) as ac:
@@ -398,7 +615,10 @@ class TestUploadTestcasesEndpoint:
             response = await ac.post(
                 "/upload-testcases",
                 files=[
-                    ("files", ("data.txt", b"\xff\xfe\x00\x01", "application/octet-stream")),
+                    (
+                        "files",
+                        ("data.txt", b"\xff\xfe\x00\x01", "application/octet-stream"),
+                    ),
                 ],
             )
 
@@ -417,7 +637,9 @@ class TestExecuteBatchEndpoint:
     @patch("app.api.routes.execute.run_in_sandbox")
     @patch("app.api.routes.execute.instrument")
     async def test_execute_batch_returns_list(
-        self, mock_instrument, mock_run_in_sandbox,
+        self,
+        mock_instrument,
+        mock_run_in_sandbox,
         tmp_path,
     ):
         """Multiple test cases return a list of results."""
@@ -429,7 +651,7 @@ class TestExecuteBatchEndpoint:
         (testcases / "tc2").mkdir()
         (testcases / "tc2" / "input.txt").write_text("3\n2 4 6\n")
 
-        mock_instrument.return_value = "#include \"tracer.h\"\nint main() {}"
+        mock_instrument.return_value = '#include "tracer.h"\nint main() {}'
         mock_run_in_sandbox.return_value = RunResult(
             stdout="Found at index: 3\n",
             stderr_clean="",
@@ -448,10 +670,13 @@ class TestExecuteBatchEndpoint:
             async with AsyncClient(
                 transport=ASGITransport(app=app), base_url="http://test"
             ) as ac:
-                response = await ac.post("/execute-batch", json={
-                    "code": SAMPLE_CODE,
-                    "test_ids": ["tc1", "tc2"],
-                })
+                response = await ac.post(
+                    "/execute-batch",
+                    json={
+                        "code": SAMPLE_CODE,
+                        "test_ids": ["tc1", "tc2"],
+                    },
+                )
 
         assert response.status_code == 200
         body = response.json()
@@ -477,24 +702,70 @@ class TestExecuteBatchEndpoint:
 
     @patch("app.api.routes.execute.run_in_sandbox")
     @patch("app.api.routes.execute.instrument")
+    async def test_execute_batch_empty_input_file_skips_sandbox(
+        self,
+        mock_instrument,
+        mock_run_in_sandbox,
+        tmp_path,
+    ):
+        """Empty input file + stdin-reading code → per-case error, no sandbox run."""
+        testcases = tmp_path / "testcases"
+        (testcases / "tc0").mkdir(parents=True)
+        (testcases / "tc0" / "input.txt").write_text("")
+        mock_instrument.return_value = '#include "tracer.h"\nint main() {}'
+        mock_run_in_sandbox.side_effect = AssertionError("sandbox path must not run")
+        cin_code = (
+            "#include <iostream>\n"
+            "int main() {\n"
+            "    int n;\n"
+            "    std::cin >> n;\n"
+            "    std::cout << n;\n"
+            "    return 0;\n"
+            "}\n"
+        )
+
+        with patch("app.api.routes.execute._TESTCASE_DIR", testcases):
+            async with AsyncClient(
+                transport=ASGITransport(app=app), base_url="http://test"
+            ) as ac:
+                response = await ac.post(
+                    "/execute-batch",
+                    json={
+                        "code": cin_code,
+                        "test_ids": ["tc0"],
+                    },
+                )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert len(body) == 1
+        assert "stdin" in (body[0]["runtime_error"] or "").lower()
+
+    @patch("app.api.routes.execute.run_in_sandbox")
+    @patch("app.api.routes.execute.instrument")
     async def test_execute_batch_test_case_not_found(
-        self, mock_instrument, mock_run_in_sandbox,
+        self,
+        mock_instrument,
+        mock_run_in_sandbox,
         tmp_path,
     ):
         """Missing test case → 404."""
         testcases = tmp_path / "testcases"
         testcases.mkdir(parents=True)
 
-        mock_instrument.return_value = "#include \"tracer.h\"\nint main() {}"
+        mock_instrument.return_value = '#include "tracer.h"\nint main() {}'
 
         with patch("app.api.routes.execute._TESTCASE_DIR", testcases):
             async with AsyncClient(
                 transport=ASGITransport(app=app), base_url="http://test"
             ) as ac:
-                response = await ac.post("/execute-batch", json={
-                    "code": SAMPLE_CODE,
-                    "test_ids": ["nonexistent-test"],
-                })
+                response = await ac.post(
+                    "/execute-batch",
+                    json={
+                        "code": SAMPLE_CODE,
+                        "test_ids": ["nonexistent-test"],
+                    },
+                )
 
         assert response.status_code == 404
         assert "not found" in response.text.lower()
@@ -502,7 +773,9 @@ class TestExecuteBatchEndpoint:
     @patch("app.api.routes.execute.run_in_sandbox")
     @patch("app.api.routes.execute.instrument")
     async def test_execute_batch_timeout_handling(
-        self, mock_instrument, mock_run_in_sandbox,
+        self,
+        mock_instrument,
+        mock_run_in_sandbox,
         tmp_path,
     ):
         """A test case that times out should have timed_out=True."""
@@ -511,7 +784,7 @@ class TestExecuteBatchEndpoint:
         (testcases / "tc1").mkdir()
         (testcases / "tc1" / "input.txt").write_text("5\n")
 
-        mock_instrument.return_value = "#include \"tracer.h\"\nint main() {}"
+        mock_instrument.return_value = '#include "tracer.h"\nint main() {}'
         mock_run_in_sandbox.return_value = RunResult(
             stdout="",
             stderr_clean="",
@@ -525,10 +798,13 @@ class TestExecuteBatchEndpoint:
             async with AsyncClient(
                 transport=ASGITransport(app=app), base_url="http://test"
             ) as ac:
-                response = await ac.post("/execute-batch", json={
-                    "code": SAMPLE_CODE,
-                    "test_ids": ["tc1"],
-                })
+                response = await ac.post(
+                    "/execute-batch",
+                    json={
+                        "code": SAMPLE_CODE,
+                        "test_ids": ["tc1"],
+                    },
+                )
 
         assert response.status_code == 200
         body = response.json()
@@ -538,7 +814,9 @@ class TestExecuteBatchEndpoint:
     @patch("app.api.routes.execute.run_in_sandbox")
     @patch("app.api.routes.execute.instrument")
     async def test_execute_batch_compile_error(
-        self, mock_instrument, mock_run_in_sandbox,
+        self,
+        mock_instrument,
+        mock_run_in_sandbox,
         tmp_path,
     ):
         """Compile error per test case reported correctly."""
@@ -547,7 +825,7 @@ class TestExecuteBatchEndpoint:
         (testcases / "tc1").mkdir()
         (testcases / "tc1" / "input.txt").write_text("5\n")
 
-        mock_instrument.return_value = "#include \"tracer.h\"\nint main() {}"
+        mock_instrument.return_value = '#include "tracer.h"\nint main() {}'
         mock_run_in_sandbox.return_value = RunResult(
             compile_error="prog.cpp:1:1: error: unknown type name",
         )
@@ -556,10 +834,13 @@ class TestExecuteBatchEndpoint:
             async with AsyncClient(
                 transport=ASGITransport(app=app), base_url="http://test"
             ) as ac:
-                response = await ac.post("/execute-batch", json={
-                    "code": SAMPLE_CODE,
-                    "test_ids": ["tc1"],
-                })
+                response = await ac.post(
+                    "/execute-batch",
+                    json={
+                        "code": SAMPLE_CODE,
+                        "test_ids": ["tc1"],
+                    },
+                )
 
         assert response.status_code == 200
         body = response.json()

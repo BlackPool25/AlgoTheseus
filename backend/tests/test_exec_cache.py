@@ -151,11 +151,15 @@ class TestXCacheHeader:
     @patch("app.api.routes.execute.instrument")
     @patch("app.api.routes.execute.parse_stdin")
     async def test_repeat_submit_hits_cache(
-        self, mock_parse_stdin, mock_instrument, mock_run, isolated_cache,
+        self,
+        mock_parse_stdin,
+        mock_instrument,
+        mock_run,
+        isolated_cache,
     ):
         """Second identical /execute: X-Cache: HIT and ≥3x faster."""
         mock_parse_stdin.return_value = ("7\n", "no changes")
-        mock_instrument.return_value = "#include \"tracer.h\"\nint main() {}"
+        mock_instrument.return_value = '#include "tracer.h"\nint main() {}'
 
         async def slow_sandbox(*a, **k):
             await asyncio.sleep(0.5)
@@ -185,11 +189,15 @@ class TestXCacheHeader:
     @patch("app.api.routes.execute.instrument")
     @patch("app.api.routes.execute.parse_stdin")
     async def test_different_flags_miss(
-        self, mock_parse_stdin, mock_instrument, mock_run, isolated_cache,
+        self,
+        mock_parse_stdin,
+        mock_instrument,
+        mock_run,
+        isolated_cache,
     ):
         """Same code but different flags → MISS, never a cross-flag HIT."""
         mock_parse_stdin.return_value = ("7\n", "no changes")
-        mock_instrument.return_value = "#include \"tracer.h\"\nint main() {}"
+        mock_instrument.return_value = '#include "tracer.h"\nint main() {}'
         mock_run.return_value = _ok_result()
 
         async with AsyncClient(
@@ -207,11 +215,15 @@ class TestXCacheHeader:
     @patch("app.api.routes.execute.instrument")
     @patch("app.api.routes.execute.parse_stdin")
     async def test_streaming_carries_x_cache(
-        self, mock_parse_stdin, mock_instrument, mock_run, isolated_cache,
+        self,
+        mock_parse_stdin,
+        mock_instrument,
+        mock_run,
+        isolated_cache,
     ):
         """NDJSON StreamingResponse carries X-Cache (headers, not stream body)."""
         mock_parse_stdin.return_value = ("7\n", "no changes")
-        mock_instrument.return_value = "#include \"tracer.h\"\nint main() {}"
+        mock_instrument.return_value = '#include "tracer.h"\nint main() {}'
         mock_run.return_value = _ok_result()
 
         async with AsyncClient(
@@ -223,11 +235,7 @@ class TestXCacheHeader:
             assert r1.status_code == 200
             assert r1.headers.get("x-cache") == "MISS"
             assert "x-ndjson" in r1.headers.get("content-type", "")
-            lines = [
-                json.loads(line)
-                for line in r1.text.splitlines()
-                if line.strip()
-            ]
+            lines = [json.loads(line) for line in r1.text.splitlines() if line.strip()]
             assert lines[-1]["type"] == "cfg"  # NDJSON shape untouched
             assert "x-cache" not in json.dumps(lines[-1]).lower() or True
 
@@ -240,7 +248,12 @@ class TestXCacheHeader:
     @patch("app.api.routes.execute.instrument")
     @patch("app.api.routes.execute.parse_stdin")
     async def test_unwritable_cache_never_500(
-        self, mock_parse_stdin, mock_instrument, mock_run, tmp_path, monkeypatch,
+        self,
+        mock_parse_stdin,
+        mock_instrument,
+        mock_run,
+        tmp_path,
+        monkeypatch,
     ):
         """Cache dir unwritable → degrade to no-cache with warning, never 500."""
         ro = tmp_path / "ro-cache"
@@ -250,7 +263,7 @@ class TestXCacheHeader:
         execute_mod.reset_cache()
         try:
             mock_parse_stdin.return_value = ("7\n", "no changes")
-            mock_instrument.return_value = "#include \"tracer.h\"\nint main() {}"
+            mock_instrument.return_value = '#include "tracer.h"\nint main() {}'
             mock_run.return_value = _ok_result()
 
             async with AsyncClient(
@@ -272,7 +285,11 @@ class TestBatchFanoutCap:
     @patch("app.api.routes.execute.run_in_sandbox")
     @patch("app.api.routes.execute.instrument")
     async def test_batch_of_8_never_exceeds_4_sandboxes(
-        self, mock_instrument, mock_run, tmp_path, monkeypatch,
+        self,
+        mock_instrument,
+        mock_run,
+        tmp_path,
+        monkeypatch,
     ):
         """Concurrency counter proof: max 4 concurrent sandboxes for 8 cases."""
         monkeypatch.setenv("MAX_BATCH_SANDBOXES", "4")
@@ -286,7 +303,7 @@ class TestBatchFanoutCap:
                 (testcases / tid).mkdir()
                 (testcases / tid / "input.txt").write_text(f"{i}\n")
 
-            mock_instrument.return_value = "#include \"tracer.h\"\nint main() {}"
+            mock_instrument.return_value = '#include "tracer.h"\nint main() {}'
             state = {"cur": 0, "peak": 0}
 
             async def counting_sandbox(*a, **k):
@@ -304,10 +321,13 @@ class TestBatchFanoutCap:
                 async with AsyncClient(
                     transport=ASGITransport(app=app), base_url="http://test"
                 ) as ac:
-                    response = await ac.post("/execute-batch", json={
-                        "code": CODE,
-                        "test_ids": ids,
-                    })
+                    response = await ac.post(
+                        "/execute-batch",
+                        json={
+                            "code": CODE,
+                            "test_ids": ids,
+                        },
+                    )
 
             assert response.status_code == 200
             body = response.json()
@@ -326,7 +346,10 @@ class TestTruncateEnforcement:
         """Oversized loop fixture: lines beyond MAX_TRACE_LINES → truncated=True."""
         monkeypatch.setattr(docker_runner, "MAX_TRACE_LINES", 10)
         raw = "\n".join(
-            [f'TRACE:{{"t":"state","l":7,"f":"main","d":1,"v":{{"i":{i}}}}}' for i in range(25)]
+            [
+                f'TRACE:{{"t":"state","l":7,"f":"main","d":1,"v":{{"i":{i}}}}}'
+                for i in range(25)
+            ]
         )
         trace, clean, truncated = docker_runner._split_stderr(raw)
         assert len(trace) == 10
@@ -337,11 +360,15 @@ class TestTruncateEnforcement:
     @patch("app.api.routes.execute.instrument")
     @patch("app.api.routes.execute.parse_stdin")
     async def test_oversized_loop_returns_truncated_true(
-        self, mock_parse_stdin, mock_instrument, mock_run, isolated_cache,
+        self,
+        mock_parse_stdin,
+        mock_instrument,
+        mock_run,
+        isolated_cache,
     ):
         """Oversized loop fixture returns truncated:true to the frontend."""
         mock_parse_stdin.return_value = ("100000", "no changes")
-        mock_instrument.return_value = "#include \"tracer.h\"\nint main() {}"
+        mock_instrument.return_value = '#include "tracer.h"\nint main() {}'
         mock_run.return_value = RunResult(
             stdout="...",
             stderr_clean="",
@@ -354,10 +381,13 @@ class TestTruncateEnforcement:
         async with AsyncClient(
             transport=ASGITransport(app=app), base_url="http://test"
         ) as ac:
-            response = await ac.post("/execute", json={
-                "code": "int main(){for(int i=0;i<100000;i++){}}",
-                "raw_stdin": "100000",
-            })
+            response = await ac.post(
+                "/execute",
+                json={
+                    "code": "int main(){for(int i=0;i<100000;i++){}}",
+                    "raw_stdin": "100000",
+                },
+            )
 
         assert response.status_code == 200
         assert response.json()["truncated"] is True

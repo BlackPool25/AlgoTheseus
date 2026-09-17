@@ -25,6 +25,7 @@ import { ProgramOutputBox, SHOW_OUTPUT_EVENT } from "./components/ProgramOutputB
 import { Splitter } from "./components/Layout/Splitter";
 import { Header } from "./components/Layout/Header";
 import { Footer } from "./components/Layout/Footer";
+import { useSeo } from "./routes/useSeo";
 import {
   CfgSkeleton,
   EditorSkeleton,
@@ -172,6 +173,29 @@ export default function App() {
 
   const isLoading = status === "executing";
 
+  const siteUrl =
+    (import.meta.env.VITE_SITE_URL as string | undefined)?.replace(/\/$/, "") ||
+    (typeof window !== "undefined" ? window.location.origin : "");
+  useSeo(
+    {
+      title: "AlgoTheseus — See How Algorithms Think",
+      description:
+        "AlgoTheseus — visualize C++ algorithms step by step: live variable traces, control-flow graphs, and container visuals in the browser.",
+      canonical: `${siteUrl}/`,
+      ogImage: `${siteUrl}/og-image.svg`,
+    },
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      name: "AlgoTheseus",
+      applicationCategory: "EducationalApplication",
+      operatingSystem: "Web",
+      url: siteUrl,
+      description:
+        "AlgoTheseus — visualize C++ algorithms step by step: live variable traces, control-flow graphs, and container visuals in the browser.",
+    },
+  );
+
   const mainRef = useRef<HTMLDivElement>(null);
   const leftColRef = useRef<HTMLDivElement>(null);
 
@@ -234,6 +258,29 @@ export default function App() {
       />
 
       {/* Mobile Segmented View Switcher (< 768px) */}
+      <section aria-label="About AlgoTheseus" className="sr-only">
+        <h1>AlgoTheseus — See How Algorithms Think</h1>
+        <p>
+          AlgoTheseus visualizes C++ algorithms step by step: live variable
+          traces, control-flow graphs, and container visuals in the browser.
+        </p>
+        <h2>What you can do here</h2>
+        <p>
+          Run C++20 code in the interactive tool, step through the execution
+          trace, and inspect variables at every step.
+        </p>
+        <h2>Where to start</h2>
+        <nav aria-label="SEO">
+          <Link to="/algorithms">Browse the Algorithms guide</Link>
+          <Link to="/visualize/binary-search">
+            Visualize Binary Search step by step
+          </Link>
+          <Link to="/visualize/quick-sort">
+            Visualize Quick Sort step by step
+          </Link>
+          <Link to="/contact">Contact the maintainers</Link>
+        </nav>
+      </section>
       {isMobile && (
         <nav
           aria-label="Mobile panel switcher"

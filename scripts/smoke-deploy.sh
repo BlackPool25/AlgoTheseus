@@ -35,16 +35,16 @@ sleeping() {
 
 # ── 0. Deploy-file gate (RED-first: fails on the unconfigured target) ──
 missing=()
-for f in frontend/public/_headers netlify.toml render.yaml docs/DEPLOY.md .github/workflows/gh-pages-mirror.yml; do
+for f in frontend/public/_headers netlify.toml render.yaml docs/DEPLOY.md; do
     [ -f "$REPO_ROOT/$f" ] || missing+=("$f")
 done
 if [ "${#missing[@]}" -gt 0 ]; then
     echo "DEPLOY-FILES-MISSING: ${missing[*]}"
     echo "hint: land the todo-21 free-deploy configs first (Pages _headers,"
-    echo "  netlify.toml, render.yaml, DEPLOY.md, GH Pages mirror workflow)."
+    echo "  netlify.toml, render.yaml, DEPLOY.md)."
     exit 1
 fi
-echo "deploy-files: OK (5/5 present)"
+echo "deploy-files: OK (4/4 present)"
 
 # ── 1. Health with cold-start timing ──
 echo "--- health: GET $BASE_URL/health (gate: 200 within ${COLD_GATE_S}s) ---"

@@ -24,9 +24,9 @@ fragment body was deleted or trimmed, so nothing could be lost.
   serves `frontend/`; `VITE_API_URL` points at the Cloud Run API URL (§4).
 - **C. Free-tier static + container (no cloud bill):** Pages or Netlify frontend;
   SnapDeploy free primary or Render free fallback backend (§5).
-- **Mirror limits:** GH Pages is mirror-only — no COOP/COEP headers possible, so
-  `crossOriginIsolated` is always false and the app takes the server path
-  (see `.github/workflows/gh-pages-mirror.yml:1-13`; `VITE_BASE=/<repo>/`).
+- **GH Pages mirror removed:** the mirror workflow is deleted (it could never
+  set COOP/COEP — no header mechanism on GitHub Pages — and cost a third
+  deploy target). Static hosting is Pages primary, Netlify runner-up.
 
 ## Static frontend (Pages primary, Netlify runner-up)
 
@@ -35,8 +35,7 @@ root directory `frontend`. `VITE_API_URL` = API URL, baked at build time — reb
 change; unset keeps the same-origin dev fallback. `VITE_SITE_URL` = canonical domain
 (prod builds must set it; fail-closed: `grep -r "%VITE_" dist/` must print nothing).
 Headers: Pages uses `frontend/public/_headers`; Netlify uses `netlify.toml`
-(`[[headers]]` + `[[redirects]]`, auto-detected). GH Pages: no header mechanism (§3
-of `docs/DEPLOY.md`).
+(`[[headers]]` + `[[redirects]]`, auto-detected).
 
 ## Cloud Run backend
 

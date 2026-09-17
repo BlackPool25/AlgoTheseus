@@ -25,3 +25,7 @@
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=(), accelerometer=(), gyroscope=(), magnetometer=()
   Content-Security-Policy-Report-Only: default-src 'self'; script-src 'self' blob: 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; worker-src 'self' blob:; font-src 'self' data:; img-src 'self' data: blob:; connect-src 'self' https://api.example.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests
+# Long-cache for hashed build assets (Vite emits immutable filenames under
+# /assets/; safe to cache for a year — Cloudflare serves these verbatim).
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable

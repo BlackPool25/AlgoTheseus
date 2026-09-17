@@ -35,14 +35,16 @@ then rebuild (`bun install --frozen-lockfile && bun run build`). Unset/empty
 keeps the same-origin dev fallback. Backend must also allow the frontend origin
 via `FRONTEND_ORIGINS` (comma-separated, never `"*"`).
 
-## 4. GH Pages mirror always takes the server path
+## 4. crossOriginIsolated is false on a static host
 
-**Symptom:** `crossOriginIsolated === false` on the GH Pages mirror; no WASM path.
-**Cause:** GitHub Pages has no custom-header mechanism, so COOP/COEP are unset —
-by design (see `.github/workflows/gh-pages-mirror.yml:1-13`).
-**Fix:** none needed — the D1 decision killed browser-WASM as primary, so the
-mirror renders the same server-driven replay. Use compose or Pages + Cloud Run
-for the full path.
+**Symptom:** `crossOriginIsolated === false`; no WASM path.
+**Cause:** the host isn't sending COOP/COEP (the GH Pages mirror, which had
+no header mechanism at all, was removed for exactly this reason).
+**Fix:** on Cloudflare Pages / Netlify the headers ship with the repo
+(`frontend/public/_headers`, `netlify.toml`) — verify in DevTools after
+deploy. The D1 decision killed browser-WASM as primary anyway, so the app
+renders the same server-driven replay either way. Use compose or Pages +
+Cloud Run for the full path.
 
 ## 5. Backend pytest needs Docker
 

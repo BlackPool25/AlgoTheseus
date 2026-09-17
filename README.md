@@ -126,7 +126,7 @@ Stuck? Full guide: [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md). Quick hit
 - Port `9001` clash: stop the other service or remap the frontend port, then `docker compose up --build` again.
 - Sandbox image missing: `docker build -f backend/docker/Dockerfile.sandbox -t algo-theseus-sandbox:latest backend/docker/`.
 - `VITE_API_URL` mis-wire: static builds bake it at build time, so set it in the Pages dashboard and rebuild.
-- Static mirror (gh-pages) thread limits: COOP/COEP headers cap workers there; use compose for full runs.
+- Static hosts without COOP/COEP (e.g. any header-less mirror) cap workers; use compose for full runs.
 - Backend pytest needs Docker: sandbox tests spawn containers, so start the Docker daemon first.
 
 <br>

@@ -26,8 +26,9 @@ const coopCoepHeaders = {
 };
 export default defineConfig({
   plugins: [react()],
-  // Base-path-safe (todo 21): '/' for Pages/Netlify custom domains; GH Pages
-  // mirror passes VITE_BASE=/<repo>/ at build time. Same-origin WASM blobs
+  // Base-path-safe (todo 21): '/' — Cloudflare Pages and Netlify serve from
+  // the domain root (VITE_BASE unset in their dashboards). The VITE_BASE env
+  // override stays for any future subpath host. Same-origin WASM blobs
   // stay relative to base — no CDN subresource anywhere (see index.html).
   base: process.env.VITE_BASE ?? '/',
   resolve: {

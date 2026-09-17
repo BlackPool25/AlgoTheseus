@@ -10,10 +10,9 @@ free-forever surface with a script, not claims:
 
 ## 0. Architecture
 
-- Frontend (static): Cloudflare Pages primary · Netlify runner-up ·
-  GH Pages mirror-only. COOP/COEP headers on Pages + Netlify so
-  `crossOriginIsolated` can go true for the future WASM path; the app
-  serves the server replay either way.
+- Frontend (static): Cloudflare Pages primary · Netlify runner-up.
+  COOP/COEP headers on both so `crossOriginIsolated` can go true for the
+  future WASM path; the app serves the server replay either way.
 - Backend (container, todo-20 image): SnapDeploy free primary · Render
   free fallback. `SANDBOX_MODE=subprocess`, single worker, ephemeral
   `CACHE_DIR=/tmp/algo-theseus-cache` (no volume — sleep wipes it, cold MISS
@@ -50,19 +49,14 @@ Static sites on Netlify do not sleep. Free plan: 100 GB bandwidth/month.
    `[[redirects]]`) — no dashboard header config needed.
 4. Deploy. Same backend-URL wiring as Pages §1 step 6.
 
-## 3. Frontend — GH Pages (mirror ONLY)
+## 3. Frontend — GH Pages (REMOVED)
 
-**Header limitation:** GitHub Pages has no custom-header mechanism
-(no `_headers` equivalent), so COOP/COEP are unset here,
-`crossOriginIsolated` is always false, and the app permanently takes the
-server path. WASM-immune: D1 already killed browser-WASM as primary, so
-nothing is lost — same server-driven replay.
-
-1. Settings → Pages → Source: GitHub Actions.
-2. The workflow `.github/workflows/gh-pages-mirror.yml` builds
-   `frontend/` with `VITE_BASE=/<repo>/` and deploys `frontend/dist`.
-3. It runs on pushes to the feature branch touching
-   `frontend/**`, or manually via workflow_dispatch.
+The GH Pages mirror (`.github/workflows/gh-pages-mirror.yml`) was deleted:
+GitHub Pages has no custom-header mechanism, so COOP/COEP could never be
+set there and the mirror permanently took the server path — while costing a
+third deploy target to maintain. Cloudflare Pages (§1) is the primary static
+host, Netlify (§2) the runner-up. If you still see a `gh-pages` deployment
+under repo Settings → Pages, disable it there and delete the stale branch.
 
 ## 4. Backend — SnapDeploy free (primary)
 

@@ -2,6 +2,8 @@
  * content/presets.ts — Interactive algorithm presets ready to execute.
  */
 
+import type { AlgorithmEntry } from "./algorithms";
+
 export interface CodePreset {
   id: string;
   name: string;
@@ -1401,3 +1403,18 @@ int main() {
 `,
   },
 ];
+
+const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+
+/** Fuzzy slug<->preset match on id or name; undefined = no runnable preset. */
+export function findPreset(e: AlgorithmEntry): CodePreset | undefined {
+  const sn = norm(e.slug);
+  const nm = norm(e.name);
+  return CODE_PRESETS.find((p) => {
+    const id = norm(p.id);
+    const pn = norm(p.name);
+    return (
+      sn.includes(id) || id.includes(sn) || nm.includes(pn) || pn.includes(nm)
+    );
+  });
+}

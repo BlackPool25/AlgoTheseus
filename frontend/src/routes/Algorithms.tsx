@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ArrowRight, Play, Search } from "lucide-react";
 import { ALGORITHMS, type AlgorithmEntry } from "../content/algorithms";
-import { CODE_PRESETS, type CodePreset } from "../content/presets";
+import { findPreset, type CodePreset } from "../content/presets";
 import { useUIStore } from "../store/uiStore";
 import { useTraceStore } from "../store/traceStore";
 import { useCFGStore } from "../store/cfgStore";
@@ -12,21 +12,6 @@ import { useSeo } from "./useSeo";
 const SITE_URL =
   (import.meta.env.VITE_SITE_URL as string | undefined)?.replace(/\/$/, "") ||
   window.location.origin;
-
-const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
-
-/** Fuzzy slug<->preset match on id or name; undefined = link-only card. */
-function findPreset(e: AlgorithmEntry): CodePreset | undefined {
-  const sn = norm(e.slug);
-  const nm = norm(e.name);
-  return CODE_PRESETS.find((p) => {
-    const id = norm(p.id);
-    const pn = norm(p.name);
-    return (
-      sn.includes(id) || id.includes(sn) || nm.includes(pn) || pn.includes(nm)
-    );
-  });
-}
 
 /** Category from preset match, else keyword heuristic over slug/name. */
 function categoryOf(e: AlgorithmEntry): string {

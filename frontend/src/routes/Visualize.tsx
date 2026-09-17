@@ -1,13 +1,17 @@
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   ALGORITHMS,
   ALGORITHM_SLUGS,
   getAlgorithm,
   type AlgorithmEntry,
 } from "../content/algorithms";
+import { useUIStore } from "../store/uiStore";
+import { useTraceStore } from "../store/traceStore";
+import { useCFGStore } from "../store/cfgStore";
 import { LegalLayout } from "./LegalLayout";
 import { NotFound } from "./NotFound";
 import { useSeo } from "./useSeo";
+import { findPreset } from "../content/presets";
 
 const SITE_URL =
   (import.meta.env.VITE_SITE_URL as string | undefined)?.replace(/\/$/, "") ||
@@ -27,7 +31,50 @@ export function Visualize() {
   return <VisualizePage entry={entry} />;
 }
 
+/**
+ * Fallback when no CODE_PRESETS entry matches the slug: wrap the page's
+ * fragment in common STL includes plus an empty main so the editor still
+ * receives a compilable, runnable program (user adds a driver call).
+ * Chosen over hiding the button so every page keeps a working handoff.
+ */
+function fallbackProgram(entry: AlgorithmEntry): string {
+  return `#include <algorithm>
+#include <deque>
+#include <iostream>
+#include <queue>
+#include <stack>
+#include <string>
+#include <unordered_map>
+#include <utility>
+#include <vector>
+
+${entry.cppSnippet}
+
+int main() {
+  // TODO: call ${entry.name} here, then press Run.
+  return 0;
+}
+`;
+}
+
 function VisualizePage({ entry }: { entry: AlgorithmEntry }) {
+  const navigate = useNavigate();
+  const setCode = useUIStore((s) => s.setCode);
+  const setRawInput = useUIStore((s) => s.setRawInput);
+  const resetUI = useUIStore((s) => s.reset);
+  const preset = findPreset(entry);
+
+  // Header handleSelectPreset pattern: load a runnable program into the
+  // editor, clear prior run state, then go to the tool.
+  function handleTryIt() {
+    const runnable = preset?.code ?? fallbackProgram(entry);
+    setCode(runnable);
+    setRawInput(preset?.stdin ?? "");
+    resetUI();
+    useTraceStore.getState().reset();
+    useCFGStore.getState().reset();
+    navigate("/");
+  }
   const pageUrl = `${SITE_URL}/visualize/${entry.slug}`;
   const title = `${entry.name} Visualization (C++) — Step by Step | AlgoTheseus`;
   const description = `Learn ${entry.name} step by step with a C++ example: ${entry.answerCapsule.split(". ")[0]}. Interactive visualization available in the AlgoTheseus tool.`;
@@ -92,12 +139,12 @@ function VisualizePage({ entry }: { entry: AlgorithmEntry }) {
       </pre>
       <h2>Try it interactively</h2>
       <p>
-        <Link
-          to="/"
+        <button
+          onClick={handleTryIt}
           className="inline-block rounded bg-blue-600 px-4 py-1.5 text-sm text-white transition-colors hover:bg-blue-500"
         >
           Visualize {entry.name} in the interactive AlgoTheseus tool
-        </Link>
+        </button>
       </p>
       <h2>Keep exploring</h2>
       <ul className="list-disc space-y-1 pl-6">

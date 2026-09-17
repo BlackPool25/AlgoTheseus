@@ -1,0 +1,17 @@
+# This CITATION.cff file was generated with cffinit.
+# Visit https://bit.ly/cffinit to generate yours.
+cff-version: 1.2.0
+title: AlgoTheseus
+version: 0.1.0
+date-released: 2026-09-17
+abstract: Visualize how algorithms execute, step by step.
+authors:
+  - alias: BlackPool25
+    email: TODO(owner-email)
+repository-code: https://github.com/BlackPool25/AlgoTheseus
+url: https://www.example.com
+license: MIT
+keywords:
+  - algorithms
+  - visualization
+  - education

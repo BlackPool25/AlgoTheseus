@@ -45,9 +45,7 @@ def _cursor_kind(cursor: clang.Cursor) -> clang.CursorKind | None:
 
 # R2 (M3): range-for is a distinct cursor kind, not FOR_STMT. getattr guard so
 # older bindings without it fall back gracefully (stays None → never matches).
-_RANGE_FOR_KIND: clang.CursorKind | None = getattr(
-    clang.CursorKind, "CXX_FOR_RANGE_STMT", None
-)
+_RANGE_FOR_KIND: clang.CursorKind | None = getattr(clang.CursorKind, "CXX_FOR_RANGE_STMT", None)
 
 _TRY_CATCH_KINDS: tuple = tuple(
     k
@@ -118,9 +116,7 @@ class ScopeTracker:
         self.source_path = os.path.abspath(source_path)
         # W0.1 pin: same shared default as the walker (see ast_walker).
         self.extra_args = (
-            extra_args
-            if extra_args is not None
-            else _libclang_compat.default_extra_args()
+            extra_args if extra_args is not None else _libclang_compat.default_extra_args()
         )
         self._index = clang.Index.create()
         self.last_diagnostics: list[str] = []
@@ -139,9 +135,7 @@ class ScopeTracker:
 
     def _is_user_code(self, cursor: clang.Cursor) -> bool:
         loc = cursor.location
-        return (
-            loc.file is not None and os.path.abspath(loc.file.name) == self.source_path
-        )
+        return loc.file is not None and os.path.abspath(loc.file.name) == self.source_path
 
     @staticmethod
     def _is_in_class_template(cursor: clang.Cursor) -> bool:
@@ -156,9 +150,7 @@ class ScopeTracker:
                 node_kind = _cursor_kind(node)
                 if node_kind is not None and node_kind in (
                     clang.CursorKind.CLASS_TEMPLATE,
-                    getattr(
-                        clang.CursorKind, "CLASS_TEMPLATE_PARTIAL_SPECIALIZATION", None
-                    ),
+                    getattr(clang.CursorKind, "CLASS_TEMPLATE_PARTIAL_SPECIALIZATION", None),
                 ):
                     return True
                 node = node.semantic_parent
@@ -197,11 +189,7 @@ class ScopeTracker:
 
             # Walk the body with a scope stack
             body = next(
-                (
-                    c
-                    for c in cursor.get_children()
-                    if c.kind == clang.CursorKind.COMPOUND_STMT
-                ),
+                (c for c in cursor.get_children() if c.kind == clang.CursorKind.COMPOUND_STMT),
                 None,
             )
             if body:
@@ -212,9 +200,7 @@ class ScopeTracker:
             self._visit(child, scopes)
 
     @staticmethod
-    def _merge_names(
-        target: dict[int, list[ScopeVar]], line: int, visible: list[ScopeVar]
-    ) -> None:
+    def _merge_names(target: dict[int, list[ScopeVar]], line: int, visible: list[ScopeVar]) -> None:
         """Append-if-missing merge of `visible` into target[line] (first wins)."""
         if line <= 0:
             return
@@ -524,18 +510,14 @@ class ScopeTracker:
     ) -> None:
         for child in node.get_children():
             ck = _cursor_kind(child)
-            if ck in _TRY_CATCH_KINDS or (
-                _LAMBDA_KIND is not None and ck == _LAMBDA_KIND
-            ):
+            if ck in _TRY_CATCH_KINDS or (_LAMBDA_KIND is not None and ck == _LAMBDA_KIND):
                 self._walk_try(child, scope, visible, depth)
 
     @staticmethod
     def _subtree_has_callable(node: clang.Cursor) -> bool:
         for child in node.get_children():
             ck = _cursor_kind(child)
-            if ck in _TRY_CATCH_KINDS or (
-                _LAMBDA_KIND is not None and ck == _LAMBDA_KIND
-            ):
+            if ck in _TRY_CATCH_KINDS or (_LAMBDA_KIND is not None and ck == _LAMBDA_KIND):
                 return True
             if ScopeTracker._subtree_has_callable(child):
                 return True
@@ -552,9 +534,7 @@ class ScopeTracker:
             ck = _cursor_kind(child)
             if ck == clang.CursorKind.COMPOUND_STMT:
                 self._walk_body(child, scope, visible, depth + 1)
-            elif ck in _TRY_CATCH_KINDS or (
-                _LAMBDA_KIND is not None and ck == _LAMBDA_KIND
-            ):
+            elif ck in _TRY_CATCH_KINDS or (_LAMBDA_KIND is not None and ck == _LAMBDA_KIND):
                 self._walk_try(child, scope, visible, depth)
 
     def _walk_switch(
@@ -619,9 +599,7 @@ class ScopeTracker:
             clang.CursorKind.DO_STMT,
         ):
             self._walk_cond(node, kind, scope, visible, depth)
-        elif kind in _TRY_CATCH_KINDS or (
-            _LAMBDA_KIND is not None and kind == _LAMBDA_KIND
-        ):
+        elif kind in _TRY_CATCH_KINDS or (_LAMBDA_KIND is not None and kind == _LAMBDA_KIND):
             self._walk_try(node, scope, visible, depth)
         elif kind == clang.CursorKind.SWITCH_STMT:
             self._walk_switch(node, scope, visible, depth)

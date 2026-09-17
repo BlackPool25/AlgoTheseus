@@ -127,9 +127,7 @@ def _instrumented_source() -> str:
 
 def _run_gcc_local(src: str, workdir: Path) -> tuple[str, list[str]]:
     (workdir / "prog.cpp").write_text(src, encoding="utf-8")
-    (workdir / "tracer.h").write_text(
-        TRACER_H.read_text(encoding="utf-8"), encoding="utf-8"
-    )
+    (workdir / "tracer.h").write_text(TRACER_H.read_text(encoding="utf-8"), encoding="utf-8")
     subprocess.run(
         [
             "g++",
@@ -154,11 +152,7 @@ def _run_gcc_local(src: str, workdir: Path) -> tuple[str, list[str]]:
         timeout=30,
         check=False,
     )
-    trace = [
-        ln[len("TRACE:") :]
-        for ln in proc.stderr.splitlines()
-        if ln.startswith("TRACE:")
-    ]
+    trace = [ln[len("TRACE:") :] for ln in proc.stderr.splitlines() if ln.startswith("TRACE:")]
     return proc.stdout, trace
 
 
@@ -168,9 +162,7 @@ class TestEndToEndByteExact:
         When run + parsed / Then last STATE stdout == terminal stdout,
         byte-exact (cout/printf interleave order preserved)."""
         with tempfile.TemporaryDirectory() as tmp:
-            terminal_stdout, trace_raw = _run_gcc_local(
-                _instrumented_source(), Path(tmp)
-            )
+            terminal_stdout, trace_raw = _run_gcc_local(_instrumented_source(), Path(tmp))
         assert terminal_stdout == EXPECTED_OUTPUT
         events = parse(trace_raw)
         states = [e for e in events if e.type.value == "state"]

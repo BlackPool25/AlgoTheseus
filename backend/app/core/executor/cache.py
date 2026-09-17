@@ -45,7 +45,7 @@ DEFAULT_TTL_SECONDS = 3600.0  # 1h TTL eviction
 
 # Toolchain identity baked into every key — bump when the sandbox compiler
 # flags change so stale binaries can never be served under a new toolchain.
-TOOLCHAIN_FLAGS = "g++ -O0 -g -std=c++17"
+TOOLCHAIN_FLAGS = "g++ -O0 -g -std=c++17 -pipe"
 
 
 def _flags_json(flags: dict) -> str:
@@ -99,9 +99,7 @@ class DiskLRUCache:
         try:
             self.dir.mkdir(parents=True, exist_ok=True)
         except OSError:
-            logger.warning(
-                "Cache dir %s not creatable — running without cache", self.dir
-            )
+            logger.warning("Cache dir %s not creatable — running without cache", self.dir)
             self._disabled = True
             return
         if not os.access(self.dir, os.W_OK):
@@ -168,9 +166,7 @@ class DiskLRUCache:
             tmp.write_text(entry, encoding="utf-8")
             os.replace(tmp, self._path(key))
         except OSError:
-            logger.warning(
-                "Cache store failed — continuing without cache", exc_info=True
-            )
+            logger.warning("Cache store failed — continuing without cache", exc_info=True)
             try:
                 tmp.unlink(missing_ok=True)
             except OSError:
@@ -259,16 +255,14 @@ class SharedCache:
         elif redis_url is not None:
             try:
                 self._l1 = _get_sync_client(redis_url)
-            except Exception:
+            except Exception:  # noqa: BLE001 — redis unavailable, L2-only fallback
                 logger.warning("SharedCache: no L1 (redis unavailable) — L2 only")
                 self._l1 = None
         else:
             self._l1 = None
 
     @classmethod
-    def from_env(
-        cls, l2_dir: str | None = None, redis_client: object | None = None
-    ) -> SharedCache:
+    def from_env(cls, l2_dir: str | None = None, redis_client: object | None = None) -> SharedCache:
         """Build from env: REDIS_URL for L1; CACHE_* for L2 (via DiskLRUCache)."""
         url = os.getenv("REDIS_URL", "").strip()
         ttl = float(os.getenv("CACHE_TTL_SECONDS", str(DEFAULT_TTL_SECONDS)))
@@ -277,7 +271,7 @@ class SharedCache:
         if url:
             try:
                 return cls(l2_dir=l2_dir, redis_url=url, ttl_seconds=ttl)
-            except Exception:
+            except Exception:  # noqa: BLE001 — bad REDIS_URL, L2-only fallback
                 logger.warning("SharedCache: REDIS_URL set but unusable — L2 only")
         return cls(l2_dir=l2_dir, ttl_seconds=ttl)
 
@@ -290,7 +284,7 @@ class SharedCache:
             return None
         try:
             raw = self._l1.get(_l1_key(key))  # type: ignore[union-attr]
-        except Exception:
+        except Exception:  # noqa: BLE001 — L1 read fail-open to L2
             logger.warning("SharedCache L1 get failed — falling back to L2")
             return None
         if raw is None:
@@ -303,13 +297,13 @@ class SharedCache:
             logger.warning("SharedCache L1 entry %s corrupt — dropping", key[:12])
             try:
                 self._l1.delete(_l1_key(key))  # type: ignore[union-attr]
-            except Exception:
+            except Exception:  # noqa: BLE001, S110 — best-effort corrupt evict
                 pass
             return None
         if age > self._l2.ttl_seconds:
             try:
                 self._l1.delete(_l1_key(key))  # type: ignore[union-attr]
-            except Exception:
+            except Exception:  # noqa: BLE001, S110 — best-effort TTL evict
                 pass
             return None  # TTL-evicted → fall through to L2 (also expired → MISS)
         if not isinstance(payload, dict):

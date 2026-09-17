@@ -27,8 +27,7 @@ class TestR1PostDecl:
         src = _write(
             tmp_path,
             "r1.cpp",
-            "int f() {\n    int mid = 5;\n"
-            "    int after = mid + 1;\n    return after;\n}\n",
+            "int f() {\n    int mid = 5;\n    int after = mid + 1;\n    return after;\n}\n",
         )
         assert "mid" in _names(build_scope_map(src), "f", 2)
 
@@ -80,11 +79,7 @@ class TestR2RangeFor:
             return
         src = _write(tmp_path, "r2w.cpp", self.SRC)
         result = walk(src)
-        states = [
-            p
-            for p in result.injection_points
-            if p.kind == InjectKind.STATE and p.line == 5
-        ]
+        states = [p for p in result.injection_points if p.kind == InjectKind.STATE and p.line == 5]
         assert states, "walker emits no STATE for range-for body line"
         assert result.loop_counters.get("range_carray_fn"), "no loop counter allocated"
 
@@ -133,9 +128,7 @@ class TestR2RangeForSTL:
         src = _write(tmp_path, "r2stlw.cpp", self.SRC)
         result = walk(src)
         states = [
-            p
-            for p in result.injection_points
-            if p.kind == InjectKind.STATE and p.line in (6, 9)
+            p for p in result.injection_points if p.kind == InjectKind.STATE and p.line in (6, 9)
         ]
         assert states, "walker emits no STATE for STL range-for body lines"
         iters = [p for p in result.injection_points if p.kind == InjectKind.LOOP_ITER]
@@ -160,9 +153,9 @@ class TestR3Braceless:
         src = _write(tmp_path, "r3.cpp", self.SRC)
         scopes = build_scope_map(src)
         for line in (4, 6, 8):
-            assert scopes["split_braceless_fn"].vars_at_line.get(
-                line
-            ), f"braceless body line {line} has no scope entry"
+            assert scopes["split_braceless_fn"].vars_at_line.get(line), (
+                f"braceless body line {line} has no scope entry"
+            )
         assert "x" in _names(scopes, "split_braceless_fn", 4)
 
 
@@ -173,5 +166,5 @@ class TestR4ReturnState:
             "r4.cpp",
             "int f() {\n    int a = 1;\n    int b = a + 1;\n    return b;\n}\n",
         )
-        out = instrument(open(src).read(), src)
+        out = instrument(Path(src).read_text(), src)
         assert "__TRACE_STATE(4" in out, "no STATE snapshot on return line"

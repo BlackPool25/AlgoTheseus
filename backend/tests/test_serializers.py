@@ -51,6 +51,7 @@ def _compile_and_run(source: str, stdin: str = "") -> str:
             capture_output=True,
             text=True,
             timeout=10,
+            check=False,
         )
         if compile_result.returncode != 0:
             raise RuntimeError(f"Compile error:\n{compile_result.stderr}")
@@ -61,6 +62,7 @@ def _compile_and_run(source: str, stdin: str = "") -> str:
             capture_output=True,
             text=True,
             timeout=5,
+            check=False,
         )
         return run_result.stdout.strip()
 
@@ -147,9 +149,7 @@ class TestPairSerializer:
     def test_pair_deep_nested(self):
         """pair<pair<int,int>,pair<int,int>> → [[1,2],[3,4]]"""
         _assert_serializes(
-            _make_source(
-                "std::pair<std::pair<int,int>,std::pair<int,int>>{{1,2},{3,4}}"
-            ),
+            _make_source("std::pair<std::pair<int,int>,std::pair<int,int>>{{1,2},{3,4}}"),
             [[1, 2], [3, 4]],
         )
 
@@ -245,7 +245,6 @@ class TestArraySerializer:
 
     def test_array_large_n(self):
         """array<int,100> with sequential values."""
-        body = "std::array<int,100>{}"
         # Fill with index values at runtime
         source = """\
 #include "tracer.h"
@@ -387,7 +386,7 @@ int main() {
         assert stdout == "[1,2] [3,4]"
 
     def test_null_pointer_serialization(self):
-        """nullptr → \"null\" """
+        """nullptr → \"null\""""
         source = """\
 #include "tracer.h"
 #include <iostream>
@@ -448,7 +447,7 @@ int main() {
         assert parsed == 'he said "hi"\nok'
 
     def test_bool_true_false(self):
-        """true → \"true\", false → \"false\" """
+        """true → \"true\", false → \"false\""""
         source = """\
 #include "tracer.h"
 #include <iostream>

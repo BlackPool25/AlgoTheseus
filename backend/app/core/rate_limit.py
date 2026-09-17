@@ -83,7 +83,7 @@ def redis_limiter_available() -> bool:
         return False
     try:
         import redis  # noqa: F401
-    except Exception:
+    except Exception:  # noqa: BLE001 — redis optional, in-memory fallback
         return False
     return True
 
@@ -134,13 +134,13 @@ def _get_redis_client() -> Any | None:
         return None
     try:
         from app.core.queue import backends as _backends
-    except Exception:
+    except Exception:  # noqa: BLE001 — queue module optional, fail-open
         return None
     if _backends.aioredis is None:
         return None
     try:
         return _backends._get_client(url)
-    except Exception:
+    except Exception:  # noqa: BLE001 — Redis pool fail-open to in-memory
         logger.warning("Rate-limit Redis pool unavailable — fail-open to in-memory")
         return None
 
@@ -165,9 +165,7 @@ async def _check_distributed(request: Request, quota: int) -> None:
         )
         count = int(await client.eval(_RL_LUA, 1, rkey, RL_WINDOW_SECONDS))
         if count > quota:
-            retry_after = max(
-                1, RL_WINDOW_SECONDS - (int(time.time()) % RL_WINDOW_SECONDS)
-            )
+            retry_after = max(1, RL_WINDOW_SECONDS - (int(time.time()) % RL_WINDOW_SECONDS))
             raise HTTPException(
                 status_code=429,
                 detail=f"Rate limit exceeded: {quota}/minute",
@@ -195,9 +193,7 @@ class _DistributedLimiter:
     def __init__(self, inner: Limiter) -> None:
         self._inner = inner
 
-    def limit(
-        self, limit_value: Any, *args: Any, **kwargs: Any
-    ) -> Callable[[Callable], Callable]:
+    def limit(self, limit_value: Any, *args: Any, **kwargs: Any) -> Callable[[Callable], Callable]:
         quota = _quota_from(limit_value)
         inner_deco = self._inner.limit(limit_value, *args, **kwargs)
 

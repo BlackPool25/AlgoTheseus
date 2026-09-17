@@ -118,11 +118,7 @@ class TestScopeTracker:
         scopes = build_scope_map(BSEARCH)
         bsearch_scope = scopes["bsearch"]
         # Collect all variable names across all lines
-        all_vars = {
-            v.name
-            for vars_list in bsearch_scope.vars_at_line.values()
-            for v in vars_list
-        }
+        all_vars = {v.name for vars_list in bsearch_scope.vars_at_line.values() for v in vars_list}
         assert "arr" in all_vars
         assert "target" in all_vars
 
@@ -130,11 +126,7 @@ class TestScopeTracker:
         """lo, hi, mid should appear in the scope map for bsearch."""
         scopes = build_scope_map(BSEARCH)
         bsearch_scope = scopes["bsearch"]
-        all_vars = {
-            v.name
-            for vars_list in bsearch_scope.vars_at_line.values()
-            for v in vars_list
-        }
+        all_vars = {v.name for vars_list in bsearch_scope.vars_at_line.values() for v in vars_list}
         assert "lo" in all_vars
         assert "hi" in all_vars
 
@@ -144,9 +136,9 @@ class TestScopeTracker:
         for fn_scope in scopes.values():
             for vars_list in fn_scope.vars_at_line.values():
                 for v in vars_list:
-                    assert not v.name.startswith(
-                        "__"
-                    ), f"Internal variable leaked into scope: {v.name}"
+                    assert not v.name.startswith("__"), (
+                        f"Internal variable leaked into scope: {v.name}"
+                    )
 
     def test_declared_var_included_in_same_line_state(self, tmp_path):
         """Post-decl snapshot: `int x = 5;` STATE carries x (pre does not)."""
@@ -165,9 +157,7 @@ class TestScopeTracker:
     def test_params_plus_declared_vars(self, tmp_path):
         """Post set on a decl line carries params + the newly declared var."""
         src = tmp_path / "params.cpp"
-        src.write_text(
-            "int add(int a, int b) {\n    int s = a + b;\n    return s;\n}\n"
-        )
+        src.write_text("int add(int a, int b) {\n    int s = a + b;\n    return s;\n}\n")
         scopes = build_scope_map(str(src))
         post = scopes["add"].vars_at_line_post[2]
         assert {v.name for v in post} == {"a", "b", "s"}

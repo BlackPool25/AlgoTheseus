@@ -127,9 +127,7 @@ class TestStreamingResponseShape:
     async def test_streaming_each_line_is_valid_json(self, stream_app):
         """Every line in the streaming body should be valid JSON."""
         async with (
-            AsyncClient(
-                transport=ASGITransport(app=stream_app), base_url="http://test"
-            ) as ac,
+            AsyncClient(transport=ASGITransport(app=stream_app), base_url="http://test") as ac,
             ac.stream("GET", "/stream-trace") as response,
         ):
             chunks = []
@@ -150,9 +148,7 @@ class TestStreamingResponseShape:
     async def test_streaming_events_in_order(self, stream_app):
         """Events should be received in the order they were yielded."""
         async with (
-            AsyncClient(
-                transport=ASGITransport(app=stream_app), base_url="http://test"
-            ) as ac,
+            AsyncClient(transport=ASGITransport(app=stream_app), base_url="http://test") as ac,
             ac.stream("GET", "/stream-trace") as response,
         ):
             chunks = []
@@ -165,9 +161,9 @@ class TestStreamingResponseShape:
 
         expected_types = ["enter", "state", "branch", "iter", "exit"]
         for i, (event, expected_type) in enumerate(zip(events, expected_types)):
-            assert (
-                event["t"] == expected_type
-            ), f"Event {i}: expected type {expected_type!r}, got {event['t']!r}"
+            assert event["t"] == expected_type, (
+                f"Event {i}: expected type {expected_type!r}, got {event['t']!r}"
+            )
 
 
 # ── Progressive trace parsing ─────────────────────────────────────────────────
@@ -263,8 +259,7 @@ class TestProgressiveTraceParsing:
                     "iter": LoopIterEvent,
                 }
                 assert isinstance(last, type_map[expected_t]), (
-                    f"Step {i}: expected {type_map[expected_t].__name__}, "
-                    f"got {type(last).__name__}"
+                    f"Step {i}: expected {type_map[expected_t].__name__}, got {type(last).__name__}"
                 )
 
     def test_parse_state_event_vars(self):

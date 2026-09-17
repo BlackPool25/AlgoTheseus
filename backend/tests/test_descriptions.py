@@ -110,9 +110,7 @@ def test_parse_attaches_non_empty_step_desc_to_every_event():
     """Given a mixed NDJSON stream / When parsed / Then every event has desc."""
     raw = [
         json.dumps({"t": "enter", "l": 5, "f": "bsearch", "d": 0, "p": {"target": 7}}),
-        json.dumps(
-            {"t": "state", "l": 6, "f": "bsearch", "d": 0, "v": {"lo": 0, "hi": 4}}
-        ),
+        json.dumps({"t": "state", "l": 6, "f": "bsearch", "d": 0, "v": {"lo": 0, "hi": 4}}),
         json.dumps(
             {
                 "t": "branch",

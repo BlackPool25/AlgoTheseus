@@ -204,9 +204,7 @@ def build_cases(seed: int = SEED) -> list[tuple[str, list[str]]]:
     cut_classes: list[int] = []
     step = max(1, len(raw) // 60)
     cut_classes += list(range(0, len(raw), step))  # mid-line / mid-JSON mix
-    mb_anchor = full.encode("utf-8").find(
-        "hÃ".encode("latin1", errors="ignore")[:0]
-    )  # noop guard
+    mb_anchor = full.encode("utf-8").find("hÃ".encode("latin1", errors="ignore")[:0])  # noop guard
     del mb_anchor
     # Mid-UTF8: cut inside the multibyte "héllo wörld" bytes explicitly.
     mb_seg = "héllo wörld".encode()
@@ -237,9 +235,7 @@ def build_cases(seed: int = SEED) -> list[tuple[str, list[str]]]:
     return cases
 
 
-def _shrink_and_fail(
-    name: str, lines: list[str], exc: BaseException, seed: int, idx: int
-) -> None:
+def _shrink_and_fail(name: str, lines: list[str], exc: BaseException, seed: int, idx: int) -> None:
     """Shrink to the minimal failing input, then fail loudly."""
     minimal = list(lines)
     # Try single lines first.
@@ -311,12 +307,9 @@ EDGE_SOURCES: dict[str, str] = {
         "#define CONST 42\nint main(){int x=ADD(1,2);int y=SQR(x)+CONST;return y;}\n"
     ),
     "template_function": (
-        "template<typename T> T ident(T x){return x;}\n"
-        "int main(){return ident<int>(3);}\n"
+        "template<typename T> T ident(T x){return x;}\nint main(){return ident<int>(3);}\n"
     ),
-    "deep_nesting_50": (
-        "int main(){" + "if(1){" * 50 + "int x=1;" + "}" * 50 + "return 0;}\n"
-    ),
+    "deep_nesting_50": ("int main(){" + "if(1){" * 50 + "int x=1;" + "}" * 50 + "return 0;}\n"),
     "empty_file": "",
     "no_main": "int helper(int x){return x*2;}\n",
 }
@@ -341,9 +334,7 @@ def _run_with_timeout(func, timeout_s: int = 60):
 
 
 @pytest.mark.parametrize("edge", sorted(EDGE_SOURCES))
-def test_instrumenter_edge_graceful(
-    edge: str, caplog: pytest.LogCaptureFixture
-) -> None:
+def test_instrumenter_edge_graceful(edge: str, caplog: pytest.LogCaptureFixture) -> None:
     """Each edge source must return a string — skip + warning, never crash/hang."""
     from app.core.instrumenter.injector import instrument
 

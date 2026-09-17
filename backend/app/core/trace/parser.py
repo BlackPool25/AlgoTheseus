@@ -77,9 +77,7 @@ def parse(raw_lines: list[str], compressed: bool = False) -> list[Any]:
             o = data.get("o")
             deltas.append(o if isinstance(o, str) else None)
         except ValidationError as e:
-            logger.warning(
-                "Skipping invalid trace event at line %d: %s — %s", i, data, e
-            )
+            logger.warning("Skipping invalid trace event at line %d: %s — %s", i, data, e)
             continue
 
     # Recompute dynamic depth based on enter/exit events
@@ -232,11 +230,7 @@ def heap_at_step(events: list[Any]) -> list[dict[str, dict]]:
             continue
         try:
             heap = event.heap
-            base = (
-                dict(heap)
-                if isinstance(heap, dict)
-                else _extract_heap_table(event.vars)
-            )
+            base = dict(heap) if isinstance(heap, dict) else _extract_heap_table(event.vars)
         except Exception:  # noqa: BLE001 — parse stays total on garbage
             logger.warning("heap extraction failed; using empty table")
             base = {}
@@ -257,9 +251,7 @@ def heap_diff(prev: dict | None, cur: dict | None) -> dict[str, Any]:
     new = cur if isinstance(cur, dict) else {}
     added = sorted((k for k in new if k not in old), key=_heap_id_key)
     removed = sorted((k for k in old if k not in new), key=_heap_id_key)
-    mutated = sorted(
-        (k for k in new if k in old and old[k] != new[k]), key=_heap_id_key
-    )
+    mutated = sorted((k for k in new if k in old and old[k] != new[k]), key=_heap_id_key)
     return {
         "added": added,
         "removed": removed,
@@ -326,9 +318,7 @@ def _changed_keys(old: Any, new: Any) -> list[str]:
                 **(new.get("fields") if isinstance(new.get("fields"), dict) else {}),
                 **(new.get("refs") if isinstance(new.get("refs"), dict) else {}),
             }
-            return sorted(
-                (k for k in merged if _field_val(old, k) != _field_val(new, k)), key=str
-            )
+            return sorted((k for k in merged if _field_val(old, k) != _field_val(new, k)), key=str)
         keys = set(old) | set(new)
         return sorted((str(k) for k in keys if old.get(k) != new.get(k)), key=str)
     return ["$value"]
@@ -365,9 +355,7 @@ def _extract_heap_table(vars: dict | None) -> dict[str, dict]:
                 continue
             for name, target in list(refs.items()):
                 if isinstance(target, list):
-                    refs[name] = [
-                        t if t == "unknown" or t in table else "unknown" for t in target
-                    ]
+                    refs[name] = [t if t == "unknown" or t in table else "unknown" for t in target]
                 elif target != "unknown" and target not in table:
                     refs[name] = "unknown"
     except Exception:  # noqa: BLE001 — garbage heap payloads yield partial table

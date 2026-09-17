@@ -72,9 +72,7 @@ class TestExecuteEndpoint:
             truncated=False,
         )
 
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as ac:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
             response = await ac.post(
                 "/execute",
                 json={
@@ -123,9 +121,7 @@ class TestExecuteEndpoint:
             compile_error="prog.cpp:1:10: fatal error: vector: No such file or directory",
         )
 
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as ac:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
             response = await ac.post(
                 "/execute",
                 json={
@@ -161,9 +157,7 @@ class TestExecuteEndpoint:
             truncated=False,
         )
 
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as ac:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
             response = await ac.post(
                 "/execute",
                 json={
@@ -199,9 +193,7 @@ class TestExecuteEndpoint:
             truncated=True,
         )
 
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as ac:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
             response = await ac.post(
                 "/execute",
                 json={
@@ -227,9 +219,7 @@ class TestExecuteEndpoint:
         mock_parse_stdin.return_value = ("42", "no changes")
         mock_instrument.side_effect = RuntimeError("libclang crashed")
 
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as ac:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
             response = await ac.post(
                 "/execute",
                 json={
@@ -255,9 +245,7 @@ class TestExecuteEndpoint:
         mock_instrument.return_value = '#include "tracer.h"\nint main() {}'
         mock_run_in_sandbox.side_effect = RuntimeError("Docker not available")
 
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as ac:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
             response = await ac.post(
                 "/execute",
                 json={
@@ -280,9 +268,7 @@ class TestExecuteEndpoint:
             "    return 0;\n"
             "}\n"
         )
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as ac:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
             with (
                 patch(
                     "app.api.routes.execute.instrument",
@@ -328,9 +314,7 @@ class TestExecuteEndpoint:
             truncated=False,
         )
 
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as ac:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
             response = await ac.post(
                 "/execute",
                 json={
@@ -365,9 +349,7 @@ class TestExecuteEndpoint:
             truncated=False,
         )
 
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as ac:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
             response = await ac.post(
                 "/execute",
                 json={
@@ -393,9 +375,7 @@ class TestExecuteEndpoint:
         code,
     ):
         """scanf/getline/getchar/getc with empty stdin → 422, sandbox never runs."""
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as ac:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
             with (
                 patch(
                     "app.api.routes.execute.instrument",
@@ -429,9 +409,7 @@ class TestExecuteEndpoint:
         """Garbage mentioning `cin >>` is not missing-stdin → instrumentation 422."""
         mock_parse_stdin.return_value = ("", "no changes")
         mock_instrument.side_effect = RuntimeError("parse failed")
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as ac:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
             response = await ac.post(
                 "/execute",
                 json={
@@ -476,9 +454,7 @@ class TestExecuteEndpoint:
             truncated=False,
         )
 
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as ac:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
             response = await ac.post(
                 "/execute",
                 json={
@@ -525,9 +501,7 @@ class TestUploadTestcasesEndpoint:
 
     async def test_upload_valid_files(self, temp_upload_dir):
         """Uploading .txt and .in files returns test_id with file previews."""
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as ac:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
             response = await ac.post(
                 "/upload-testcases",
                 files=[
@@ -555,18 +529,14 @@ class TestUploadTestcasesEndpoint:
 
     async def test_upload_no_files(self, temp_upload_dir):
         """No files → 422 (FastAPI validation: File(...) is required)."""
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as ac:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
             response = await ac.post("/upload-testcases")
 
         assert response.status_code == 422
 
     async def test_upload_invalid_extension(self, temp_upload_dir):
         """File with .exe extension → 400."""
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as ac:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
             response = await ac.post(
                 "/upload-testcases",
                 files=[
@@ -583,9 +553,7 @@ class TestUploadTestcasesEndpoint:
     async def test_upload_too_many_files(self, temp_upload_dir):
         """More than 50 files → 400."""
         files = [("files", (f"file{i}.txt", b"data", "text/plain")) for i in range(51)]
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as ac:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
             response = await ac.post("/upload-testcases", files=files)
 
         assert response.status_code == 400
@@ -594,9 +562,7 @@ class TestUploadTestcasesEndpoint:
     async def test_upload_oversized_file(self, temp_upload_dir):
         """File larger than 10 MB → 400."""
         large_content = b"x" * (10 * 1024 * 1024 + 1)
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as ac:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
             response = await ac.post(
                 "/upload-testcases",
                 files=[
@@ -609,9 +575,7 @@ class TestUploadTestcasesEndpoint:
 
     async def test_upload_binary_file_preview(self, temp_upload_dir):
         """Binary content with allowed extension gets placeholder preview."""
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as ac:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
             response = await ac.post(
                 "/upload-testcases",
                 files=[
@@ -667,9 +631,7 @@ class TestExecuteBatchEndpoint:
 
         # Patch the testcase directory path
         with patch("app.api.routes.execute._TESTCASE_DIR", testcases):
-            async with AsyncClient(
-                transport=ASGITransport(app=app), base_url="http://test"
-            ) as ac:
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
                 response = await ac.post(
                     "/execute-batch",
                     json={
@@ -725,9 +687,7 @@ class TestExecuteBatchEndpoint:
         )
 
         with patch("app.api.routes.execute._TESTCASE_DIR", testcases):
-            async with AsyncClient(
-                transport=ASGITransport(app=app), base_url="http://test"
-            ) as ac:
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
                 response = await ac.post(
                     "/execute-batch",
                     json={
@@ -756,9 +716,7 @@ class TestExecuteBatchEndpoint:
         mock_instrument.return_value = '#include "tracer.h"\nint main() {}'
 
         with patch("app.api.routes.execute._TESTCASE_DIR", testcases):
-            async with AsyncClient(
-                transport=ASGITransport(app=app), base_url="http://test"
-            ) as ac:
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
                 response = await ac.post(
                     "/execute-batch",
                     json={
@@ -795,9 +753,7 @@ class TestExecuteBatchEndpoint:
         )
 
         with patch("app.api.routes.execute._TESTCASE_DIR", testcases):
-            async with AsyncClient(
-                transport=ASGITransport(app=app), base_url="http://test"
-            ) as ac:
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
                 response = await ac.post(
                     "/execute-batch",
                     json={
@@ -831,9 +787,7 @@ class TestExecuteBatchEndpoint:
         )
 
         with patch("app.api.routes.execute._TESTCASE_DIR", testcases):
-            async with AsyncClient(
-                transport=ASGITransport(app=app), base_url="http://test"
-            ) as ac:
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
                 response = await ac.post(
                     "/execute-batch",
                     json={
@@ -853,9 +807,7 @@ class TestExecuteBatchEndpoint:
 
 class TestHealthEndpoint:
     async def test_health_returns_ok(self):
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as ac:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
             response = await ac.get("/health")
 
         assert response.status_code == 200

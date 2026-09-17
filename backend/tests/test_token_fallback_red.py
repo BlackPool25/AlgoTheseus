@@ -20,8 +20,6 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-import pytest
-
 from app.core.instrumenter import ast_walker
 from app.core.instrumenter.injector import instrument
 
@@ -128,7 +126,7 @@ class TestMacroTokenFallback:
                 or "__TRACE_BRANCH(1," in ln
             )
         ]
-        assert not bad, f"TRACE spliced for macro-definition line 1:\n" + "\n".join(bad)
+        assert not bad, "TRACE spliced for macro-definition line 1:\n" + "\n".join(bad)
         assert "#define INC(x) ((x)+1)" in instrumented
 
 
@@ -145,9 +143,7 @@ class TestTemplateMemberFallback:
             for i, l in enumerate(lines)
             if open_idx < i < close_idx and "__TRACE" in l
         ]
-        assert (
-            not inside
-        ), "bogus splice: __TRACE inside class-template definition:\n" + "\n".join(
+        assert not inside, "bogus splice: __TRACE inside class-template definition:\n" + "\n".join(
             inside
         )
 
@@ -163,10 +159,9 @@ class TestTemplateMemberFallback:
 class TestFallbackHelpersGuarded:
     def test_safe_get_tokens_never_raises_on_macro_tu(self, tmp_path):
         assert hasattr(ast_walker, "_safe_get_tokens"), "missing _safe_get_tokens (RED)"
-        assert hasattr(
-            ast_walker, "_fallback_user_lines"
-        ), "missing _fallback_user_lines (RED)"
+        assert hasattr(ast_walker, "_fallback_user_lines"), "missing _fallback_user_lines (RED)"
         import clang.cindex as clang
+
         from app.core.instrumenter import _libclang_compat
 
         _libclang_compat.ensure_libclang()

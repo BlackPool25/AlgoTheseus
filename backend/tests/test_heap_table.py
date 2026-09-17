@@ -61,12 +61,8 @@ def _instrument_compile_run(fixture: str) -> list[dict]:
             timeout=30,
             check=False,
         )
-        assert (
-            compile_result.returncode == 0
-        ), f"Compile error:\n{compile_result.stderr}"
-        run = subprocess.run(
-            [str(binary)], capture_output=True, text=True, timeout=10, check=False
-        )
+        assert compile_result.returncode == 0, f"Compile error:\n{compile_result.stderr}"
+        run = subprocess.run([str(binary)], capture_output=True, text=True, timeout=10, check=False)
     assert run.returncode == 0, f"nonzero exit:\n{run.stderr}"
     return [
         json.loads(line[len("TRACE:") :])
@@ -121,9 +117,9 @@ def test_heap_table_contains_structs():
 
     # Stable ids: some $id survives across consecutive STATEs.
     ids_per_state = [set(t) for _, t in states if t]
-    assert any(
-        a & b for a, b in itertools.pairwise(ids_per_state)
-    ), "no stable $id across consecutive steps"
+    assert any(a & b for a, b in itertools.pairwise(ids_per_state)), (
+        "no stable $id across consecutive steps"
+    )
 
 
 def test_in_step_ref_resolves_to_child_key():
@@ -256,9 +252,7 @@ def test_dangling_ref_renders_unknown_never_raises():
                 "l": 1,
                 "f": "main",
                 "d": 0,
-                "v": {
-                    "root": {"$id": 1, "$addr": "0x1", "val": 1, "next": {"$ref": 99}}
-                },
+                "v": {"root": {"$id": 1, "$addr": "0x1", "val": 1, "next": {"$ref": 99}}},
             },
             {"t": "state", "l": 2, "f": "main", "d": 0, "v": {"x": "garbage"}},
         ]

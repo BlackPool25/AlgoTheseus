@@ -99,7 +99,7 @@ class TestS1LoopHeaderStateLeak:
             print("  " + line)
         assert not offending, (
             "S1 LEAK: header-anchored STATE referencing dead loop var `x` "
-            f"placed after loop body:\n" + "\n".join(offending)
+            "placed after loop body:\n" + "\n".join(offending)
         )
 
         code, stderr = _compile(instrumented)
@@ -136,9 +136,7 @@ class TestS1LoopHeaderStateLeak:
         # `_trace_state` unions point vars with vars_at_line_post[line]:
         # this is the union source that smuggles dead loop-`x` into the
         # post-loop emission.
-        assert "x" in [
-            v.name for v in scopes["main"].vars_at_line_post.get(HEADER_LINE, [])
-        ]
+        assert "x" in [v.name for v in scopes["main"].vars_at_line_post.get(HEADER_LINE, [])]
 
         instrumented = instrument(S1_SRC, str(src))
         lines = instrumented.splitlines()
@@ -153,6 +151,5 @@ class TestS1LoopHeaderStateLeak:
             print("  " + line)
         assert not leaked, (
             f"S1 LEAK: __TRACE_STATE({HEADER_LINE},...) referencing `x` "
-            f"emitted after loop body (post-loop, header var dead):\n"
-            + "\n".join(leaked)
+            f"emitted after loop body (post-loop, header var dead):\n" + "\n".join(leaked)
         )

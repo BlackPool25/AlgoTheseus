@@ -28,15 +28,10 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from .models import (
-    BranchEvent,
     CFGEdge,
     CFGNode,
     CFGNodeType,
     EventType,
-    FuncEnterEvent,
-    FuncExitEvent,
-    LoopIterEvent,
-    StateEvent,
 )
 
 
@@ -140,13 +135,11 @@ def build(events: list[Any]) -> tuple[list[CFGNode], list[CFGEdge]]:
             current_loop_id = None  # loop scope ends
             fn = event.func
             # Pop from active_funcs
-            if fn in active_funcs and active_funcs[fn]:
+            if active_funcs.get(fn):
                 active_funcs[fn].pop()
 
             node_id = state.new_id("func_end")
-            ret_label = (
-                f"→ {event.return_val}" if event.return_val is not None else "return"
-            )
+            ret_label = f"→ {event.return_val}" if event.return_val is not None else "return"
             node = CFGNode(
                 id=node_id,
                 type=CFGNodeType.FUNC_END,
@@ -179,9 +172,7 @@ def build(events: list[Any]) -> tuple[list[CFGNode], list[CFGEdge]]:
                 ):
                     current_line_node.lines.append(event.line)
                     current_line_node.trace_indices.append(idx)
-                    current_line_node.label = (
-                        f"lines {current_line_node.lines[0]}–{event.line}"
-                    )
+                    current_line_node.label = f"lines {current_line_node.lines[0]}–{event.line}"
                 else:
                     # Discontinuity — flush and start new node
                     flush_line_node()

@@ -8,7 +8,6 @@ Multibyte/UTF-8 folds into the macro row (string-literal case).
 
 import shutil
 import subprocess
-import tempfile
 from pathlib import Path
 
 from app.core.instrumenter.injector import instrument
@@ -155,9 +154,7 @@ def _build_and_run(source: str, tmp_path: Path, name: str):
         timeout=60,
     )
     assert comp.returncode == 0, f"{name}: compile failed:\n{comp.stderr}"
-    run = subprocess.run(
-        [str(binary)], capture_output=True, text=True, check=False, timeout=10
-    )
+    run = subprocess.run([str(binary)], capture_output=True, text=True, check=False, timeout=10)
     assert run.returncode == 0, f"{name}: run rc={run.returncode} err={run.stderr!r}"
     return run.stdout, run.stderr
 
@@ -168,9 +165,9 @@ def _check(source: str, tmp_path: Path, name: str):
     instrumented = instrument(source, str(src))  # must not raise InstrumentParseError
     out_instr, err_instr = _build_and_run(instrumented, tmp_path, f"i_{name}")
     out_plain, _ = _build_and_run(source, tmp_path, f"p_{name}")
-    assert (
-        out_instr == out_plain
-    ), f"{name}: stdout mismatch: instrumented={out_instr!r} plain={out_plain!r}"
+    assert out_instr == out_plain, (
+        f"{name}: stdout mismatch: instrumented={out_instr!r} plain={out_plain!r}"
+    )
     assert '"t":"enter"' in err_instr, f"{name}: no enter event:\n{err_instr}"
     assert '"t":"state"' in err_instr, f"{name}: no state event:\n{err_instr}"
     assert '"t":"exit"' in err_instr, f"{name}: no exit event:\n{err_instr}"

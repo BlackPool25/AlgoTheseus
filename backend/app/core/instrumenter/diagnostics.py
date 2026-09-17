@@ -31,9 +31,7 @@ def collect_diagnostics(tu: clang.TranslationUnit) -> list[str]:
     for d in tu.diagnostics:
         loc = d.location
         fname: str = loc.file.name if loc.file is not None else "<unknown>"
-        out.append(
-            f"{fname}:{loc.line}: {_SEVERITY_NAMES.get(int(d.severity), '?')}: {d.spelling}"
-        )
+        out.append(f"{fname}:{loc.line}: {_SEVERITY_NAMES.get(int(d.severity), '?')}: {d.spelling}")
     return out
 
 

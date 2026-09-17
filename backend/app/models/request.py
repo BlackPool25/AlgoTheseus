@@ -13,9 +13,7 @@ class ExecuteRequest(BaseModel):
     model_config = {"extra": "forbid"}
 
     code: str = Field(..., description="Full C++ source code")
-    raw_stdin: str = Field(
-        default="", description="Raw stdin input (parsed server-side)"
-    )
+    raw_stdin: str = Field(default="", description="Raw stdin input (parsed server-side)")
     compressed: bool = Field(
         default=False,
         description="When True, collapse consecutive STATE events with identical vars server-side to reduce payload",

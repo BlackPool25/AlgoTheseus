@@ -75,11 +75,10 @@ class TestSharedExecuteBudget:
         ip = "10.99.11.1"
         p0, p1, p2 = _mocked_sandbox()
         with p0, p1, p2:
-            async with AsyncClient(
-                transport=ASGITransport(app=app), base_url="http://test"
-            ) as ac1, AsyncClient(
-                transport=ASGITransport(app=app), base_url="http://test"
-            ) as ac2:
+            async with (
+                AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac1,
+                AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac2,
+            ):
                 statuses = []
                 retry_afters = []
                 ac1_429s = ac2_429s = 0
@@ -120,9 +119,7 @@ class TestSharedExecuteBudget:
         ip = "10.99.11.2"
         p0, p1, p2 = _mocked_sandbox()
         with p0, p1, p2:
-            async with AsyncClient(
-                transport=ASGITransport(app=app), base_url="http://test"
-            ) as ac:
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
                 for _ in range(5):
                     r = await ac.post(
                         "/execute",
@@ -150,9 +147,7 @@ class TestJobsSharedBudget:
     async def test_jobs_30x202_then_429(self, _distrib):
         fake = _distrib
         ip = "10.99.11.3"
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as ac:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
             statuses = []
             retry_after = None
             for _ in range(31):

@@ -145,6 +145,7 @@ def _gcc_internal_include() -> str | None:
             capture_output=True,
             text=True,
             timeout=10,
+            check=False,
         )
         if out.returncode != 0:
             return None

@@ -89,9 +89,7 @@ class StructDef:
 
 def _is_user_code(cursor: clang.Cursor, source_path: str) -> bool:
     loc = cursor.location
-    return loc.file is not None and os.path.abspath(loc.file.name) == os.path.abspath(
-        source_path
-    )
+    return loc.file is not None and os.path.abspath(loc.file.name) == os.path.abspath(source_path)
 
 
 def _normalize_type(spelling: str) -> str:
@@ -168,9 +166,7 @@ def _collect_from_tu(tu: object, source_path: str) -> list[StructDef]:
     return out
 
 
-def _struct_def(
-    cursor: clang.Cursor, names: set[str], source_path: str
-) -> StructDef | None:
+def _struct_def(cursor: clang.Cursor, names: set[str], source_path: str) -> StructDef | None:
     if not cursor.spelling or not _FIELD_NAME_RE.match(cursor.spelling):
         return None
     fields: list[FieldDef] = []

@@ -10,13 +10,12 @@ from __future__ import annotations
 import asyncio
 from unittest.mock import patch
 
+import pytest
 from httpx import ASGITransport, AsyncClient
 
 import app.api.routes.execute as execute_mod
 from app.core.executor.docker_runner import RunResult
 from app.main import app
-
-import pytest
 
 
 @pytest.fixture(autouse=True)
@@ -76,9 +75,7 @@ class TestCoalescing:
         mock_run.side_effect = slow_sandbox
         payload = {"code": CODE, "raw_stdin": "7\n"}
 
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as ac:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
             responses = await asyncio.gather(
                 *[ac.post("/execute", json=payload) for _ in range(20)]
             )
@@ -99,16 +96,10 @@ class TestCoalescing:
             await asyncio.sleep(0.3)
             return "shared"
 
-        leader = asyncio.ensure_future(
-            execute_mod._coalesced("poison-key", slow_factory)
-        )
+        leader = asyncio.ensure_future(execute_mod._coalesced("poison-key", slow_factory))
         await asyncio.sleep(0.05)
-        waiter1 = asyncio.ensure_future(
-            execute_mod._coalesced("poison-key", slow_factory)
-        )
-        waiter2 = asyncio.ensure_future(
-            execute_mod._coalesced("poison-key", slow_factory)
-        )
+        waiter1 = asyncio.ensure_future(execute_mod._coalesced("poison-key", slow_factory))
+        waiter2 = asyncio.ensure_future(execute_mod._coalesced("poison-key", slow_factory))
         await asyncio.sleep(0.05)
         waiter1.cancel()
         try:

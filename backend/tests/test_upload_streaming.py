@@ -93,9 +93,7 @@ async def test_stale_dirs_purged_on_upload(temp_upload_dir):
     fresh.mkdir()
     (fresh / "input.txt").write_bytes(b"new")
 
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as ac:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         resp = await ac.post(
             "/upload-testcases",
             files=[("files", ("input.txt", b"1 2 3\n", "text/plain"))],

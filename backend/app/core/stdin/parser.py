@@ -45,9 +45,7 @@ def _extract_cin_summary(code: str) -> str:
     reads input. Mirrors the old ``_extract_cin_usage`` interface.
     """
     lines = code.splitlines()
-    input_lines = [
-        l.strip() for l in lines if "cin" in l or "scanf" in l or "getline" in l
-    ]
+    input_lines = [l.strip() for l in lines if "cin" in l or "scanf" in l or "getline" in l]
     return "\n".join(input_lines[:10])
 
 

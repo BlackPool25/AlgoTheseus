@@ -115,9 +115,7 @@ class TestGlobalsTrace:
         _, stderr, code = _compile_and_run(GLOBALS_SRC)
         events = _trace_events(stderr)
         assert code == 0, f"run failed:\n{stderr}"
-        main_states = [
-            e for e in events if e.get("t") == "state" and e.get("f") == "main"
-        ]
+        main_states = [e for e in events if e.get("t") == "state" and e.get("f") == "main"]
         assert main_states, "no main STATE events"
         with_g = [e for e in main_states if "g" in e]
         assert with_g, "no STATE carries globals"
@@ -128,20 +126,14 @@ class TestGlobalsTrace:
         _, stderr, code = _compile_and_run(GLOBALS_SRC)
         events = _trace_events(stderr)
         assert code == 0, f"run failed:\n{stderr}"
-        main_states = [
-            e for e in events if e.get("t") == "state" and e.get("f") == "main"
-        ]
+        main_states = [e for e in events if e.get("t") == "state" and e.get("f") == "main"]
         assert len(main_states) > 1, "need multiple STATEs to prove dedup"
         with_g = [e for e in main_states if "g" in e]
-        assert (
-            len(with_g) == 1
-        ), f"expected exactly 1 STATE with globals, got {len(with_g)}"
+        assert len(with_g) == 1, f"expected exactly 1 STATE with globals, got {len(with_g)}"
 
     def test_no_globals_key_without_globals(self):
         """A program with zero globals emits NO `globals` key at all."""
         _, stderr, _ = _compile_and_run(NO_GLOBALS_SRC)
         events = _trace_events(stderr)
         assert events, "no trace events"
-        assert all(
-            "g" not in e for e in events
-        ), "globals key leaked into zero-globals trace"
+        assert all("g" not in e for e in events), "globals key leaked into zero-globals trace"

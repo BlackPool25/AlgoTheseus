@@ -56,9 +56,7 @@ class TestV2OptionalFields:
 
     def test_state_event_has_v2_fields(self):
         assert isinstance(models.StateEvent.model_fields.get("stdout"), object)
-        e = models.StateEvent.model_validate(
-            {"t": "state", "l": 1, "f": "main", "d": 0, "v": {}}
-        )
+        e = models.StateEvent.model_validate({"t": "state", "l": 1, "f": "main", "d": 0, "v": {}})
         assert e.stdout is None
         assert e.globals is None
         assert e.step_desc is None
@@ -79,9 +77,7 @@ class TestV2OptionalFields:
         assert e.step_desc is None
 
     def test_exit_event_has_v2_fields(self):
-        e = models.FuncExitEvent.model_validate(
-            {"t": "exit", "l": 1, "f": "main", "d": 0, "r": 0}
-        )
+        e = models.FuncExitEvent.model_validate({"t": "exit", "l": 1, "f": "main", "d": 0, "r": 0})
         assert e.step_desc is None
         assert e.return_line is None
 

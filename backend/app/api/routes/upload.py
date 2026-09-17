@@ -27,9 +27,7 @@ MAX_FILES = 50
 ALLOWED_EXTENSIONS = {".txt", ".in", ".out", ".ans"}
 CHUNK_SIZE = 65536  # 64 KB streaming reads (bounds per-request RAM)
 TESTCASE_TTL_SECONDS = 3600  # mtime GC horizon for testcase dirs
-_PREVIEW_HEAD_BYTES = (
-    4096  # preview probe (preview shows 200 chars; exact for files ≤ 4KB)
-)
+_PREVIEW_HEAD_BYTES = 4096  # preview probe (preview shows 200 chars; exact for files ≤ 4KB)
 
 # Module-level File() default (B008: no calls in argument defaults).
 # Same object FastAPI would build at decoration time — shared on purpose.
@@ -55,10 +53,7 @@ def _purge_stale_dirs() -> None:
         now = time.time()
         for child in BASE_DIR.iterdir():
             try:
-                if (
-                    child.is_dir()
-                    and (now - child.stat().st_mtime) > TESTCASE_TTL_SECONDS
-                ):
+                if child.is_dir() and (now - child.stat().st_mtime) > TESTCASE_TTL_SECONDS:
                     shutil.rmtree(child, ignore_errors=True)
             except OSError:
                 logger.debug("GC skip %s", child, exc_info=True)
@@ -137,7 +132,7 @@ async def upload_testcases(files: list[UploadFile] = _FILES_PARAM) -> dict:
         size = 0
         head = bytearray()
         too_big = False
-        with open(file_path, "wb") as out:
+        with open(file_path, "wb") as out:  # noqa: ASYNC230 — chunked local write
             while chunk := await file.read(CHUNK_SIZE):
                 size += len(chunk)
                 if size > MAX_FILE_SIZE:

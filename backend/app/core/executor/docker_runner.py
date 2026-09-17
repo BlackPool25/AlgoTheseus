@@ -45,7 +45,7 @@ _TRACER_H = Path(__file__).parent.parent / "instrumenter" / "tracer.h"
 # - If compile fails, print errors to stderr and exit 1
 # - If compile succeeds, run with stdin from /mnt/code/input.txt
 _CONTAINER_SCRIPT = """
-g++ -O0 -g -std=c++17 -I /mnt/code -o /tmp/prog /mnt/code/prog.cpp 2>/tmp/compile_err
+g++ -O0 -g -std=c++17 -pipe -I /mnt/code -o /tmp/prog /mnt/code/prog.cpp 2>/tmp/compile_err
 if [ $? -ne 0 ]; then
     cat /tmp/compile_err >&2
     exit 1
@@ -106,9 +106,7 @@ _OUTPUT_GUARD_MESSAGE = (
 )
 
 
-def _apply_output_guard(
-    exit_code: int, stderr_clean: str, truncated: bool
-) -> tuple[str, bool]:
+def _apply_output_guard(exit_code: int, stderr_clean: str, truncated: bool) -> tuple[str, bool]:
     """Map a file-size-guard death to a legible message + truncated flag."""
     if exit_code not in _OUTPUT_GUARD_EXIT_CODES:
         return stderr_clean, truncated
@@ -188,7 +186,9 @@ def _run_container_sync(cpp_source: str, stdin_data: str) -> RunResult:
         shutil.rmtree(tmp, ignore_errors=True)
 
 
-async def run_in_sandbox(cpp_source: str, stdin_data: str = "") -> RunResult:
+async def run_in_sandbox(
+    cpp_source: str, stdin_data: str = "", binary_bytes: bytes | None = None
+) -> RunResult:
     """Async entry point — runs the blocking sandbox work in a thread pool.
 
     Dispatches on SANDBOX_MODE: "subprocess" uses the socketless
@@ -198,12 +198,17 @@ async def run_in_sandbox(cpp_source: str, stdin_data: str = "") -> RunResult:
     Args:
         cpp_source: Complete instrumented C++ source (already has #include "tracer.h").
         stdin_data: Raw stdin string to feed to the program.
+        binary_bytes: Prebuilt binary from a shared compile step (subprocess
+            mode only — runs the run phase without recompiling). None keeps
+            the classic compile+run behaviour; the docker path ignores it.
 
     Returns:
         RunResult with stdout, clean stderr, raw trace lines, and exit code.
     """
     if os.environ.get("SANDBOX_MODE", "docker").strip().lower() == "subprocess":
-        from .subprocess_runner import _run_subprocess_sync
+        from .subprocess_runner import _run_subprocess_sync, run_binary_sync
 
+        if binary_bytes is not None:
+            return await asyncio.to_thread(run_binary_sync, binary_bytes, stdin_data)
         return await asyncio.to_thread(_run_subprocess_sync, cpp_source, stdin_data)
     return await asyncio.to_thread(_run_container_sync, cpp_source, stdin_data)

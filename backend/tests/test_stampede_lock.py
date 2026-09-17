@@ -22,14 +22,13 @@ from __future__ import annotations
 import asyncio
 from unittest.mock import patch
 
+import pytest
 from httpx import ASGITransport, AsyncClient
 
 import app.api.routes.execute as execute_mod
 from app.core.executor.cache import SharedCache
 from app.core.executor.docker_runner import RunResult
 from app.main import app
-
-import pytest
 
 fakeredis = pytest.importorskip("fakeredis")
 
@@ -205,9 +204,7 @@ class TestStampedeLock:
         execute_mod.reset_cache()
         try:
             execute_mod._cache = _shared_cache(tmp_path, BoomRedis(), "a")
-            async with AsyncClient(
-                transport=ASGITransport(app=app), base_url="http://test"
-            ) as ac:
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
                 r = await ac.post("/execute", json={"code": CODE, "raw_stdin": "7\n"})
             assert r.status_code == 200
             assert r.headers.get("x-cache") == "MISS"

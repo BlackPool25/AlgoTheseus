@@ -12,9 +12,9 @@ from app.api.routes.execute import _resolve, reset_cache
 from app.core.trace.parser import _event_adapter, parse
 from app.models.request import ExecuteRequest
 
-
 CASES = {
-    "singly-linked-list": (r'''
+    "singly-linked-list": (
+        r"""
 #include <iostream>
 struct Node { int value; Node* next; };
 int main() {
@@ -24,8 +24,11 @@ int main() {
     while (head) { Node* next = head->next; delete head; head = next; }
     return 0;
 }
-''', "1 2 3 \n"),
-    "linked-list-cycle-floyd": (r'''
+""",
+        "1 2 3 \n",
+    ),
+    "linked-list-cycle-floyd": (
+        r"""
 #include <iostream>
 struct Node { int value; Node* next; };
 bool cycle(Node* head) {
@@ -44,8 +47,11 @@ int main() {
     delete c; delete b; delete a;
     return 0;
 }
-''', "1\n0\n"),
-    "doubly-linked-list": (r'''
+""",
+        "1\n0\n",
+    ),
+    "doubly-linked-list": (
+        r"""
 #include <iostream>
 struct Node { int value; Node* prev; Node* next; };
 int main() {
@@ -58,8 +64,11 @@ int main() {
     std::cout << '\n'; delete c; delete b; delete a;
     return 0;
 }
-''', "1 2 3 \n3 2 1 \n"),
-    "binary-tree-inorder": (r'''
+""",
+        "1 2 3 \n3 2 1 \n",
+    ),
+    "binary-tree-inorder": (
+        r"""
 #include <iostream>
 struct Node { int value; Node* left; Node* right; };
 void inorder(Node* p) {
@@ -75,8 +84,11 @@ int main() {
     inorder(root); std::cout << '\n'; destroy(root);
     return 0;
 }
-''', "1 2 3 \n"),
-    "bst-insert-search": (r'''
+""",
+        "1 2 3 \n",
+    ),
+    "bst-insert-search": (
+        r"""
 #include <iostream>
 struct Node { int key; Node* left; Node* right; };
 Node* insert(Node* p, int key) {
@@ -100,8 +112,11 @@ int main() {
     std::cout << search(root, 4) << ' ' << search(root, 9) << '\n';
     destroy(root); return 0;
 }
-''', "1 0\n"),
-    "graph-bfs": (r'''
+""",
+        "1 0\n",
+    ),
+    "graph-bfs": (
+        r"""
 #include <iostream>
 #include <vector>
 #include <queue>
@@ -115,8 +130,11 @@ int main() {
     }
     std::cout << '\n'; return 0;
 }
-''', "0 1 2 3 \n"),
-    "graph-dfs-iterative": (r'''
+""",
+        "0 1 2 3 \n",
+    ),
+    "graph-dfs-iterative": (
+        r"""
 #include <iostream>
 #include <vector>
 #include <stack>
@@ -130,8 +148,11 @@ int main() {
     }
     std::cout << '\n'; return 0;
 }
-''', "0 1 3 2 \n"),
-    "graph-dfs-recursive": (r'''
+""",
+        "0 1 3 2 \n",
+    ),
+    "graph-dfs-recursive": (
+        r"""
 #include <iostream>
 #include <vector>
 void dfs(int u, const std::vector<std::vector<int>>& g, std::vector<int>& seen) {
@@ -144,8 +165,11 @@ int main() {
     std::vector<int> seen(4, 0); dfs(0, g, seen);
     std::cout << '\n'; return 0;
 }
-''', "0 1 3 2 \n"),
-    "dijkstra-priority-queue": (r'''#include <vector>
+""",
+        "0 1 3 2 \n",
+    ),
+    "dijkstra-priority-queue": (
+        r"""#include <vector>
 #include <queue>
 #include <iostream>
 
@@ -183,8 +207,11 @@ int main() {
     std::cout << "Shortest distance to 3: " << dist[3] << std::endl;
     return 0;
 }
-''', "Shortest distance to 3: 4\n"),
-    "dsu-kruskal": (r'''#include <vector>
+""",
+        "Shortest distance to 3: 4\n",
+    ),
+    "dsu-kruskal": (
+        r"""#include <vector>
 #include <iostream>
 #include <algorithm>
 
@@ -237,8 +264,11 @@ int main() {
     std::cout << "MST weight: " << mst << std::endl;
     return 0;
 }
-''', "MST weight: 19\n"),
-    "trie-insert-search": (r'''
+""",
+        "MST weight: 19\n",
+    ),
+    "trie-insert-search": (
+        r"""
 #include <iostream>
 #include <string>
 struct Node { Node* child[26] = {}; bool end = false; };
@@ -268,13 +298,19 @@ int main() {
               << search(root, "dog") << ' ' << search(root, "car") << '\n';
     destroy(root); return 0;
 }
-''', "1 0 0 1\n"),
-    "recursive-fibonacci": (r'''
+""",
+        "1 0 0 1\n",
+    ),
+    "recursive-fibonacci": (
+        r"""
 #include <iostream>
 int fib(int n) { if (n < 2) return n; return fib(n - 1) + fib(n - 2); }
 int main() { std::cout << fib(10) << '\n'; return 0; }
-''', "55\n"),
-    "knapsack-2d-dp": (r'''
+""",
+        "55\n",
+    ),
+    "knapsack-2d-dp": (
+        r"""
 #include <iostream>
 #include <algorithm>
 int main() {
@@ -288,8 +324,11 @@ int main() {
     }
     std::cout << dp[3][5] << '\n'; return 0;
 }
-''', "22\n"),
-    "grid-flood-fill-count": (r'''
+""",
+        "22\n",
+    ),
+    "grid-flood-fill-count": (
+        r"""
 #include <iostream>
 #include <vector>
 void fill(std::vector<std::vector<int>>& grid, int r, int c) {
@@ -306,8 +345,11 @@ int main() {
     }
     std::cout << count << '\n'; return 0;
 }
-''', "3\n"),
-    "vector-matrix-ops": (r'''
+""",
+        "3\n",
+    ),
+    "vector-matrix-ops": (
+        r"""
 #include <iostream>
 #include <vector>
 int main() {
@@ -322,7 +364,9 @@ int main() {
     }
     return 0;
 }
-''', "19 22 \n43 50 \n"),
+""",
+        "19 22 \n43 50 \n",
+    ),
 }
 
 
@@ -336,13 +380,21 @@ async def test_structure_matches_plain_gpp(
     reset_cache()
     with tempfile.TemporaryDirectory(prefix="at-sweep-plain-") as directory:
         binary = str(Path(directory) / "plain")
-        compiled = subprocess.run(
+        compiled = subprocess.run(  # noqa: ASYNC221 — sync baseline in test
             ["g++", "-std=c++17", "-O0", "-x", "c++", "-", "-o", binary],
-            input=code, capture_output=True, text=True, timeout=60, check=False,
+            input=code,
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=False,
         )
         assert compiled.returncode == 0, f"plain_gpp_compile_error: {compiled.stderr}"
-        plain = subprocess.run(
-            [binary], capture_output=True, text=True, timeout=10, check=False,
+        plain = subprocess.run(  # noqa: ASYNC221 — sync baseline in test
+            [binary],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
         )
         assert plain.returncode == 0, f"plain_gpp_exit={plain.returncode}: {plain.stderr}"
         assert plain.stdout == expected, f"plain_gpp_stdout={plain.stdout!r}; expected={expected!r}"

@@ -69,9 +69,7 @@ class InjectKind(Enum):
 
 # R2 (M3): range-for is a distinct cursor kind, not FOR_STMT. getattr guard so
 # older bindings without it fall back gracefully (excluded from _LOOP_KINDS).
-_RANGE_FOR_KIND: clang.CursorKind | None = getattr(
-    clang.CursorKind, "CXX_FOR_RANGE_STMT", None
-)
+_RANGE_FOR_KIND: clang.CursorKind | None = getattr(clang.CursorKind, "CXX_FOR_RANGE_STMT", None)
 _LOOP_KINDS: tuple = tuple(
     k
     for k in (
@@ -135,9 +133,7 @@ def _safe_get_tokens(cursor: clang.Cursor) -> list[str]:
         return []
 
 
-def _fallback_user_lines(
-    cursor: clang.Cursor, source_path: str
-) -> tuple[int, int] | None:
+def _fallback_user_lines(cursor: clang.Cursor, source_path: str) -> tuple[int, int] | None:
     """Re-lex a kind-None/UNEXPOSED cursor's user-file line range from tokens.
 
     Returns (first_line, last_line) only when token locations resolve inside
@@ -260,9 +256,7 @@ class ASTWalker:
         # W0.1 pin: shared default carries -isystem <gcc-include> so STL
         # headers parse (libclang 18 vs GCC 16 gap). Explicit args bypass it.
         self.extra_args = (
-            extra_args
-            if extra_args is not None
-            else _libclang_compat.default_extra_args()
+            extra_args if extra_args is not None else _libclang_compat.default_extra_args()
         )
         self._index = clang.Index.create()
         self._loop_counter_seq = 0
@@ -337,18 +331,15 @@ class ASTWalker:
     def _collect_user_functions(self, cursor: clang.Cursor, result: set[str]) -> None:
         """Collect names of all user-defined functions."""
         if (
-            _cursor_kind(cursor)
-            in (clang.CursorKind.FUNCTION_DECL, clang.CursorKind.CXX_METHOD)
+            _cursor_kind(cursor) in (clang.CursorKind.FUNCTION_DECL, clang.CursorKind.CXX_METHOD)
             and cursor.is_definition()
+            and self._is_user_code(cursor)
         ):
-            if self._is_user_code(cursor):
-                result.add(cursor.spelling)
+            result.add(cursor.spelling)
         for child in cursor.get_children():
             self._collect_user_functions(child, result)
 
-    def _compute_call_depths(
-        self, root: clang.Cursor, user_functions: set[str]
-    ) -> dict[str, int]:
+    def _compute_call_depths(self, root: clang.Cursor, user_functions: set[str]) -> dict[str, int]:
         """Compute call depth for each user function.
 
         Uses BFS from main() (depth 0). Functions not reachable from main
@@ -418,9 +409,7 @@ class ASTWalker:
     def _is_user_code(self, cursor: clang.Cursor) -> bool:
         """True if this cursor is in the user's source file (not a header)."""
         loc = cursor.location
-        return (
-            loc.file is not None and os.path.abspath(loc.file.name) == self.source_path
-        )
+        return loc.file is not None and os.path.abspath(loc.file.name) == self.source_path
 
     def _is_macro_expanded(self, cursor: clang.Cursor) -> bool:
         """True if this cursor was produced by a macro expansion."""
@@ -465,7 +454,7 @@ class ASTWalker:
             if not text or text == "?":
                 return "true"
             return text
-        except Exception:
+        except Exception:  # noqa: BLE001 — degenerate AST fail-open to "true"
             return "true"
 
     def _get_condition_vars(self, cond: clang.Cursor) -> list[str]:
@@ -478,9 +467,7 @@ class ASTWalker:
             return []
         return names[:8]
 
-    def _collect_refs(
-        self, cursor: clang.Cursor, names: list[str], seen: set[str]
-    ) -> None:
+    def _collect_refs(self, cursor: clang.Cursor, names: list[str], seen: set[str]) -> None:
         if cursor.kind == clang.CursorKind.DECL_REF_EXPR and cursor.spelling:
             name = cursor.spelling
             # W0.1: with STL headers fully parsed, overloaded operators
@@ -528,8 +515,7 @@ class ASTWalker:
         """Best-effort callee name for C++ call expressions (incl. member calls)."""
         for child in cursor.get_children():
             if (
-                child.kind
-                in (clang.CursorKind.MEMBER_REF_EXPR, clang.CursorKind.DECL_REF_EXPR)
+                child.kind in (clang.CursorKind.MEMBER_REF_EXPR, clang.CursorKind.DECL_REF_EXPR)
                 and child.spelling
             ):
                 return child.spelling
@@ -542,9 +528,7 @@ class ASTWalker:
         if re.fullmatch(r"-?\d+(\.\d+)?", text):
             return True
         return (
-            re.fullmatch(
-                r"[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*(\[[^\]]+\])*"
-            )
+            re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*(\[[^\]]+\])*")
             is not None
         )
 
@@ -599,18 +583,12 @@ class ASTWalker:
 
             # Collect parameter names
             params = [
-                c.spelling
-                for c in cursor.get_children()
-                if c.kind == clang.CursorKind.PARM_DECL
+                c.spelling for c in cursor.get_children() if c.kind == clang.CursorKind.PARM_DECL
             ]
 
             # Find the compound statement (function body)
             body = next(
-                (
-                    c
-                    for c in cursor.get_children()
-                    if c.kind == clang.CursorKind.COMPOUND_STMT
-                ),
+                (c for c in cursor.get_children() if c.kind == clang.CursorKind.COMPOUND_STMT),
                 None,
             )
             if body is None:
@@ -651,9 +629,7 @@ class ASTWalker:
 
         # ── Recurse into non-function nodes ──────────────────────────────────
         for child in cursor.get_children():
-            self._walk_cursor(
-                child, points, loop_counters, depth, func_name, func_depth, depth_map
-            )
+            self._walk_cursor(child, points, loop_counters, depth, func_name, func_depth, depth_map)
 
     def _maybe_emit_state(
         self,
@@ -754,9 +730,7 @@ class ASTWalker:
             return
         if seen is None:
             seen = set()
-        if kind in _UNEXPOSED_KINDS and (
-            cursor.location.file is None or cursor.location.line <= 0
-        ):
+        if kind in _UNEXPOSED_KINDS and (cursor.location.file is None or cursor.location.line <= 0):
             # Wave 2b fallback: UNEXPOSED node with an unusable location —
             # re-lex user lines from tokens; skip unless they resolve.
             resolved = _fallback_user_lines(cursor, self.source_path)
@@ -798,9 +772,7 @@ class ASTWalker:
                     for c in cursor.get_children()
                     if c.kind == clang.CursorKind.VAR_DECL and c.spelling
                 ]
-            self._maybe_emit_state(
-                cursor, points, func_name, func_depth, seen, decl_names
-            )
+            self._maybe_emit_state(cursor, points, func_name, func_depth, seen, decl_names)
 
         # ── Return statement → FUNC_EXIT ──────────────────────────────────────
         if kind == clang.CursorKind.RETURN_STMT:
@@ -883,9 +855,7 @@ class ASTWalker:
                 )
             # Recurse into then-body (children[1])
             if len(children) > 1:
-                self._walk_stmt(
-                    children[1], points, loop_counters, func_name, func_depth, seen
-                )
+                self._walk_stmt(children[1], points, loop_counters, func_name, func_depth, seen)
             # Recurse into else branch — but if it's another IF_STMT (else-if),
             # recurse into its bodies without injecting another BRANCH at the top.
             if len(children) > 2:
@@ -894,13 +864,9 @@ class ASTWalker:
                     # else-if: recurse into its then/else bodies only
                     else_children = list(else_branch.get_children())
                     for ec in else_children[1:]:
-                        self._walk_stmt(
-                            ec, points, loop_counters, func_name, func_depth, seen
-                        )
+                        self._walk_stmt(ec, points, loop_counters, func_name, func_depth, seen)
                 else:
-                    self._walk_stmt(
-                        else_branch, points, loop_counters, func_name, func_depth, seen
-                    )
+                    self._walk_stmt(else_branch, points, loop_counters, func_name, func_depth, seen)
             return
 
         # ── Switch statement → BRANCH per case ──────────────────────────────────
@@ -958,9 +924,7 @@ class ASTWalker:
                     )
 
                     for stmt in body_stmts:
-                        self._walk_stmt(
-                            stmt, points, loop_counters, func_name, func_depth, seen
-                        )
+                        self._walk_stmt(stmt, points, loop_counters, func_name, func_depth, seen)
 
                 elif child.kind == clang.CursorKind.DEFAULT_STMT:
                     label = f"true /* switch({cond_text}) == default */"
@@ -983,15 +947,11 @@ class ASTWalker:
                     )
 
                     for stmt in body_stmts:
-                        self._walk_stmt(
-                            stmt, points, loop_counters, func_name, func_depth, seen
-                        )
+                        self._walk_stmt(stmt, points, loop_counters, func_name, func_depth, seen)
 
                 else:
                     # Non-case statement inside switch body (declaration, etc.)
-                    self._walk_stmt(
-                        child, points, loop_counters, func_name, func_depth, seen
-                    )
+                    self._walk_stmt(child, points, loop_counters, func_name, func_depth, seen)
 
             return
 
@@ -1027,25 +987,19 @@ class ASTWalker:
                 )
                 # Recurse into body statements
                 for child in body.get_children():
-                    self._walk_stmt(
-                        child, points, loop_counters, func_name, func_depth, seen
-                    )
+                    self._walk_stmt(child, points, loop_counters, func_name, func_depth, seen)
             elif body is not None:
                 # R3 (M4) policy: NO LOOP_ITER for braceless single-statement
                 # bodies. One statement is one step and the STATE emitted above
                 # already covers it; an extra iter event would inflate scrubber
                 # step counts without adding variables.
-                self._walk_stmt(
-                    body, points, loop_counters, func_name, func_depth, seen
-                )
+                self._walk_stmt(body, points, loop_counters, func_name, func_depth, seen)
             return
 
         # ── Try/catch + lambda → recurse like COMPOUND ─────────────────────────
         # v1 scope: no TRACE on the header itself (skip-not-brace-wrap); bodies
         # recurse so inner statements get STATE. Params/conditions are skipped.
-        if kind in _TRY_CATCH_KINDS or (
-            _LAMBDA_KIND is not None and kind == _LAMBDA_KIND
-        ):
+        if kind in _TRY_CATCH_KINDS or (_LAMBDA_KIND is not None and kind == _LAMBDA_KIND):
             for child in cursor.get_children():
                 ck = _cursor_kind(child)
                 if (
@@ -1053,9 +1007,7 @@ class ASTWalker:
                     or ck in _TRY_CATCH_KINDS
                     or (_LAMBDA_KIND is not None and ck == _LAMBDA_KIND)
                 ):
-                    self._walk_stmt(
-                        child, points, loop_counters, func_name, func_depth, seen
-                    )
+                    self._walk_stmt(child, points, loop_counters, func_name, func_depth, seen)
             return
 
         # v1 scope: never splice inside template definitions (members instantiate per specialization).
@@ -1066,32 +1018,20 @@ class ASTWalker:
         # ── Compound statement → recurse ──────────────────────────────────────
         if kind == clang.CursorKind.COMPOUND_STMT:
             for child in cursor.get_children():
-                self._walk_stmt(
-                    child, points, loop_counters, func_name, func_depth, seen
-                )
+                self._walk_stmt(child, points, loop_counters, func_name, func_depth, seen)
             return
 
         # Lambdas nested in declarations/initializers (e.g. `auto f = [...]{};`):
         # the lambda body recurses like COMPOUND; nothing else descended into.
         for child in cursor.get_children():
             ck = _cursor_kind(child)
-            if ck in _TRY_CATCH_KINDS or (
-                _LAMBDA_KIND is not None and ck == _LAMBDA_KIND
-            ):
-                self._walk_stmt(
-                    child, points, loop_counters, func_name, func_depth, seen
-                )
-            elif ck is not None and (
-                ck in _UNEXPOSED_KINDS or ck == clang.CursorKind.VAR_DECL
-            ):
+            if ck in _TRY_CATCH_KINDS or (_LAMBDA_KIND is not None and ck == _LAMBDA_KIND):
+                self._walk_stmt(child, points, loop_counters, func_name, func_depth, seen)
+            elif ck is not None and (ck in _UNEXPOSED_KINDS or ck == clang.CursorKind.VAR_DECL):
                 for gchild in child.get_children():
                     gk = _cursor_kind(gchild)
-                    if gk in _TRY_CATCH_KINDS or (
-                        _LAMBDA_KIND is not None and gk == _LAMBDA_KIND
-                    ):
-                        self._walk_stmt(
-                            gchild, points, loop_counters, func_name, func_depth, seen
-                        )
+                    if gk in _TRY_CATCH_KINDS or (_LAMBDA_KIND is not None and gk == _LAMBDA_KIND):
+                        self._walk_stmt(gchild, points, loop_counters, func_name, func_depth, seen)
         return
 
 

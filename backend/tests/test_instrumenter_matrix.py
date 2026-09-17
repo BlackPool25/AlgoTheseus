@@ -166,18 +166,12 @@ def _walk_and_instrument(src_text: str, tmp_path: Path, name: str):
 
 class TestInstrumenterMatrix:
     def test_braceless_if_elseif_chain(self, tmp_path):
-        result, instrumented, _ = _walk_and_instrument(
-            SRC_BRACELESS_IF, tmp_path, "m_if.cpp"
-        )
+        result, instrumented, _ = _walk_and_instrument(SRC_BRACELESS_IF, tmp_path, "m_if.cpp")
         branches = [p for p in result.injection_points if p.kind == InjectKind.BRANCH]
         assert len(branches) >= 1  # top if only; else-if skipped to preserve chain
         states = {p.line for p in result.injection_points if p.kind == InjectKind.STATE}
-        assert (
-            3 in states and 5 in states and 7 in states
-        )  # each braceless body has STATE
-        assert (
-            "{" not in instrumented.split("if (x > 0)")[1].split("\n")[0]
-        )  # no brace-wrap
+        assert 3 in states and 5 in states and 7 in states  # each braceless body has STATE
+        assert "{" not in instrumented.split("if (x > 0)")[1].split("\n")[0]  # no brace-wrap
         code, err = _syntax_only(instrumented)
         assert code == 0, f"braceless-if not syntax-clean:\n{err}"
 
@@ -189,15 +183,11 @@ class TestInstrumenterMatrix:
         assert code == 0, f"switch not syntax-clean:\n{err}"
 
     def test_do_while_braceless(self, tmp_path):
-        result, instrumented, scopes = _walk_and_instrument(
-            SRC_DO_WHILE, tmp_path, "m_do.cpp"
-        )
+        result, instrumented, scopes = _walk_and_instrument(SRC_DO_WHILE, tmp_path, "m_do.cpp")
         iters = [p for p in result.injection_points if p.kind == InjectKind.LOOP_ITER]
         assert not iters  # skip-not-brace-wrap: braceless body gets no LOOP_ITER
         states = {p.line for p in result.injection_points if p.kind == InjectKind.STATE}
-        assert (
-            4 in states
-        )  # braceless do body line carries STATE (parity with for/while)
+        assert 4 in states  # braceless do body line carries STATE (parity with for/while)
         assert "count" in scopes
         # Injector skip-with-reason: any splice splits `do <body> while (...)`.
         assert "__TRACE_STATE(4," not in instrumented
@@ -206,9 +196,7 @@ class TestInstrumenterMatrix:
         assert code == 0, f"do-while not syntax-clean:\n{err}"
 
     def test_try_catch_bodies_recurse(self, tmp_path):
-        result, instrumented, _ = _walk_and_instrument(
-            SRC_TRY_CATCH, tmp_path, "m_try.cpp"
-        )
+        result, instrumented, _ = _walk_and_instrument(SRC_TRY_CATCH, tmp_path, "m_try.cpp")
         states = {p.line for p in result.injection_points if p.kind == InjectKind.STATE}
         assert 5 in states  # try body statement recursed like COMPOUND
         assert 7 in states  # catch body statement recursed like COMPOUND
@@ -216,18 +204,14 @@ class TestInstrumenterMatrix:
         assert code == 0, f"try/catch not syntax-clean:\n{err}"
 
     def test_lambda_body_recurses(self, tmp_path):
-        result, instrumented, _ = _walk_and_instrument(
-            SRC_LAMBDA, tmp_path, "m_lam.cpp"
-        )
+        result, instrumented, _ = _walk_and_instrument(SRC_LAMBDA, tmp_path, "m_lam.cpp")
         states = {p.line for p in result.injection_points if p.kind == InjectKind.STATE}
         assert 3 in states  # lambda body statement recursed like COMPOUND
         code, err = _syntax_only(instrumented)
         assert code == 0, f"lambda not syntax-clean:\n{err}"
 
     def test_range_for_braceless(self, tmp_path):
-        result, instrumented, scopes = _walk_and_instrument(
-            SRC_RANGE_FOR, tmp_path, "m_rf.cpp"
-        )
+        result, instrumented, scopes = _walk_and_instrument(SRC_RANGE_FOR, tmp_path, "m_rf.cpp")
         iters = [p for p in result.injection_points if p.kind == InjectKind.LOOP_ITER]
         assert not iters  # braceless: skip LOOP_ITER, STATE only
         states = {p.line for p in result.injection_points if p.kind == InjectKind.STATE}
@@ -237,27 +221,21 @@ class TestInstrumenterMatrix:
         assert code == 0, f"range-for not syntax-clean:\n{err}"
 
     def test_class_template_skip_with_reason(self, tmp_path):
-        result, instrumented, scopes = _walk_and_instrument(
+        _result, instrumented, scopes = _walk_and_instrument(
             SRC_CLASS_TEMPLATE, tmp_path, "m_ct.cpp"
         )
         assert "Box" not in scopes and "get" not in scopes and "set" not in scopes
         lines = instrumented.splitlines()
         open_idx = next(i for i, l in enumerate(lines) if "class Box" in l)
         close_idx = next(i for i, l in enumerate(lines) if l.strip() == "};")
-        inside = [
-            l
-            for i, l in enumerate(lines)
-            if open_idx < i < close_idx and "__TRACE" in l
-        ]
+        inside = [l for i, l in enumerate(lines) if open_idx < i < close_idx and "__TRACE" in l]
         assert not inside  # skip-with-reason: no TRACE inside class-template definition
         assert '"main"' in instrumented
         code, err = _syntax_only(instrumented)
         assert code == 0, f"class-template not syntax-clean:\n{err}"
 
     def test_nested_loops(self, tmp_path):
-        result, instrumented, _ = _walk_and_instrument(
-            SRC_NESTED_LOOPS, tmp_path, "m_nl.cpp"
-        )
+        result, instrumented, _ = _walk_and_instrument(SRC_NESTED_LOOPS, tmp_path, "m_nl.cpp")
         iters = [
             p
             for p in result.injection_points

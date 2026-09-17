@@ -48,9 +48,7 @@ async def _run_payload(payload: dict) -> dict:
     if run_result.compile_error:
         resp = ExecuteResponse(stdout="", compile_error=run_result.compile_error)
         return jsonable_encoder(resp, by_alias=False)
-    events = await asyncio.to_thread(
-        parse_trace, run_result.trace_raw, compressed=req.compressed
-    )
+    events = await asyncio.to_thread(parse_trace, run_result.trace_raw, compressed=req.compressed)
     cfg_nodes, cfg_edges = await asyncio.to_thread(build_cfg, events)
     runtime_error: str | None = None
     if run_result.timed_out:
@@ -59,8 +57,7 @@ async def _run_payload(payload: dict) -> dict:
         runtime_error = run_result.stderr_clean
     elif not events and resolved.trace_call_count == 0:
         runtime_error = (
-            "No trace points were injected — check libclang parsing and "
-            "instrumentation rules"
+            "No trace points were injected — check libclang parsing and instrumentation rules"
         )
     resp = ExecuteResponse(
         stdout=run_result.stdout,

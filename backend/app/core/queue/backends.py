@@ -26,7 +26,7 @@ RESULT_TTL_SECONDS = 3600  # 1h
 
 try:  # Optional dependency — never crash when redis is missing.
     from redis import asyncio as aioredis  # type: ignore[import-not-found]
-except Exception:  # pragma: no cover - import-time fallback
+except Exception:  # noqa: BLE001 — optional dep fallback, pragma: no cover
     aioredis = None  # type: ignore[assignment]
 
 # Process-wide pooled async clients, one per Redis URL. redis.asyncio

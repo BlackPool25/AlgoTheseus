@@ -58,9 +58,7 @@ class TestExecuteRateLimit:
     async def test_429s_after_30_per_minute_with_retry_after(self):
         patches = _mocked_sandbox(None)
         with patches[0], patches[1], patches[2]:
-            async with AsyncClient(
-                transport=ASGITransport(app=app), base_url="http://test"
-            ) as ac:
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
                 statuses = []
                 retry_afters = []
                 for _ in range(35):
@@ -80,9 +78,7 @@ class TestExecuteRateLimit:
     async def test_health_never_rate_limited(self):
         patches = _mocked_sandbox(None)
         with patches[0], patches[1], patches[2]:
-            async with AsyncClient(
-                transport=ASGITransport(app=app), base_url="http://test"
-            ) as ac:
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
                 for _ in range(35):  # exhaust the /execute bucket for this IP
                     await ac.post(
                         "/execute",
@@ -100,9 +96,7 @@ class TestExecuteRateLimit:
         the 31st valid is the first 429 (limit checked AFTER validation)."""
         patches = _mocked_sandbox(None)
         with patches[0], patches[1], patches[2]:
-            async with AsyncClient(
-                transport=ASGITransport(app=app), base_url="http://test"
-            ) as ac:
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
                 for _ in range(5):
                     r = await ac.post(
                         "/execute",
@@ -134,9 +128,7 @@ class TestBatchRateLimit:
             patch("app.api.routes.execute.run_in_sandbox", return_value=OK_RUN),
             patch("app.api.routes.execute.instrument", return_value="int main(){}"),
         ):
-            async with AsyncClient(
-                transport=ASGITransport(app=app), base_url="http://test"
-            ) as ac:
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
                 statuses = []
                 for _ in range(7):
                     r = await ac.post(
@@ -155,9 +147,7 @@ class TestProxyAwareKey:
         direct client IP (direct bucket stays unexhausted)."""
         patches = _mocked_sandbox(None)
         with patches[0], patches[1], patches[2]:
-            async with AsyncClient(
-                transport=ASGITransport(app=app), base_url="http://test"
-            ) as ac:
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
                 for _ in range(30):
                     r = await ac.post(
                         "/execute",
@@ -180,9 +170,7 @@ class TestProxyAwareKey:
         monkeypatch.setenv("TRUSTED_PROXY_COUNT", "1")
         patches = _mocked_sandbox(None)
         with patches[0], patches[1], patches[2]:
-            async with AsyncClient(
-                transport=ASGITransport(app=app), base_url="http://test"
-            ) as ac:
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
                 for _ in range(30):  # exhaust the DIRECT bucket (no XFF)
                     r = await ac.post("/execute", json=VALID_BODY)
                     assert r.status_code == 200

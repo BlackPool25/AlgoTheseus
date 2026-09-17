@@ -48,17 +48,30 @@ def _instrument_compile_run(src: str) -> subprocess.CompletedProcess:
         shutil.copy(TRACER_H, tmp_path / "tracer.h")
         binary = tmp_path / "prog"
         compile_result = subprocess.run(
-            ["g++", "-O0", "-std=c++17", "-I", str(tmp_path),
-             "-o", str(binary), str(tmp_path / "prog.cpp")],
-            capture_output=True, text=True, timeout=60, check=False,
+            [
+                "g++",
+                "-O0",
+                "-std=c++17",
+                "-I",
+                str(tmp_path),
+                "-o",
+                str(binary),
+                str(tmp_path / "prog.cpp"),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=False,
         )
-        assert compile_result.returncode == 0, (
-            f"compile error:\n{compile_result.stderr}"
-        )
+        assert compile_result.returncode == 0, f"compile error:\n{compile_result.stderr}"
         # Binary path is temp-dir local; run inside the context before cleanup.
         # To return the result, run here and capture output.
         proc = subprocess.run(
-            [str(binary)], capture_output=True, text=True, timeout=10, check=False,
+            [str(binary)],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
         )
         # NOTE: binary is deleted with tmp dir; stash outputs on the result.
         proc.binary_stdout = proc.stdout  # type: ignore[attr-defined]
@@ -71,8 +84,7 @@ def test_nested_pair_instrumented_end_to_end():
     proc = _instrument_compile_run(_SRC)
     assert proc.returncode == 0, f"nonzero exit:\n{proc.stderr}"
     assert proc.stdout.strip() == "1:ab:8", f"bad stdout: {proc.stdout!r}"
-    raw = [ln[len("TRACE:"):] for ln in proc.stderr.splitlines()
-           if ln.startswith("TRACE:")]
+    raw = [ln[len("TRACE:") :] for ln in proc.stderr.splitlines() if ln.startswith("TRACE:")]
     assert raw, "no TRACE: lines produced"
     events = parse(raw)
     assert len(events) > 0, "parser produced zero events"

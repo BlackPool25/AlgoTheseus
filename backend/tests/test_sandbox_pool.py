@@ -16,13 +16,12 @@ from __future__ import annotations
 import asyncio
 from unittest.mock import patch
 
+import pytest
 from httpx import ASGITransport, AsyncClient
 
 import app.api.routes.execute as execute_mod
 from app.core.executor.docker_runner import RunResult
 from app.main import app
-
-import pytest
 
 
 @pytest.fixture(autouse=True)
@@ -107,9 +106,7 @@ class TestSandboxPool:
 
         mock_run.side_effect = slow_sandbox
 
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as ac:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
             responses = await asyncio.gather(
                 *[
                     ac.post(

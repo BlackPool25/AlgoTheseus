@@ -123,7 +123,7 @@ class TestCrossInstance:
         assert b.get("big") is None  # skipped L1 -> cross-instance MISS
 
     def test_keys_and_flags_stable(self):
-        assert TOOLCHAIN_FLAGS == "g++ -O0 -g -std=c++17"
+        assert TOOLCHAIN_FLAGS == "g++ -O0 -g -std=c++17 -pipe"
         assert source_key(CODE, {"t": 1}) == source_key(CODE, {"t": 1})
         assert result_key("i", "s", {"t": 1}) == result_key("i", "s", {"t": 1})
         assert source_key(CODE, {"t": 1}) != result_key(CODE, "s", {"t": 1})
@@ -150,23 +150,15 @@ class TestEndpointShared:
                 ),
             ):
                 mock_run.return_value = _ok_result()
-                execute_mod._cache = SharedCache(
-                    l2_dir=str(tmp_path / "a"), redis_client=fake
-                )
+                execute_mod._cache = SharedCache(l2_dir=str(tmp_path / "a"), redis_client=fake)
                 async with AsyncClient(
                     transport=ASGITransport(app=app), base_url="http://test"
                 ) as ac:
-                    r1 = await ac.post(
-                        "/execute", json={"code": CODE, "raw_stdin": "7\n"}
-                    )
+                    r1 = await ac.post("/execute", json={"code": CODE, "raw_stdin": "7\n"})
                     assert r1.headers.get("x-cache") == "MISS"
                     # Simulate a different instance: fresh disk dir, same L1.
-                    execute_mod._cache = SharedCache(
-                        l2_dir=str(tmp_path / "b"), redis_client=fake
-                    )
-                    r2 = await ac.post(
-                        "/execute", json={"code": CODE, "raw_stdin": "7\n"}
-                    )
+                    execute_mod._cache = SharedCache(l2_dir=str(tmp_path / "b"), redis_client=fake)
+                    r2 = await ac.post("/execute", json={"code": CODE, "raw_stdin": "7\n"})
                     assert r2.headers.get("x-cache") == "HIT", r2.headers
                     assert r1.json() == r2.json()  # byte-equal bodies
                     assert mock_run.await_count == 1
@@ -197,20 +189,14 @@ class TestEndpointShared:
                 ) as ac:
                     fake = FakeRedis()
                     fake.store[f"{L1_KEY_PREFIX}anything"] = b"{{{bad"
-                    execute_mod._cache = SharedCache(
-                        l2_dir=str(tmp_path / "c"), redis_client=fake
-                    )
-                    r = await ac.post(
-                        "/execute", json={"code": CODE, "raw_stdin": "7\n"}
-                    )
+                    execute_mod._cache = SharedCache(l2_dir=str(tmp_path / "c"), redis_client=fake)
+                    r = await ac.post("/execute", json={"code": CODE, "raw_stdin": "7\n"})
                     assert r.status_code == 200  # corrupt entry -> MISS, not 500
 
                     execute_mod._cache = SharedCache(
                         l2_dir=str(tmp_path / "d"), redis_client=BoomRedis()
                     )
-                    r = await ac.post(
-                        "/execute", json={"code": CODE, "raw_stdin": "7\n"}
-                    )
+                    r = await ac.post("/execute", json={"code": CODE, "raw_stdin": "7\n"})
                     assert r.status_code == 200  # redis down -> MISS, not 500
                     assert r.headers.get("x-cache") == "MISS"
         finally:

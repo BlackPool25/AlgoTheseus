@@ -129,9 +129,7 @@ def _apply_limits(as_bytes: int, uid: int, drop_privs: bool) -> None:
     ):
         try:
             resource.setrlimit(args[0], args[1])
-        except (
-            Exception
-        ):  # noqa: BLE001, S110 — limits are defense-in-depth, never fatal
+        except Exception:  # noqa: BLE001, S110 — best-effort rlimit, jail proceeds
             pass
 
 
@@ -211,40 +209,43 @@ def _read_capped(path: Path, cap: int) -> str:
         return ""
 
 
-def _run_subprocess_sync(cpp_source: str, stdin_data: str = "") -> RunResult:
-    """Blocking implementation — called via asyncio.to_thread."""
+def _compile_argv(cdir: Path) -> list[str]:
+    """Shared g++ argv (mirrors TOOLCHAIN_FLAGS). Single place for compile flags."""
+    return [
+        "g++",
+        "-O0",
+        "-g",
+        "-std=c++17",
+        "-pipe",
+        "-ftemplate-depth=100",
+        "-I",
+        str(cdir),
+        "-o",
+        str(cdir / "prog"),
+        str(cdir / "prog.cpp"),
+    ]
+
+
+def compile_source_sync(cpp_source: str) -> tuple[bytes | None, str | None, bool]:
+    """Compile once; return (binary_bytes, compile_error, timed_out).
+
+    Blocking — call via asyncio.to_thread. The temp compile dir is removed
+    afterwards; only the binary bytes leave. Exactly one of binary_bytes /
+    compile_error is set (timed_out implies compile_error).
+    """
     _JAIL_ROOT.mkdir(parents=True, exist_ok=True)
-    jail = _JAIL_ROOT / f"dsa_{uuid4().hex}"
-    jail.mkdir(parents=True, exist_ok=False)
-
+    cdir = _JAIL_ROOT / f"cc_{uuid4().hex}"
+    cdir.mkdir(parents=True, exist_ok=False)
     try:
-        (jail / "prog.cpp").write_text(cpp_source, encoding="utf-8")
-        (jail / "input.txt").write_text(stdin_data, encoding="utf-8")
-        (jail / "tracer.h").write_text(
-            _TRACER_H.read_text(encoding="utf-8"), encoding="utf-8"
-        )
-        # Sources read-only to the jailed child; dir stays writable for the
-        # tracer's fd-1 temp files (todo 10 requirement).
-        for name in ("prog.cpp", "input.txt", "tracer.h"):
-            (jail / name).chmod(0o444)
-
-        prog = jail / "prog"
-        compile_out, compile_err = jail / "cout.bin", jail / "cerr.bin"
+        (cdir / "prog.cpp").write_text(cpp_source, encoding="utf-8")
+        (cdir / "tracer.h").write_text(_TRACER_H.read_text(encoding="utf-8"), encoding="utf-8")
+        for name in ("prog.cpp", "tracer.h"):
+            (cdir / name).chmod(0o444)
+        compile_out, compile_err = cdir / "cout.bin", cdir / "cerr.bin"
         with _GXX_SPAWN_SEM:
             code, compile_timed_out = _run_guarded(
-                [
-                    "g++",
-                    "-O0",
-                    "-g",
-                    "-std=c++17",
-                    "-ftemplate-depth=100",
-                    "-I",
-                    str(jail),
-                    "-o",
-                    str(prog),
-                    str(jail / "prog.cpp"),
-                ],
-                cwd=jail,
+                _compile_argv(cdir),
+                cwd=cdir,
                 stdin_path=None,
                 stdout_path=compile_out,
                 stderr_path=compile_err,
@@ -255,11 +256,30 @@ def _run_subprocess_sync(cpp_source: str, stdin_data: str = "") -> RunResult:
             err = _read_capped(compile_err, _STDERR_CAP_BYTES)
             if compile_timed_out and not err:
                 err = f"g++ compile timed out after {EXECUTION_TIMEOUT_SECONDS}s"
-            return RunResult(
-                compile_error=err or "g++ failed with no output",
-                timed_out=compile_timed_out,
-            )
+            return None, err or "g++ failed with no output", compile_timed_out
+        try:
+            return (cdir / "prog").read_bytes(), None, False
+        except OSError as exc:
+            return None, f"compiled binary unreadable: {exc}", False
+    finally:
+        shutil.rmtree(cdir, ignore_errors=True)
 
+
+def run_binary_sync(binary_bytes: bytes, stdin_data: str = "") -> RunResult:
+    """Run a prebuilt binary in a fresh per-run jail (run phase only, no compile).
+
+    Blocking — call via asyncio.to_thread. Run-phase semantics match the old
+    combined path exactly: same rlimits, drop-privs, output caps, cleanup.
+    """
+    _JAIL_ROOT.mkdir(parents=True, exist_ok=True)
+    jail = _JAIL_ROOT / f"dsa_{uuid4().hex}"
+    jail.mkdir(parents=True, exist_ok=False)
+    try:
+        prog = jail / "prog"
+        prog.write_bytes(binary_bytes)
+        prog.chmod(0o755)
+        (jail / "input.txt").write_text(stdin_data, encoding="utf-8")
+        (jail / "input.txt").chmod(0o444)
         run_out, run_err = jail / "rout.bin", jail / "rerr.bin"
         exit_code, timed_out = _run_guarded(
             [str(prog)],
@@ -287,6 +307,17 @@ def _run_subprocess_sync(cpp_source: str, stdin_data: str = "") -> RunResult:
         )
     finally:
         shutil.rmtree(jail, ignore_errors=True)
+
+
+def _run_subprocess_sync(cpp_source: str, stdin_data: str = "") -> RunResult:
+    """Blocking implementation — called via asyncio.to_thread."""
+    binary, compile_error, timed_out = compile_source_sync(cpp_source)
+    if compile_error is not None or binary is None:
+        return RunResult(
+            compile_error=compile_error or "g++ failed with no output",
+            timed_out=timed_out,
+        )
+    return run_binary_sync(binary, stdin_data)
 
 
 async def run_in_subprocess(cpp_source: str, stdin_data: str = "") -> RunResult:

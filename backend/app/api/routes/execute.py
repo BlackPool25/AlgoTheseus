@@ -33,7 +33,8 @@ Streaming (compressed=true):
 
 Batch endpoint:
   POST /execute-batch — runs multiple test cases against the same code
-  in parallel. Instruments once, then fans out to one sandbox per test.
+  in parallel. Instruments once, compiles once, then fans out run-only
+  to one sandbox per test.
   Concurrency is capped by $MAX_BATCH_SANDBOXES (default 4) for fan-out;
   pool saturation fails each case fast (runtime_error="saturated, retry").
 """
@@ -135,9 +136,7 @@ def sandbox_max() -> int:
     try:
         return max(1, int(os.getenv("SANDBOX_MAX_CONCURRENT", str(GLOBAL_SANDBOX_MAX))))
     except ValueError:
-        logger.warning(
-            "Bad SANDBOX_MAX_CONCURRENT — falling back to %d", GLOBAL_SANDBOX_MAX
-        )
+        logger.warning("Bad SANDBOX_MAX_CONCURRENT — falling back to %d", GLOBAL_SANDBOX_MAX)
         return GLOBAL_SANDBOX_MAX
 
 
@@ -174,12 +173,9 @@ def reset_sandbox_pool() -> None:
 SATURATED_DETAIL = "sandbox saturated, retry"
 SATURATED_RETRY_AFTER = "5"
 BATCH_SATURATED_ERROR = "saturated, retry"
-BATCH_EMPTY_STDIN_ERROR = (
-    "empty input: program reads stdin (cin/scanf) but this case has none"
-)
+BATCH_EMPTY_STDIN_ERROR = "empty input: program reads stdin (cin/scanf) but this case has none"
 INPUT_REQUIRED_DETAIL = (
-    "No stdin provided but the program reads input (cin/scanf) — "
-    "add input and run again"
+    "No stdin provided but the program reads input (cin/scanf) — add input and run again"
 )
 
 # libclang AST stdin-read detection. Mirrors the frontend readsStdin
@@ -241,10 +237,11 @@ def _reads_stdin(code: str) -> bool:
     error, not a missing-stdin 422, speaks for broken code).
     """
     try:
+        import clang.cindex as clang
+
         from app.core.instrumenter import _libclang_compat
         from app.core.instrumenter.diagnostics import parse_with_diagnostics
-        import clang.cindex as clang
-    except Exception:
+    except Exception:  # noqa: BLE001 — stdin guard fail-open by design
         logger.warning("libclang unavailable — stdin guard fail-open")
         return False
     try:
@@ -258,7 +255,7 @@ def _reads_stdin(code: str) -> bool:
             )
             if k is not None
         )
-    except Exception:
+    except Exception:  # noqa: BLE001 — libclang setup fail-open by design
         logger.warning("libclang setup failed — stdin guard fail-open")
         return False
     with tempfile.NamedTemporaryFile(
@@ -268,10 +265,8 @@ def _reads_stdin(code: str) -> bool:
         path = tmp.name
     try:
         try:
-            tu = parse_with_diagnostics(
-                index, path, _libclang_compat.default_extra_args()
-            )
-        except Exception:
+            tu = parse_with_diagnostics(index, path, _libclang_compat.default_extra_args())
+        except Exception:  # noqa: BLE001 — unparseable input fail-open
             return False  # unparseable → fail open
         user_path = os.path.abspath(path)
         stack = [tu.cursor]
@@ -280,24 +275,16 @@ def _reads_stdin(code: str) -> bool:
             if cur is not tu.cursor:
                 try:
                     loc = cur.location
-                    if (
-                        loc.file is not None
-                        and os.path.abspath(loc.file.name) != user_path
-                    ):
+                    if loc.file is not None and os.path.abspath(loc.file.name) != user_path:
                         continue  # header noise — prune the subtree
                 except (AttributeError, TypeError, RuntimeError, ValueError, OSError):
                     pass
             kind = _ast_kind_name(cur)
-            if (
-                kind in ("CALL_EXPR", "CXX_OPERATOR_CALL_EXPR")
-                and cur.kind in call_kinds
-            ):
+            if kind in ("CALL_EXPR", "CXX_OPERATOR_CALL_EXPR") and cur.kind in call_kinds:
                 callee = _ast_callee_name(cur)
                 if callee in _STDIN_PLAIN_CALLS:
                     return True
-                if callee in ("operator>>", "getline") and _ast_subtree_refs(
-                    cur, "cin"
-                ):
+                if callee in ("operator>>", "getline") and _ast_subtree_refs(cur, "cin"):
                     return True
             try:
                 stack.extend(cur.get_children())
@@ -323,7 +310,7 @@ def _try_acquire_slot(sem: asyncio.Semaphore) -> bool:
     queued waiters also fails: jumping the FIFO queue would starve waiters.
     """
     try:
-        value = sem._value  # noqa: SLF001 — asyncio offers no public try_acquire
+        value = sem._value
     except AttributeError:
         return not sem.locked()
     if value is not None and value <= 0:
@@ -332,7 +319,7 @@ def _try_acquire_slot(sem: asyncio.Semaphore) -> bool:
     if waiters is not None and len(waiters) > 0:
         return False
     if value is not None:
-        sem._value = value - 1  # noqa: SLF001 — pairs with sem.release() below
+        sem._value = value - 1
         return True
     return not sem.locked()
 
@@ -438,8 +425,7 @@ STAMPEDE_LOCK_TTL_MS = 15000
 STAMPEDE_POLL_TIMEOUT = 15.0
 STAMPEDE_POLL_INTERVAL = 0.1
 _STAMPEDE_RELEASE_LUA = (
-    "if redis.call('get',KEYS[1])==ARGV[1] then "
-    "return redis.call('del',KEYS[1]) else return 0 end"
+    "if redis.call('get',KEYS[1])==ARGV[1] then return redis.call('del',KEYS[1]) else return 0 end"
 )
 
 
@@ -466,7 +452,7 @@ def _stampede_try_acquire(cache: SharedCache, rkey: str) -> tuple[str | None, bo
     token = secrets.token_hex(16)
     try:
         held = l1.set(_stampede_lock_key(rkey), token, nx=True, px=STAMPEDE_LOCK_TTL_MS)
-    except Exception:
+    except Exception:  # noqa: BLE001 — Redis error fail-open to direct run
         logger.warning("Stampede lock acquire failed — running without lock")
         return None, False
     if held:
@@ -486,18 +472,18 @@ def _stampede_release(cache: SharedCache, rkey: str, token: str | None) -> None:
         try:
             l1.eval(_STAMPEDE_RELEASE_LUA, 1, lock_key, token)
             return
-        except Exception:
+        except Exception:  # noqa: BLE001, S110 — no-EVAL client, fallback below
             pass  # client without EVAL (dict fakes) → compare-del fallback
         try:
             raw = l1.get(lock_key)
-        except Exception:
+        except Exception:  # noqa: BLE001 — cache read fail-open
             return
         if raw == token or raw == token.encode("utf-8"):
             try:
                 l1.delete(lock_key)
-            except Exception:
+            except Exception:  # noqa: BLE001, S110 — best-effort, TTL covers
                 pass
-    except Exception:
+    except Exception:  # noqa: BLE001 — release never raises, TTL covers
         logger.warning("Stampede lock release failed — TTL covers it")
 
 
@@ -641,9 +627,7 @@ async def _resolve(req: ExecuteRequest, kind: str) -> _Resolved:
     else:
         warnings = []
         try:
-            instrumented = await asyncio.to_thread(
-                instrument, req.code, None, warnings
-            )
+            instrumented = await asyncio.to_thread(instrument, req.code, None, warnings)
         except (RuntimeError, ValueError, OSError) as e:
             return _Resolved(cleaned_stdin=cleaned_stdin, instrumentation_error=str(e))
         await asyncio.to_thread(
@@ -745,9 +729,7 @@ async def _stream_resolved(resolved: _Resolved) -> AsyncGenerator[bytes, None]:
 
     # Compile error — yield early
     if run_result.compile_error:
-        payload = json.dumps(
-            {"type": "error", "compile_error": run_result.compile_error}
-        )
+        payload = json.dumps({"type": "error", "compile_error": run_result.compile_error})
         yield (payload + "\n").encode()
         return
 
@@ -779,7 +761,9 @@ async def _stream_resolved(resolved: _Resolved) -> AsyncGenerator[bytes, None]:
     elif run_result.exit_code != 0 and run_result.stderr_clean:
         runtime_error = run_result.stderr_clean
     elif not events and resolved.trace_call_count == 0:
-        runtime_error = "No trace points were injected — check libclang parsing and instrumentation rules"
+        runtime_error = (
+            "No trace points were injected — check libclang parsing and instrumentation rules"
+        )
 
     # ── Yield CFG as final NDJSON line ────────────────────────────────────────
     cfg_payload = json.dumps(
@@ -852,9 +836,7 @@ async def execute(
     # ── Non-streaming path (existing behaviour) ──────────────────────────────
 
     if resolved.input_error is not None:
-        raise HTTPException(
-            status_code=422, detail=f"Missing stdin: {resolved.input_error}"
-        )
+        raise HTTPException(status_code=422, detail=f"Missing stdin: {resolved.input_error}")
     if resolved.instrumentation_error is not None:
         logger.exception("Instrumentation failed")
         raise HTTPException(
@@ -863,9 +845,7 @@ async def execute(
         )
     if resolved.sandbox_error is not None:
         logger.exception("Sandbox execution failed")
-        raise HTTPException(
-            status_code=500, detail=f"Sandbox error: {resolved.sandbox_error}"
-        )
+        raise HTTPException(status_code=500, detail=f"Sandbox error: {resolved.sandbox_error}")
 
     assert resolved.run_result is not None
     run_result = resolved.run_result
@@ -891,9 +871,7 @@ async def execute(
 
     # Parse trace (adaptive stdout granularity from todo 10 applies inside
     # the parser when compressed=True; JSON default keeps full granularity)
-    events = await asyncio.to_thread(
-        parse_trace, run_result.trace_raw, compressed=req.compressed
-    )
+    events = await asyncio.to_thread(parse_trace, run_result.trace_raw, compressed=req.compressed)
 
     try:
         Path("/tmp/dsa_last_trace_raw.txt").write_text(
@@ -912,7 +890,9 @@ async def execute(
     elif run_result.exit_code != 0 and run_result.stderr_clean:
         runtime_error = run_result.stderr_clean
     elif not events and resolved.trace_call_count == 0:
-        runtime_error = "No trace points were injected — check libclang parsing and instrumentation rules"
+        runtime_error = (
+            "No trace points were injected — check libclang parsing and instrumentation rules"
+        )
 
     return ORJSONResponse(
         content=jsonable_encoder(
@@ -946,9 +926,7 @@ def _batch_fanout_limit() -> int:
         return 4
 
 
-@batch_router.post(
-    "", response_model=list[ExecuteBatchResponseItem], response_model_by_alias=False
-)
+@batch_router.post("", response_model=list[ExecuteBatchResponseItem], response_model_by_alias=False)
 @limiter.limit(EXECUTE_BATCH_LIMIT)
 async def execute_batch(
     request: Request, response: Response, req: ExecuteBatchRequest
@@ -999,6 +977,33 @@ async def execute_batch(
     if trace_call_count == 0:
         logger.warning("Instrumentation produced zero trace calls")
 
+    # ── Compile once (subprocess mode): one g++ for the whole batch ─────────
+    # Per-case runs below reuse these bytes (run phase only). Docker mode has
+    # no host-side compile — binary stays None and each case runs full
+    # compile+run exactly as before.
+    binary: bytes | None = None
+    if os.environ.get("SANDBOX_MODE", "docker").strip().lower() == "subprocess":
+        try:
+            binary, shared_compile_error, _ = await _compile_shared_guarded(instrumented)
+        except SandboxSaturatedError:
+            return [
+                ExecuteBatchResponseItem(
+                    test_id=test_id,
+                    stdout="",
+                    runtime_error=BATCH_SATURATED_ERROR,
+                )
+                for test_id, _ in test_inputs
+            ]
+        if shared_compile_error is not None:
+            return [
+                ExecuteBatchResponseItem(
+                    test_id=test_id,
+                    stdout="",
+                    compile_error=shared_compile_error,
+                )
+                for test_id, _ in test_inputs
+            ]
+
     # ── Fan-out cap: at most N sandboxes concurrently, remainder queue ───────
     semaphore = asyncio.Semaphore(_batch_fanout_limit())
     cache = get_cache()
@@ -1008,9 +1013,7 @@ async def execute_batch(
     async def _run_one(test_id: str, stdin_data: str) -> ExecuteBatchResponseItem:
         """Run the full pipeline for a single test case."""
         async with semaphore:
-            if not stdin_data.strip() and await asyncio.to_thread(
-                _reads_stdin, req.code
-            ):
+            if not stdin_data.strip() and await asyncio.to_thread(_reads_stdin, req.code):
                 return ExecuteBatchResponseItem(
                     test_id=test_id,
                     stdout="",
@@ -1025,7 +1028,7 @@ async def execute_batch(
 
                 async def _run_and_store() -> RunResult:
                     run_result = await asyncio.wait_for(
-                        _run_sandbox_guarded(instrumented, stdin_data),
+                        _run_binary_guarded(instrumented, binary, stdin_data),
                         timeout=_BATCH_PER_CASE_TIMEOUT,
                     )
                     if run_result.compile_error is None:
@@ -1036,9 +1039,7 @@ async def execute_batch(
                         )
                     return run_result
 
-                run_result, _hit = await _sandbox_with_stampede_lock(
-                    cache, key, _run_and_store
-                )
+                run_result, _hit = await _sandbox_with_stampede_lock(cache, key, _run_and_store)
                 return run_result
 
             try:
@@ -1050,9 +1051,7 @@ async def execute_batch(
                     runtime_error=BATCH_SATURATED_ERROR,
                 )
             except TimeoutError:
-                logger.warning(
-                    "Test case %s timed out after %ds", test_id, _BATCH_PER_CASE_TIMEOUT
-                )
+                logger.warning("Test case %s timed out after %ds", test_id, _BATCH_PER_CASE_TIMEOUT)
                 return ExecuteBatchResponseItem(
                     test_id=test_id,
                     stdout="",
@@ -1086,7 +1085,9 @@ async def execute_batch(
         elif run_result.exit_code != 0 and run_result.stderr_clean:
             runtime_error = run_result.stderr_clean
         elif not events and trace_call_count == 0:
-            runtime_error = "No trace points were injected — check libclang parsing and instrumentation rules"
+            runtime_error = (
+                "No trace points were injected — check libclang parsing and instrumentation rules"
+            )
 
         return ExecuteBatchResponseItem(
             test_id=test_id,

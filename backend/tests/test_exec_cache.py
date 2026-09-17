@@ -168,9 +168,7 @@ class TestXCacheHeader:
         mock_run.side_effect = slow_sandbox
         payload = {"code": CODE, "raw_stdin": "7\n"}
 
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as ac:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
             t0 = time.perf_counter()
             r1 = await ac.post("/execute", json=payload)
             t1 = time.perf_counter()
@@ -200,9 +198,7 @@ class TestXCacheHeader:
         mock_instrument.return_value = '#include "tracer.h"\nint main() {}'
         mock_run.return_value = _ok_result()
 
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as ac:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
             r1 = await ac.post("/execute", json={"code": CODE, "raw_stdin": "7\n"})
             assert r1.headers.get("x-cache") == "MISS"
             # Streaming path parses with compressed=True → different flags → MISS.
@@ -226,9 +222,7 @@ class TestXCacheHeader:
         mock_instrument.return_value = '#include "tracer.h"\nint main() {}'
         mock_run.return_value = _ok_result()
 
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as ac:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
             r1 = await ac.post(
                 "/execute", json={"code": CODE, "raw_stdin": "7\n", "compressed": True}
             )
@@ -266,9 +260,7 @@ class TestXCacheHeader:
             mock_instrument.return_value = '#include "tracer.h"\nint main() {}'
             mock_run.return_value = _ok_result()
 
-            async with AsyncClient(
-                transport=ASGITransport(app=app), base_url="http://test"
-            ) as ac:
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
                 r = await ac.post("/execute", json={"code": CODE, "raw_stdin": "7\n"})
             assert r.status_code == 200
             assert r.headers.get("x-cache") == "MISS"
@@ -346,10 +338,7 @@ class TestTruncateEnforcement:
         """Oversized loop fixture: lines beyond MAX_TRACE_LINES → truncated=True."""
         monkeypatch.setattr(docker_runner, "MAX_TRACE_LINES", 10)
         raw = "\n".join(
-            [
-                f'TRACE:{{"t":"state","l":7,"f":"main","d":1,"v":{{"i":{i}}}}}'
-                for i in range(25)
-            ]
+            [f'TRACE:{{"t":"state","l":7,"f":"main","d":1,"v":{{"i":{i}}}}}' for i in range(25)]
         )
         trace, clean, truncated = docker_runner._split_stderr(raw)
         assert len(trace) == 10
@@ -378,9 +367,7 @@ class TestTruncateEnforcement:
             truncated=True,
         )
 
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as ac:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
             response = await ac.post(
                 "/execute",
                 json={

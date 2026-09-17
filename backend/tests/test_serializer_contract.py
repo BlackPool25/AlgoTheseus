@@ -12,7 +12,7 @@ from tests.test_serializers import TRACER_H, _compile_and_run
 
 
 def test_const_array_pointer_elements_and_cstrings() -> None:
-    source = r'''
+    source = r"""
 #include "tracer.h"
 struct Node { int value; };
 int main() {
@@ -24,7 +24,7 @@ int main() {
     std::cout << "{" << __vars_build("values", values, "children", children,
         "text", text, "chars", mutable_text, "letters", letters) << "}";
 }
-'''
+"""
     assert json.loads(_compile_and_run(source)) == {
         "values": [1, 2, 3, 4, 5],
         "children": [None] * 26,
@@ -35,7 +35,7 @@ int main() {
 
 
 def test_array_elements_use_adl_and_multidimensional_arrays() -> None:
-    source = r'''
+    source = r"""
 #include "tracer.h"
 struct Node { int value; };
 std::string __ser(Node* p) {
@@ -49,7 +49,7 @@ int main() {
     std::cout << "{" << __vars_build("children", children,
         "matrix", matrix, "strings", strings) << "}";
 }
-'''
+"""
     assert json.loads(_compile_and_run(source)) == {
         "children": [{"value": 7}] + [None] * 25,
         "matrix": [[1, 2], [3, 4]],
@@ -58,21 +58,21 @@ int main() {
 
 
 def test_jagged_graph_shape_survives_parser() -> None:
-    source = r'''
+    source = r"""
 #include "tracer.h"
 int main() {
     std::vector<std::vector<int>> rows{{}, {1}};
     std::cout << "{" << __vars_build("rows", rows) << "}";
 }
-'''
+"""
     wire = _compile_and_run(source)
-    events = parser.parse(['{"t":"state","l":1,"f":"main","d":0,"v":' + wire + '}'])
+    events = parser.parse(['{"t":"state","l":1,"f":"main","d":0,"v":' + wire + "}"])
     assert len(events) == 1
     assert events[0].vars == {"rows": {"_type": "graph", "adj": [[], [1]]}}
 
 
 def test_recursive_map_vector_lookup() -> None:
-    source = r'''
+    source = r"""
 #include "tracer.h"
 int main() {
     std::vector<std::map<std::string, int>> vm{{{"a",1}}};
@@ -86,7 +86,7 @@ int main() {
     std::cout << "{" << __vars_build("vm", vm, "mv", mv,
         "nested", nested, "unordered", unordered) << "}";
 }
-'''
+"""
     expected = {
         "vm": [{"a": 1}],
         "mv": {"b": [2, 3]},
@@ -95,15 +95,16 @@ int main() {
     }
     wire = _compile_and_run(source)
     assert json.loads(wire) == expected
-    events = parser.parse(['{"t":"state","l":1,"f":"main","d":0,"v":' + wire + '}'])
+    events = parser.parse(['{"t":"state","l":1,"f":"main","d":0,"v":' + wire + "}"])
     assert len(events) == 1
     assert events[0].vars == expected
 
 
 def test_scalar_edge_exact_trace_bytes(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture,
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
-    source = r'''
+    source = r"""
 #include "tracer.h"
 #include <climits>
 #include <limits>
@@ -130,26 +131,54 @@ int main() {
     __TRACE_STATE(15, "main", 0, "v", std::numeric_limits<float>::infinity());
     __TRACE_STATE(16, "main", 0, "v", -0.0);
 }
-'''
+"""
     binary = tmp_path / "edges"
     compiled = subprocess.run(
-        ["g++", "-std=c++17", "-fsigned-char", "-I", str(TRACER_H.parent),
-         "-x", "c++", "-", "-o", str(binary)],
-        input=source, capture_output=True, text=True, check=False, timeout=30,
+        [
+            "g++",
+            "-std=c++17",
+            "-fsigned-char",
+            "-I",
+            str(TRACER_H.parent),
+            "-x",
+            "c++",
+            "-",
+            "-o",
+            str(binary),
+        ],
+        input=source,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=30,
     )
     assert compiled.returncode == 0, compiled.stderr
     result = subprocess.run([str(binary)], capture_output=True, check=False, timeout=10)
     assert result.returncode == 0, result.stderr
     values = [
-        b'-9223372036854775808', b'9223372036854775807',
-        b'1.7976931348623157e+308', b'-1.7976931348623157e+308',
-        b'"Infinity"', b'"-Infinity"', b'"NaN"', b'"\\u0080"', b'"\\u007f"',
-        b'"\\u0000"', b'true', b'false', b'4.9406564584124654e-324',
-        b'"\\r\\b\\f\\u0000\\u0001"', b'"Infinity"', b'-0',
+        b"-9223372036854775808",
+        b"9223372036854775807",
+        b"1.7976931348623157e+308",
+        b"-1.7976931348623157e+308",
+        b'"Infinity"',
+        b'"-Infinity"',
+        b'"NaN"',
+        b'"\\u0080"',
+        b'"\\u007f"',
+        b'"\\u0000"',
+        b"true",
+        b"false",
+        b"4.9406564584124654e-324",
+        b'"\\r\\b\\f\\u0000\\u0001"',
+        b'"Infinity"',
+        b"-0",
     ]
-    expected = b''.join(
-        b'TRACE:{"t":"state","l":' + str(i).encode()
-        + b',"f":"main","d":0,"v":{"v":' + value + b'},"o":""}\n'
+    expected = b"".join(
+        b'TRACE:{"t":"state","l":'
+        + str(i).encode()
+        + b',"f":"main","d":0,"v":{"v":'
+        + value
+        + b'},"o":""}\n'
         for i, value in enumerate(values, 1)
     )
     assert result.stderr == expected

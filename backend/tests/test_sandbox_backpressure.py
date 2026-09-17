@@ -13,13 +13,12 @@ import asyncio
 import time
 from unittest.mock import patch
 
+import pytest
 from httpx import ASGITransport, AsyncClient
 
 import app.api.routes.execute as execute_mod
 from app.core.executor.docker_runner import RunResult
 from app.main import app
-
-import pytest
 
 
 @pytest.fixture(autouse=True)
@@ -127,14 +126,10 @@ class TestBackpressure:
             )
             dt_ms = (time.perf_counter() - t0) * 1000
 
-            assert (
-                r.status_code == 429
-            ), f"want 429, got {r.status_code}: {r.text[:200]}"
+            assert r.status_code == 429, f"want 429, got {r.status_code}: {r.text[:200]}"
             assert r.json().get("detail") == "sandbox saturated, retry"
             assert r.headers.get("retry-after") == "5", dict(r.headers)
-            assert (
-                dt_ms < 50
-            ), f"N+1th took {dt_ms:.1f}ms — it queued instead of failing fast"
+            assert dt_ms < 50, f"N+1th took {dt_ms:.1f}ms — it queued instead of failing fast"
 
             release.set()  # let holders finish
             holder_resps = await asyncio.gather(*holders)
@@ -197,9 +192,5 @@ class TestBackpressure:
     async def test_jobs_unaffected_returns_202(self):
         """POST /jobs never touches the pool → 202 even with no sandbox mocks."""
         async with _client() as ac:
-            r = await ac.post(
-                "/jobs", json={"code": "int main(){return 0;}", "raw_stdin": "1\n"}
-            )
-            assert (
-                r.status_code == 202
-            ), f"want 202, got {r.status_code}: {r.text[:200]}"
+            r = await ac.post("/jobs", json={"code": "int main(){return 0;}", "raw_stdin": "1\n"})
+            assert r.status_code == 202, f"want 202, got {r.status_code}: {r.text[:200]}"

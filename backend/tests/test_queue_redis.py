@@ -36,11 +36,11 @@ async def _ping(aioredis) -> None:  # type: ignore[no-untyped-def]
 def _redis_available():
     try:
         import redis.asyncio as aioredis
-    except Exception:
+    except Exception:  # noqa: BLE001 — any import failure means skip
         pytest.skip("redis package not installed")
     try:
         asyncio.run(_ping(aioredis))
-    except Exception:
+    except Exception:  # noqa: BLE001 — unreachable Redis means skip
         pytest.skip("test Redis unreachable at localhost:6399")
 
 

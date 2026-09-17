@@ -1,9 +1,3 @@
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="resources/AlgoTheseus.png">
-    <img src="resources/AlgoTheseus.png" alt="AlgoTheseus" width="720"/>
-  </picture>
-</p>
 
 <h1 align="center">AlgoTheseus</h1>
 

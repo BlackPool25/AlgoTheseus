@@ -12,7 +12,7 @@
 </p>
 
 <p align="center">
-  <strong>Live site:</strong> <a href="https://www.example.com">https://www.example.com</a>
+  <strong>Live site:</strong> <a href="https://www.example.com">https://www.example.com</a> <!-- TODO(owner-url): placeholder stays per Key Decisions until the owner supplies the real deployment URL -->
 </p>
 
 <p align="center">
@@ -21,18 +21,19 @@
   <a href="#usage">Usage</a> •
   <a href="#architecture">Architecture</a> •
   <a href="#api">API</a> •
-  <a href="#development">Development</a>
+  <a href="#development">Development</a> •
+  <a href="#contributing">Contributing</a> •
+  <a href="SECURITY.md">Security</a> •
+  <a href="SUPPORT.md">Support</a> •
+  <a href="CHANGELOG.md">Changelog</a>
 </p>
 
 <!-- Badges -->
 <p align="center">
-  <a href="https://www.python.org/"><img src="https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white&style=flat-square"></a>
-  <a href="https://fastapi.tiangolo.com/"><img src="https://img.shields.io/badge/FastAPI-0.115-009688?logo=fastapi&logoColor=white&style=flat-square"></a>
-  <a href="https://react.dev/"><img src="https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=white&style=flat-square"></a>
-  <a href="https://www.docker.com/"><img src="https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white&style=flat-square"></a>
-  <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white&style=flat-square"></a>
-  <br>
+  <a href="https://github.com/BlackPool25/AlgoTheseus/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/BlackPool25/AlgoTheseus/ci.yml?style=flat-square&logo=github&logoColor=white"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green?style=flat-square"></a>
+  <a href="https://www.python.org/"><img src="https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white&style=flat-square"></a>
+  <a href="https://www.docker.com/"><img src="https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white&style=flat-square"></a>
   <img src="https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square">
 </p>
 

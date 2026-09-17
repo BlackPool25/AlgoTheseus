@@ -22,6 +22,7 @@ import { GraphAlgorithmVisual } from "./GraphAlgorithmVisual";
 import { DPTableVisual } from "./DPTableVisual";
 import { GridVisual } from "./GridVisual";
 import { TrieVisual } from "./TrieVisual";
+import { DSUVisual } from "./DSUVisual";
 import { LinkedListVisual } from "./LinkedListVisual";
 import {
   MultiStructureAdapter,
@@ -53,6 +54,7 @@ export const VISUAL_REGISTRY: Record<
   dp_table: DPTableVisual,
   grid: GridVisual,
   trie: TrieVisual,
+  dsu: DSUVisual,
   linked_list: LinkedListVisual,
   multi_structure: MultiStructureAdapter,
   struct: PrimitiveFallback,

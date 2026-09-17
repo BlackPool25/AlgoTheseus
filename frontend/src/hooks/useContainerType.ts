@@ -24,12 +24,24 @@ export type ContainerKind =
   | "struct"
   | "linked_list"
   | "trie"
+  | "dsu"
   | "multi_structure"
   | "primitive"
   | "unknown";
 
-export function useContainerType(value: unknown): ContainerKind {
-  if (value === null || value === undefined) return "primitive";
+function isParentArrayShape(p: unknown): p is number[] {
+  if (!Array.isArray(p) || p.length === 0) return false;
+  return p.every(
+    (v) => typeof v === "number" && Number.isInteger(v) && v >= 0 && v < p.length,
+  );
+}
+
+function isRankArrayShape(r: unknown, n: number): r is number[] {
+  if (!Array.isArray(r) || r.length !== n) return false;
+  return r.every((v) => typeof v === "number" && Number.isInteger(v) && v >= 0);
+}
+
+export function useContainerType(value: unknown): ContainerKind {  if (value === null || value === undefined) return "primitive";
   if (typeof value !== "object") return "primitive";
 
   if (Array.isArray(value)) {
@@ -51,7 +63,16 @@ export function useContainerType(value: unknown): ContainerKind {
     if (obj._type === "dp_table") return "dp_table";
     if (obj._type === "graph") return "graph";
     if (obj._type === "trie") return "trie";
+    if (obj._type === "dsu") return "dsu";
     if (obj._type === "multi_structure") return "multi_structure";
+  }
+
+  // DSU (union-find) via frontend parent-array detection fallback.
+  // Backend serializes DSU through the generic struct path as
+  // {"$id", "$addr", "p": [...], "r": [...]} (no _type emitter —
+  // deliberate: avoids touching tracer.h/serializer_gen codegen).
+  if (isParentArrayShape(obj.p) && isRankArrayShape(obj.r, obj.p.length)) {
+    return "dsu";
   }
 
   // Stack: { top, items } — items ordered top-first

@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Community health files: Code of Conduct, Security policy, Support, Citation.
+- GitHub templates: issue forms, PR template, CODEOWNERS, dependabot.
+- CI pipeline: lint, pytest, web, link checks.
+- README: badges, quickstart, configuration table, troubleshooting index.
+- Docs consolidation: ARCHITECTURE, API, SELF-HOSTING, Troubleshooting, docs index.
+- Contributor bootstrap: `scripts/setup.sh` with preflight and smoke checks.
+
 ### Changed
 
 ### Fixed

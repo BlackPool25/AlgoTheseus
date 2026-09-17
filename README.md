@@ -196,6 +196,8 @@ Result:  ✓ PASS  |  ✗ FAIL (side-by-side diff)
 
 ## Architecture
 
+Full detail → [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (mermaid source of truth).
+
 ```mermaid
 flowchart TB
     subgraph Frontend ["Frontend (React 19 + Vite)"]

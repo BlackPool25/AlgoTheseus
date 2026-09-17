@@ -348,6 +348,161 @@ def _is_braceless_then_body(point_line: int, lines: list[str]) -> bool:
     return "{" not in prev and _IF_HEADER_RE.match(prev) is not None
 
 
+_LOOP_KW_RE = re.compile(r"\b(for|while)\s*\(")
+
+
+def _sanitize_for_scan(line: str) -> str:
+    """Strip // comments and blank out string/char literals, columns intact."""
+    code = line.split("//")[0]
+    code = _DQ_STRING_RE.sub(lambda m: " " * len(m.group(0)), code)
+    return _SQ_STRING_RE.sub(lambda m: " " * len(m.group(0)), code)
+
+
+def _match_paren(s: str, open_idx: int) -> int:
+    """Index of the paren closing s[open_idx] == '('; -1 when unbalanced."""
+    depth = 0
+    for k in range(open_idx, len(s)):
+        if s[k] == "(":
+            depth += 1
+        elif s[k] == ")":
+            depth -= 1
+            if depth == 0:
+                return k
+    return -1
+
+
+def _loop_governed_if(point_line: int, lines: list[str]) -> tuple[str, int, int] | None:
+    """Detect an `if` that is the direct braceless body of a for/while loop.
+
+    A before-placement on such a line lands outside the loop scope, so a
+    condition naming a for-init variable fails to compile (`'i' was not
+    declared in this scope` — Bug-C, topoSort preset). Returns
+    ("same", line_idx0, header_close_col) when `for (...)/while (...)` and
+    the `if` share the line (innermost loop wins), ("split", hdr_idx0, -1)
+    when the previous non-blank line is a bare loop header, else None.
+    """
+    if point_line < 1 or point_line > len(lines):
+        return None
+    here = _sanitize_for_scan(lines[point_line - 1])
+    best: tuple[str, int, int] | None = None
+    for m in _LOOP_KW_RE.finditer(here):
+        close = _match_paren(here, m.end() - 1)
+        if close < 0:
+            continue
+        if re.match(r"\s*if\s*\(", here[close + 1 :]):
+            best = ("same", point_line - 1, close)
+    if best is not None:
+        return best
+    j = point_line - 2
+    while j >= 0 and not lines[j].strip():
+        j -= 1
+    if j < 0:
+        return None
+    prev = _sanitize_for_scan(lines[j])
+    if "{" in prev:
+        return None
+    if re.match(r"\s*(for|while)\s*\(.*\)\s*$", prev) is None:
+        return None
+    if _IF_HEADER_RE.match(lines[point_line - 1].strip()) is None:
+        return None
+    return ("split", j, -1)
+
+
+def _loop_body_stmt_end(start_line: int, lines: list[str]) -> int | None:
+    """Last line of the (else-absorbing) statement starting at start_line.
+
+    None past the safety bound — the caller then keeps the legacy path.
+    """
+    n = len(lines)
+
+    def scan(fr: int, budget: int) -> int | None:
+        depth = 0
+        k = fr
+        while k <= n and budget > 0:
+            code = _sanitize_for_scan(lines[k - 1])
+            for ch in code:
+                if ch in "([{":
+                    depth += 1
+                elif ch in ")]}":
+                    depth -= 1
+            s = code.strip()
+            if depth <= 0 and s.endswith((";", "}")):
+                j = k
+                while True:
+                    nxt = j + 1
+                    while nxt <= n and not lines[nxt - 1].strip():
+                        nxt += 1
+                    if nxt <= n and re.match(r"else\b", lines[nxt - 1].strip()):
+                        e = scan(nxt, budget - (nxt - k))
+                        if e is None:
+                            return None
+                        j = e
+                        continue
+                    return j
+            k += 1
+            budget -= 1
+        return None
+
+    return scan(start_line, 100)
+
+
+def _wrap_loop_governed_if(point: InjectionPoint, lines: list[str]) -> bool:
+    """Brace-wrap a loop-governed braceless if with the BRANCH probe inside.
+
+    Turns `for (...) if (c) body;` into `for (...) { PROBE; if (c) body; }`
+    (same-line), or appends `{` to a bare loop header, prepends the probe to
+    the if line, and closes after the if/else chain (split-line). Line count
+    never changes, so other line-keyed insertions stay valid. Legacy
+    duplicate-evaluation on purpose: a hoisted temp decl before the loop
+    header would escape the scope just the same. True when wrapped (caller
+    emits nothing further), False to keep the legacy path.
+    """
+    span = _loop_governed_if(point.line, lines)
+    if span is None:
+        return False
+    probe = _trace_branch(point)
+    kind, idx, close = span
+    if kind == "same":
+        line = lines[idx]
+        nl = "\n" if line.endswith("\n") else ""
+        body = line[:-1] if nl else line
+        cpos = body.find("//", close + 1)
+        comment = ""
+        if cpos >= 0:
+            comment, body = body[cpos:], body[:cpos]
+        code = body.rstrip()
+        lines[idx] = (
+            f"{code[: close + 1]} {{ {probe} {code[close + 1 :].lstrip()} }}"
+            f"{comment}{nl}"
+        )
+        return True
+    end = _loop_body_stmt_end(point.line, lines)
+    if end is None:
+        return False
+    hdr = lines[idx]
+    hnl = "\n" if hdr.endswith("\n") else ""
+    hbody = hdr[:-1] if hnl else hdr
+    cpos = hbody.find("//")
+    if cpos >= 0:
+        lines[idx] = hbody[:cpos].rstrip() + " {" + " " + hbody[cpos:] + hnl
+    else:
+        lines[idx] = hbody.rstrip() + " {" + hnl
+    pl = lines[point.line - 1]
+    pnl = "\n" if pl.endswith("\n") else ""
+    pbody = pl[:-1] if pnl else pl
+    indent = pbody[: len(pbody) - len(pbody.lstrip())]
+    lines[point.line - 1] = f"{indent}{probe} {pbody.lstrip()}{pnl}"
+    el = lines[end - 1]
+    enl = "\n" if el.endswith("\n") else ""
+    ebody = el[:-1] if enl else el
+    epos = ebody.find("//")
+    if epos >= 0:
+        lines[end - 1] = ebody[:epos].rstrip() + " }" + " " + ebody[epos:] + enl
+    else:
+        lines[end - 1] = ebody.rstrip() + " }" + enl
+    return True
+
+
 def _is_braceless_do_body(point_line: int, lines: list[str]) -> bool:
     """True when line *point_line* is the body of a braceless `do ... while`.
 
@@ -837,6 +992,10 @@ def instrument(
             )
 
         elif point.kind == InjectKind.BRANCH:
+            # Loop-governed braceless if (Bug-C): before-placement lands
+            # outside the loop scope, so brace-wrap with the probe inside.
+            if _wrap_loop_governed_if(point, lines):
+                continue
             # Single-evaluation hoist: `auto` copy-init would drop explicit
             # bool conversions, so the ternary replays the if's own
             # contextual conversion exactly once. while/for/else-if emit no

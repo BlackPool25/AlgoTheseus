@@ -323,6 +323,8 @@ frontend/
 
 ## API
 
+Full reference → [docs/API.md](docs/API.md) (sync + batch + upload + async `/jobs`).
+
 ### `POST /execute`
 
 Submit C++ code for instrumentation, execution, and trace generation.

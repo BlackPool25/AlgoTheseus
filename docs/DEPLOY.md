@@ -26,12 +26,16 @@ static, 500 builds/month.
 2. Dash → Workers & Pages → Create → Pages → Connect to Git → pick repo.
 3. Build settings: root directory `frontend`, build command
    `bun install --frozen-lockfile && bun run build`, output `dist`.
-4. Env: none required (no secrets; API base is same-origin/proxied).
+4. Env: `VITE_API_URL` = Cloud Run API URL (e.g. the `status.url` from
+   `gcloud run services describe algo-theseus-api`). Vite bakes this at
+   build time — setting it after the build has no effect; rebuild on change.
+   Unset/empty keeps the same-origin dev fallback (Vite proxy / nginx).
 5. Deploy. Headers come from `frontend/public/_headers` (copied to `dist`
    verbatim by Vite) — verify in DevTools: `crossOriginIsolated === true`.
-6. Point the frontend at the backend: set the API URL env your hosting
-   provides (or redeploy with the backend URL baked in) — same-origin
-   proxy in `frontend/nginx.conf` covers the Docker-local flow only.
+6. Backend must allow the Pages origin: set `FRONTEND_ORIGINS` on the API
+   (comma-separated, e.g. the Pages `https://<project>.pages.dev` URL) —
+   defaults stay localhost-only. Docker-local flow needs nothing: empty
+   `VITE_API_URL` + `frontend/nginx.conf` proxy covers it.
 
 ## 2. Frontend — Netlify (runner-up, free, no sleep)
 

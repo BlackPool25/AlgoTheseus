@@ -2,10 +2,8 @@
 # AlgoTheseus — Cloud Run worker service (serving.knative.dev/v1)
 # =============================================================================
 # Same image as the API; entrypoint overridden to the worker command.
-# NOTE: app.worker does not exist yet — this service is the reservation for it.
-# Until then, deploy API only. When the worker lands (`python -m app.worker`),
-# this file applies as-is. Alternative: ship the worker as a Cloud Run *job*
-# or Cloud Tasks handler instead of a always-scales-to-zero service.
+# NOTE: app.worker exists — this service deploys alongside the API.
+# Alternative: ship the worker as a Cloud Run *job* or Cloud Tasks handler instead.
 # Apply: gcloud run services replace deploy/cloudrun/service-worker.yaml --region=$REGION
 # =============================================================================
 
@@ -50,11 +48,6 @@ spec:
             limits:
               cpu: "2"
               memory: 4Gi
-          startupProbe:
-            httpGet:
-              path: /health
-            periodSeconds: 10
-            failureThreshold: 12
   traffic:
     - percent: 100
       latestRevision: true

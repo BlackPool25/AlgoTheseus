@@ -24,4 +24,17 @@
 #   a Cloud Tasks queue targeting the worker service (internal ingress) and let
 #   max-instances 0-20 scale on queue depth. No broker to run. See docs/CLOUDRUN.md.
 #
-# Local/compose: unchanged — no REDIS_URL needed; single instance, in-memory counters.
+# Local/compose: `redis` service (redis:7-alpine, internal only, no public
+# port) + backend `REDIS_URL=${REDIS_URL:-redis://redis:6379/0}`.
+# Override per-shell with `REDIS_URL=... docker compose up` (empty/unset =
+# fail-open in-memory path, see app/queue/backends.py). No secret needed locally.
+#
+# Cloud Run secret (exact):
+#   printf 'rediss://...' | gcloud secrets create algo-theseus-redis-url --data-file=-
+#   # if it already exists:
+#   printf 'rediss://...' | gcloud secrets versions add algo-theseus-redis-url --data-file=-
+#   # Upstash: paste the `rediss://` (TLS) URL as-is. Memorystore: store
+#   # `redis://<private-ip>:6379` instead (needs a VPC connector, see Option B).
+#   # verify:
+#   gcloud secrets describe algo-theseus-redis-url
+#   gcloud secrets versions access latest --secret=algo-theseus-redis-url | head -c 20

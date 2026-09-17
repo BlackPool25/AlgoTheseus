@@ -208,3 +208,39 @@ The executed-arrow grep must print `8`; the render table row grep lives
 in `docs/render-spec.md`. Quote the brace form when citing the token pair
 in prose so palette-block counts stay exact. Any palette block missing its
 next-arrow line fails review even when the count passes.
+
+## 6. Decision record 2026-09-17 — keep-6/drop-2 + alias-edge contrast fixes
+
+Amends §§3-4. Frozen text above is untouched; this section supersedes it
+where they conflict.
+
+### 6.1 Dropped themes
+
+`light` (§4.2) and `nord` (§4.8) are removed. Live set is 6: `zinc-dark`,
+`high-contrast`, `colorblind-safe`, `papyrus`, `catppuccin-mocha`,
+`gruvbox-dark`. Their `[data-theme]` blocks are deleted from
+`frontend/src/index.css` and their entries removed from `THEMES` /
+`THEME_CATALOG` in `frontend/src/theme.ts`; `monacoThemeFor` no longer
+references `light`. A stored user pref equal to a dropped theme is not a
+valid `ThemeName`, so `applyTheme`/`initTheme` fall back to `zinc-dark`
+with the existing console warning — no migration needed. The §5
+executed-arrow grep counts the frozen §4 blocks (still 8 in this file);
+the live count in `index.css` is 6.
+
+### 6.2 Alias-edge hex deltas (2 tokens, all other tokens untouched)
+
+- `papyrus` alias-edge `#7a6a4f` → `#5f5340` vs panel `#ece0c3`:
+  4.00:1 → 5.72:1 (AA pass).
+- `gruvbox-dark` alias-edge `#83a598` → `#93b8ab` vs panel `#3c3836`:
+  4.31:1 → 5.35:1 (AA pass).
+
+Ratios recomputed with the relative-luminance formula; both new pairs
+meet the 4.5 bar. `zinc-dark`, `high-contrast`, `colorblind-safe` and
+`mocha` tokens are unchanged (Okabe-Ito accent stays).
+
+### 6.3 New rule: panel-text meets the 4.5 bar
+
+The audit found `light` at 4.39:1 ink-on-panel while passing body-on-body,
+so §3's body-pair-only bar is extended: panel text (body-text ink on
+panel-bg surface) must meet the same WCAG AA 4.5:1 as body-on-body.
+Alias-edge/panel pairs above were fixed under this rule.

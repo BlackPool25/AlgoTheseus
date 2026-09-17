@@ -1,0 +1,76 @@
+# Wave7 5.1 — k6 burst/spike/soak against production (manual dispatch only).
+#
+# Never runs on push/PR: load-testing prod on every commit would 429 (or
+# worse) real users against the conc15 Cloud Run budget. Dispatch by hand,
+# preferably off-peak, after running seed against the same URL.
+#
+# Required secret: PROD_URL (e.g. https://algo-theseus-api-XXXX.run.app).
+# Each run uploads the k6 JSON summaries as one artifact (k6-summaries).
+#
+# Soak drift checklist (run while soak holds 50 VUs, compare before/after):
+#   gcloud run services describe algo-theseus-api --region=$REGION \
+#     --format='value(status.url)'                     # confirm target
+#   # latency drift: split soak-summary.json into 5m windows, compare p95
+#   # cache/tmp growth: exec into revision, du -sh /tmp/algo-theseus-cache
+#   # conn growth: Cloud Run metrics — billable container instances stable,
+#   #   request latency p99 flat, 5xx count zero
+
+name: k6-prod
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: 'Override target (default: PROD_URL secret)'
+        required: false
+        default: ''
+      suite:
+        description: 'Which suite to run'
+        required: false
+        default: 'burst'
+        type: choice
+        options:
+          - burst
+          - spike
+          - soak
+          - all
+
+jobs:
+  k6:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup k6
+        uses: grafana/setup-k6-action@v1
+
+      - name: Resolve target URL
+        id: target
+        run: |
+          URL="${{ inputs.base_url }}"
+          if [ -z "$URL" ]; then URL="${{ secrets.PROD_URL }}"; fi
+          if [ -z "$URL" ]; then echo "PROD_URL secret or base_url input required" >&2; exit 1; fi
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+
+      - name: Seed cache (20 canonical programs)
+        run: k6 run --out json=seed-summary.json k6/seed.js -e BASE_URL="${{ steps.target.outputs.url }}"
+
+      - name: Run burst (0->200 VUs, 1m hold, 80/20 HIT)
+        if: inputs.suite == 'burst' || inputs.suite == 'all'
+        run: k6 run --out json=burst-summary.json k6/burst.js -e BASE_URL="${{ steps.target.outputs.url }}"
+
+      - name: Run spike (50->1000, 429s not 500s)
+        if: inputs.suite == 'spike' || inputs.suite == 'all'
+        run: k6 run --out json=spike-summary.json k6/spike.js -e BASE_URL="${{ steps.target.outputs.url }}"
+
+      - name: Run soak (50 VUs, 15m)
+        if: inputs.suite == 'soak' || inputs.suite == 'all'
+        run: k6 run --out json=soak-summary.json k6/soak.js -e BASE_URL="${{ steps.target.outputs.url }}"
+
+      - name: Upload JSON summaries
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: k6-summaries
+          path: '*-summary.json'

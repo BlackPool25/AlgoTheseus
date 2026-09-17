@@ -12,18 +12,18 @@ metadata:
   name: algo-theseus-api
   annotations:
     run.googleapis.com/ingress: all
-    # run.googleapis.com/execution-environment: gen2  # uncomment for faster
-    # g++ subprocess cold starts (gen1 gVisor fork/exec is slower); gen2 costs the same.
+    run.googleapis.com/execution-environment: gen2 # gen2: faster g++ subprocess cold starts (same cost)
+    # (was gen1 gVisor fork/exec)
 spec:
   template:
     metadata:
       annotations:
-        autoscaling.knative.dev/minScale: "0" # scale-to-zero: the upgrade over free-tier sleep
-        autoscaling.knative.dev/maxScale: "10"
+        autoscaling.knative.dev/minScale: "1" # Wave8: keep 1 warm instance to absorb burst cold-start
+        autoscaling.knative.dev/maxScale: "20" # Wave8: doubled from 10 for burst headroom
         run.googleapis.com/cpu-throttling: "false" # keep CPU during g++ jail + streaming
         run.googleapis.com/startup-cpu-boost: "true" # blunt cold starts (~60s SnapDeploy / ~1min Render)
     spec:
-      containerConcurrency: 15 # 10-20 band; single uvicorn worker, in-memory rate limits assume few instances
+      containerConcurrency: 20 # Wave8: raised from 15; single uvicorn handles 20 concurrent without pool exhaustion
       timeoutSeconds: 300
       containers:
         - image: _IMAGE
@@ -36,7 +36,9 @@ spec:
             - name: CACHE_DIR
               value: /tmp/algo-theseus-cache # ephemeral: restart wipes it, cold MISS expected
             - name: MAX_BATCH_SANDBOXES
-              value: "2"
+              value: "4" # Wave8: doubled from 2; gen2 handles 4 concurrent sandbox spawns
+            - name: SANDBOX_MAX_CONCURRENT
+              value: "6" # Wave8: cap total in-flight sandbox executions per instance
             - name: REDIS_URL
               valueFrom:
                 secretKeyRef:

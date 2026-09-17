@@ -100,7 +100,9 @@ def main() -> int:
             continue
         ratio = contrast_ratio(bg, fg)
         status = "PASS" if ratio >= MIN_RATIO else "FAIL"
-        print(f"{name}: body {bg} vs text {fg} = {ratio:.2f}:1 ({status}, AA bar 4.5:1)")
+        print(
+            f"{name}: body {bg} vs text {fg} = {ratio:.2f}:1 ({status}, AA bar 4.5:1)"
+        )
         if ratio < MIN_RATIO:
             failures.append(f"{name}: ratio {ratio:.2f}:1 below AA 4.5:1")
 

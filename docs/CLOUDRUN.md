@@ -24,7 +24,13 @@ export PROJECT=<gcp-project> REGION=asia-south1  # near your users
 # one-time: registry + secret
 gcloud artifacts repositories create algo-theseus --repository-format=docker \
   --location="$REGION" --project="$PROJECT"
-# optional: printf 'rediss://...' | gcloud secrets create algo-theseus-redis-url --data-file=-
+# Redis secret (Upstash rediss:// URL as-is; Memorystore redis://<private-ip>:6379):
+# printf 'rediss://...' | gcloud secrets create algo-theseus-redis-url --data-file=-
+# # if it already exists:
+# printf 'rediss://...' | gcloud secrets versions add algo-theseus-redis-url --data-file=-
+# # verify:
+# gcloud secrets describe algo-theseus-redis-url
+# gcloud secrets versions access latest --secret=algo-theseus-redis-url | head -c 20
 
 # build + deploy API (worker: arg `worker`, both: `all`)
 ./deploy/cloudrun/deploy.sh api
@@ -39,8 +45,12 @@ API_URL=$(gcloud run services describe algo-theseus-api \
 curl "$API_URL/health"                                        # {"status":"ok"}
 scripts/smoke-deploy.sh "$API_URL"
 
-# wire the frontend: Cloudflare Pages env VITE_API_URL=$API_URL, rebuild.
-# (frontend/src/utils/api.ts: BASE_URL = import.meta.env.VITE_API_URL ?? "")
+# wire the frontend: Cloudflare Pages dashboard env VITE_API_URL=$API_URL,
+# then rebuild (Vite bakes it at build time; post-build changes need a rebuild).
+# allow the Pages origin through backend CORS (comma-separated; no code change):
+# gcloud run services update algo-theseus-api --region="$REGION" \
+#   --set-env-vars FRONTEND_ORIGINS="https://<project>.pages.dev"
+# (frontend/src/utils/api.ts: BASE_URL = (import.meta.env.VITE_API_URL ?? "").trim())
 ```
 
 Equivalent without the script: `gcloud builds submit` with
@@ -55,6 +65,7 @@ Equivalent without the script: `gcloud builds submit` with
 | `CACHE_DIR` | `/tmp/algo-theseus-cache` | ephemeral by design: restart wipes it, cold MISS expected |
 | `MAX_BATCH_SANDBOXES` | `2` | small-instance cap, same as render.yaml |
 | `REDIS_URL` | secret `algo-theseus-redis-url` | shared counters/batch state; omit secret binding if unused |
+| `FRONTEND_ORIGINS` | unset → localhost defaults | comma-separated browser origins for CORS (e.g. Pages URL); empties ignored, never `"*"` |
 | `PORT` | injected by Cloud Run | image honors `${PORT:-8000}`; never hardcode 8000 |
 
 ## 3. Scaling notes
@@ -67,8 +78,9 @@ Equivalent without the script: `gcloud builds submit` with
 - Cold starts: gen1 (gVisor) fork/exec for g++ is slower than gen2; uncomment
   the `execution-environment: gen2` annotation if compiles feel slow.
 - Filesystem: `/tmp` is ephemeral and per-instance — never a shared cache.
-- CORS: `backend/app/main.py` allows only Vite dev origins; add the Pages
-  domain to `allow_origins` when wiring a browser-direct frontend.
+- CORS: `backend/app/main.py` reads `FRONTEND_ORIGINS` (comma-separated,
+  defaults `http://localhost:5173,http://localhost:3000`); set it to the Pages
+  origin when wiring a browser-direct frontend (see §1). Unset keeps localhost dev unchanged.
 
 ## 4. SEO / crawler notes (and the Render warning)
 

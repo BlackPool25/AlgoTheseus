@@ -17,6 +17,8 @@ services:
     depends_on:
       init-dood:
         condition: service_completed_successfully
+      redis:
+        condition: service_started
     # ports: no host exposure — backend is reached via internal Docker DNS through nginx proxy
     # DooD fix: the mounted docker.sock is root:<docker-gid> 0660, and the
     # image runs as non-root appuser (Cloud Run least-privilege). Without this
@@ -27,6 +29,9 @@ services:
       # docker = local-dev DooD path (default); subprocess = socketless
       # single-container jail (no socket mount needed in that mode).
       - SANDBOX_MODE=${SANDBOX_MODE:-docker}
+      # Local-dev Redis queue path (fail-open if unset/empty — see app/queue/backends.py).
+      # Compose default points at the internal `redis` service below.
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
     volumes:
       # Docker socket for spawning sandbox containers (DooD)
       - /var/run/docker.sock:/var/run/docker.sock
@@ -48,6 +53,18 @@ services:
     networks:
       - algo-theseus-network
 
+  # Local-dev Redis for the queue path (fail-open without it).
+  # No public port — reachable only as redis://redis:6379 via algo-theseus-network.
+  redis:
+    image: redis:7-alpine
+    container_name: algo-theseus-redis
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - algo-theseus-redis:/data
+    networks:
+      - algo-theseus-network
+    restart: unless-stopped
+
   # Sandboxed C++ execution environment (build-only — image is used by backend)
   # Build: creates algo-theseus-sandbox:latest; backend spawns containers dynamically via Docker SDK
   sandbox:
@@ -62,3 +79,7 @@ networks:
   algo-theseus-network:
     driver: bridge
     name: algo-theseus-network
+
+volumes:
+  algo-theseus-redis:
+    name: algo-theseus-redis

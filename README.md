@@ -49,24 +49,11 @@ Paste any C++ interview problem, click **Run**, and scrub through every step of 
 
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/screenshots/01-editor-cfg.png">
-    <img src="docs/assets/screenshots/01-editor-cfg.png" alt="AlgoTheseus editor with interactive CFG after Run" width="720"/>
-  </picture>
-</p>
-
-<p align="center">
-  <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/assets/screenshots/02-heap-container.png">
     <img src="docs/assets/screenshots/02-heap-container.png" alt="Heap container visualisation with bubble-up animation" width="720"/>
   </picture>
 </p>
 
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/screenshots/03-batch-verdicts.png">
-    <img src="docs/assets/screenshots/03-batch-verdicts.png" alt="Batch test verdicts showing one pass and one fail" width="720"/>
-  </picture>
-</p>
 
 <br>
 

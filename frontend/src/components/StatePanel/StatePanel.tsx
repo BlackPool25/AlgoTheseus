@@ -275,20 +275,10 @@ export function StatePanel() {
         </div>
       )}
 
-      {/* Variable list — flat current-frame rows; owner-labeled so it never
-          reads as a second frame's vars next to the per-frame tables above. */}
+      {/* Variable list — flat current-frame rows. No frame header here: with
+          2+ frames the per-frame tables above already label the current
+          frame, and a second header renders it twice (bug-A). */}
       <div className="flex-1 overflow-y-auto">
-        {showFrameTables && (
-          <div className="px-3 py-1 flex items-center gap-1 min-w-0 border-t border-viz-line">
-            <span className="text-[10px] font-medium text-viz-ink/60 uppercase tracking-wide shrink-0">
-              Frame
-            </span>
-            <span className="text-[11px] font-mono text-amber-400 truncate">
-              {currentEvent.func}()
-            </span>
-            <span className="text-[10px] text-viz-ink/60 shrink-0">· current</span>
-          </div>
-        )}
         {rows.length === 0 ? (
           <div className="px-3 py-2 text-xs text-viz-ink/60">No variables in scope</div>
         ) : (

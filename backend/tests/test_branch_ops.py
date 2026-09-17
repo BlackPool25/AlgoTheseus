@@ -24,7 +24,8 @@ def test_branch_ops_vars_collected():
     """Given `arr[mid]==target` / When walked / Then keys arr,mid,target."""
     result = walk(BSEARCH)
     branches = [
-        p for p in result.injection_points
+        p
+        for p in result.injection_points
         if p.kind == InjectKind.BRANCH and "arr[mid]" in p.condition_text
     ]
     assert branches, "expected a BRANCH for arr[mid]==target"
@@ -42,9 +43,19 @@ def test_branch_ops_emitted_in_instrumented_source():
 
 def test_branch_ops_streaming_values_match():
     """Given branch wire JSON with op / When parsed / Then values match."""
-    raw = [json.dumps({"t": "branch", "l": 9, "f": "bsearch", "d": 0,
-                       "c": "arr[mid] == target", "tk": False,
-                       "op": ["arr=[1,3,5,7,9]", "mid=2", "target=7"]})]
+    raw = [
+        json.dumps(
+            {
+                "t": "branch",
+                "l": 9,
+                "f": "bsearch",
+                "d": 0,
+                "c": "arr[mid] == target",
+                "tk": False,
+                "op": ["arr=[1,3,5,7,9]", "mid=2", "target=7"],
+            }
+        )
+    ]
     events = parse(raw)
     assert len(events) == 1
     assert events[0].ops == ["arr=[1,3,5,7,9]", "mid=2", "target=7"]

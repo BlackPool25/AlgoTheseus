@@ -31,7 +31,10 @@ import clang.cindex as clang
 # Toolchain pin lives in _libclang_compat (bundled clang/native/libclang.so +
 # registration of cursor kinds missing from the wheel's cindex.py, e.g. 437).
 from app.core.instrumenter import _libclang_compat
-from app.core.instrumenter.diagnostics import collect_diagnostics, parse_with_diagnostics
+from app.core.instrumenter.diagnostics import (
+    collect_diagnostics,
+    parse_with_diagnostics,
+)
 
 # Re-exported: resolves the bundled clang/native/libclang.so (never system lib).
 _find_libclang = _libclang_compat._find_libclang
@@ -40,6 +43,7 @@ _lib = _libclang_compat.ensure_libclang()
 
 
 # ── Data types ────────────────────────────────────────────────────────────────
+
 
 def _cursor_kind(cursor: clang.Cursor) -> clang.CursorKind | None:
     """Return cursor.kind, or None if libclang reports an unknown kind id.
@@ -53,12 +57,13 @@ def _cursor_kind(cursor: clang.Cursor) -> clang.CursorKind | None:
     except ValueError:
         return None
 
+
 class InjectKind(Enum):
-    FUNC_ENTER  = auto()   # start of a user function body
-    FUNC_EXIT   = auto()   # before a return statement
-    STATE       = auto()   # after a statement (captures in-scope vars)
-    BRANCH      = auto()   # before an if/else-if condition
-    LOOP_ITER   = auto()   # at the top of a loop body
+    FUNC_ENTER = auto()  # start of a user function body
+    FUNC_EXIT = auto()  # before a return statement
+    STATE = auto()  # after a statement (captures in-scope vars)
+    BRANCH = auto()  # before an if/else-if condition
+    LOOP_ITER = auto()  # at the top of a loop body
     LOOP_COUNTER = auto()  # declaration of __loop_iter_N at function start
 
 
@@ -103,9 +108,7 @@ _CLASS_TEMPLATE_KINDS: tuple = tuple(
 
 # Function-template definitions (v1: skip-with-reason, same as class templates).
 _FUNCTION_TEMPLATE_KINDS: tuple = tuple(
-    k
-    for k in (getattr(clang.CursorKind, "FUNCTION_TEMPLATE", None),)
-    if k is not None
+    k for k in (getattr(clang.CursorKind, "FUNCTION_TEMPLATE", None),) if k is not None
 )
 
 # Try/catch + lambda kinds (getattr-guarded; bodies recurse like COMPOUND).
@@ -117,9 +120,7 @@ _TRY_CATCH_KINDS: tuple = tuple(
     )
     if k is not None
 )
-_LAMBDA_KIND: clang.CursorKind | None = getattr(
-    clang.CursorKind, "LAMBDA_EXPR", None
-)
+_LAMBDA_KIND: clang.CursorKind | None = getattr(clang.CursorKind, "LAMBDA_EXPR", None)
 
 
 def _safe_get_tokens(cursor: clang.Cursor) -> list[str]:
@@ -134,7 +135,9 @@ def _safe_get_tokens(cursor: clang.Cursor) -> list[str]:
         return []
 
 
-def _fallback_user_lines(cursor: clang.Cursor, source_path: str) -> tuple[int, int] | None:
+def _fallback_user_lines(
+    cursor: clang.Cursor, source_path: str
+) -> tuple[int, int] | None:
     """Re-lex a kind-None/UNEXPOSED cursor's user-file line range from tokens.
 
     Returns (first_line, last_line) only when token locations resolve inside
@@ -196,17 +199,25 @@ def _is_in_class_template(cursor: clang.Cursor) -> bool:
 @dataclass
 class InjectionPoint:
     """A single location where a trace call will be inserted."""
+
     kind: InjectKind
-    line: int           # 1-based source line
-    col: int            # 1-based source column (for precise insertion)
-    func_name: str      # enclosing function name
-    depth: int          # call depth (0 = main, 1 = called from main, etc.)
+    line: int  # 1-based source line
+    col: int  # 1-based source column (for precise insertion)
+    func_name: str  # enclosing function name
+    depth: int  # call depth (0 = main, 1 = called from main, etc.)
     # For FUNC_ENTER: parameter names in scope
     param_names: list[str] = field(default_factory=list)
     # For STATE: variable names in scope at this point
     var_names: list[str] = field(default_factory=list)
     # For BRANCH: the condition text
     condition_text: str = ""
+    # For BRANCH on an if header: byte offsets (into the walked source) of
+    # the condition expression extent. The injector hoists the condition
+    # into a temp so the trace + the real `if` evaluate it exactly once
+    # (side-effecting conds like dsu.unite() ran TWICE before). (-1 when
+    # unset — e.g. switch labels, whose runtime expr is synthesized.)
+    cond_start: int = -1
+    cond_end: int = -1
     # For BRANCH: free variable names referenced by the condition (T8 ops).
     # Collected from DECL_REF_EXPR spellings only (never MEMBER_REF — a bare
     # member name is not evaluable at the injection site). Capped at 8 names
@@ -220,6 +231,7 @@ class InjectionPoint:
 @dataclass
 class WalkResult:
     """Output of ast_walker.walk()."""
+
     injection_points: list[InjectionPoint]
     # Maps function name → list of loop counter variable names needed
     loop_counters: dict[str, list[str]]
@@ -227,9 +239,13 @@ class WalkResult:
     # these to every STATE for the v2 `g` snapshot with change-dedup.
     global_vars: list[str] = field(default_factory=list)
     diagnostics: list[str] = field(default_factory=list)
+    # User template definitions skipped in v1 (never spliced — per-specialization
+    # bogus splice). Surfaced as a visible warning, never silent.
+    skipped_templates: list[str] = field(default_factory=list)
 
 
 # ── Walker ────────────────────────────────────────────────────────────────────
+
 
 class ASTWalker:
     """Walks a C++ AST and collects injection points.
@@ -243,9 +259,28 @@ class ASTWalker:
         self.source_path = os.path.abspath(source_path)
         # W0.1 pin: shared default carries -isystem <gcc-include> so STL
         # headers parse (libclang 18 vs GCC 16 gap). Explicit args bypass it.
-        self.extra_args = extra_args if extra_args is not None else _libclang_compat.default_extra_args()
+        self.extra_args = (
+            extra_args
+            if extra_args is not None
+            else _libclang_compat.default_extra_args()
+        )
         self._index = clang.Index.create()
         self._loop_counter_seq = 0
+        self._skipped_templates: list[str] = []
+
+    def _note_template_skip(self, cursor: clang.Cursor) -> None:
+        try:
+            user = self._is_user_code(cursor)
+        except (AttributeError, TypeError, RuntimeError, ValueError, OSError):
+            user = True
+        if not user:
+            return
+        try:
+            name = cursor.spelling or "template"
+        except (AttributeError, TypeError, RuntimeError, ValueError):
+            name = "template"
+        if name and name not in self._skipped_templates:
+            self._skipped_templates.append(name)
 
     def walk(self) -> WalkResult:
         """Parse the source and return all injection points.
@@ -258,6 +293,7 @@ class ASTWalker:
 
         points: list[InjectionPoint] = []
         loop_counters: dict[str, list[str]] = {}
+        self._skipped_templates = []
 
         # Top-level TU declarations: user globals for the v2 STATE snapshot.
         global_vars: list[str] = []
@@ -280,24 +316,39 @@ class ASTWalker:
         # We compute depth by BFS from main/entry points
         depth_map = self._compute_call_depths(tu.cursor, user_functions)
 
-        self._walk_cursor(tu.cursor, points, loop_counters, depth=0, func_name="", func_depth=0, depth_map=depth_map)
+        self._walk_cursor(
+            tu.cursor,
+            points,
+            loop_counters,
+            depth=0,
+            func_name="",
+            func_depth=0,
+            depth_map=depth_map,
+        )
 
         return WalkResult(
             injection_points=points,
             loop_counters=loop_counters,
             global_vars=global_vars,
             diagnostics=diagnostics,
+            skipped_templates=sorted(self._skipped_templates),
         )
 
     def _collect_user_functions(self, cursor: clang.Cursor, result: set[str]) -> None:
         """Collect names of all user-defined functions."""
-        if _cursor_kind(cursor) in (clang.CursorKind.FUNCTION_DECL, clang.CursorKind.CXX_METHOD) and cursor.is_definition():
+        if (
+            _cursor_kind(cursor)
+            in (clang.CursorKind.FUNCTION_DECL, clang.CursorKind.CXX_METHOD)
+            and cursor.is_definition()
+        ):
             if self._is_user_code(cursor):
                 result.add(cursor.spelling)
         for child in cursor.get_children():
             self._collect_user_functions(child, result)
 
-    def _compute_call_depths(self, root: clang.Cursor, user_functions: set[str]) -> dict[str, int]:
+    def _compute_call_depths(
+        self, root: clang.Cursor, user_functions: set[str]
+    ) -> dict[str, int]:
         """Compute call depth for each user function.
 
         Uses BFS from main() (depth 0). Functions not reachable from main
@@ -309,11 +360,16 @@ class ASTWalker:
 
         # BFS from main
         depth_map: dict[str, int] = {}
-        start = "main" if "main" in user_functions else (next(iter(user_functions)) if user_functions else None)
+        start = (
+            "main"
+            if "main" in user_functions
+            else (next(iter(user_functions)) if user_functions else None)
+        )
         if start is None:
             return depth_map
 
         from collections import deque
+
         queue: deque[tuple[str, int]] = deque([(start, 0)])
         visited: set[str] = set()
 
@@ -343,7 +399,10 @@ class ASTWalker:
     ) -> None:
         """Recursively build the call graph."""
         kind = _cursor_kind(cursor)
-        if kind in (clang.CursorKind.FUNCTION_DECL, clang.CursorKind.CXX_METHOD) and cursor.is_definition():
+        if (
+            kind in (clang.CursorKind.FUNCTION_DECL, clang.CursorKind.CXX_METHOD)
+            and cursor.is_definition()
+        ):
             if self._is_user_code(cursor):
                 current_func = cursor.spelling
         elif kind == clang.CursorKind.CALL_EXPR:
@@ -360,13 +419,16 @@ class ASTWalker:
         """True if this cursor is in the user's source file (not a header)."""
         loc = cursor.location
         return (
-            loc.file is not None
-            and os.path.abspath(loc.file.name) == self.source_path
+            loc.file is not None and os.path.abspath(loc.file.name) == self.source_path
         )
 
     def _is_macro_expanded(self, cursor: clang.Cursor) -> bool:
         """True if this cursor was produced by a macro expansion."""
-        return cursor.location.file is not None and cursor.extent.start.offset != cursor.extent.end.offset and cursor.location.offset == 0
+        return (
+            cursor.location.file is not None
+            and cursor.extent.start.offset != cursor.extent.end.offset
+            and cursor.location.offset == 0
+        )
 
     def _is_template_instantiation(self, cursor: clang.Cursor) -> bool:
         """True if this is a template instantiation (skip in v1)."""
@@ -426,7 +488,12 @@ class ASTWalker:
             # CXX_METHOD; a bare `operator[]` is not evaluable at the
             # injection site, so skip overload names (a user variable can
             # never be spelled `operator<symbol>` — `operatorx` stays valid).
-            if name and not name.startswith("__") and not re.fullmatch(r"operator([^A-Za-z0-9_].*)?", name) and name not in seen:
+            if (
+                name
+                and not name.startswith("__")
+                and not re.fullmatch(r"operator([^A-Za-z0-9_].*)?", name)
+                and name not in seen
+            ):
                 ref = cursor.referenced
                 if ref is None or "FUNCTION" not in str(ref.kind):
                     seen.add(name)
@@ -460,7 +527,11 @@ class ASTWalker:
     def _get_call_expr_name(self, cursor: clang.Cursor) -> str:
         """Best-effort callee name for C++ call expressions (incl. member calls)."""
         for child in cursor.get_children():
-            if child.kind in (clang.CursorKind.MEMBER_REF_EXPR, clang.CursorKind.DECL_REF_EXPR) and child.spelling:
+            if (
+                child.kind
+                in (clang.CursorKind.MEMBER_REF_EXPR, clang.CursorKind.DECL_REF_EXPR)
+                and child.spelling
+            ):
                 return child.spelling
         return ""
 
@@ -470,7 +541,12 @@ class ASTWalker:
             return False
         if re.fullmatch(r"-?\d+(\.\d+)?", text):
             return True
-        return re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*(\[[^\]]+\])*") is not None
+        return (
+            re.fullmatch(
+                r"[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*(\[[^\]]+\])*"
+            )
+            is not None
+        )
 
     def _walk_cursor(
         self,
@@ -487,20 +563,34 @@ class ASTWalker:
         if kind is None:
             # Transparent container — may still hold nodes of interest below.
             for child in cursor.get_children():
-                self._walk_cursor(child, points, loop_counters, depth, func_name, func_depth, depth_map)
+                self._walk_cursor(
+                    child,
+                    points,
+                    loop_counters,
+                    depth,
+                    func_name,
+                    func_depth,
+                    depth_map,
+                )
             return
 
         # v1 scope: never splice inside template definitions (per-specialization bogus splice).
         if kind in _CLASS_TEMPLATE_KINDS or kind in _FUNCTION_TEMPLATE_KINDS:
+            self._note_template_skip(cursor)
             return
 
         # ── Function definition ───────────────────────────────────────────────
-        if kind in (clang.CursorKind.FUNCTION_DECL, clang.CursorKind.CXX_METHOD) and cursor.is_definition():
+        if (
+            kind in (clang.CursorKind.FUNCTION_DECL, clang.CursorKind.CXX_METHOD)
+            and cursor.is_definition()
+        ):
             if not self._is_user_code(cursor):
                 return
             if self._is_template_instantiation(cursor):
+                self._note_template_skip(cursor)
                 return
             if _is_in_class_template(cursor):
+                self._note_template_skip(cursor)
                 return
 
             fn = cursor.spelling
@@ -516,22 +606,27 @@ class ASTWalker:
 
             # Find the compound statement (function body)
             body = next(
-                (c for c in cursor.get_children()
-                 if c.kind == clang.CursorKind.COMPOUND_STMT),
+                (
+                    c
+                    for c in cursor.get_children()
+                    if c.kind == clang.CursorKind.COMPOUND_STMT
+                ),
                 None,
             )
             if body is None:
                 return
 
             # FUNC_ENTER at the opening brace
-            points.append(InjectionPoint(
-                kind=InjectKind.FUNC_ENTER,
-                line=body.extent.start.line,
-                col=body.extent.start.column + 1,  # after the {
-                func_name=fn,
-                depth=fn_depth,
-                param_names=params,
-            ))
+            points.append(
+                InjectionPoint(
+                    kind=InjectKind.FUNC_ENTER,
+                    line=body.extent.start.line,
+                    col=body.extent.start.column + 1,  # after the {
+                    func_name=fn,
+                    depth=fn_depth,
+                    param_names=params,
+                )
+            )
 
             loop_counters.setdefault(fn, [])
 
@@ -541,20 +636,24 @@ class ASTWalker:
                 line = child.location.line
                 if line not in seen_lines and line > 0:
                     seen_lines.add(line)
-                    points.append(InjectionPoint(
-                        kind=InjectKind.STATE,
-                        line=line,
-                        col=1,
-                        func_name=fn,
-                        depth=fn_depth,
-                    ))
+                    points.append(
+                        InjectionPoint(
+                            kind=InjectKind.STATE,
+                            line=line,
+                            col=1,
+                            func_name=fn,
+                            depth=fn_depth,
+                        )
+                    )
                 self._walk_stmt(child, points, loop_counters, fn, fn_depth, seen_lines)
 
             return  # Don't recurse further — _walk_stmt handles the body
 
         # ── Recurse into non-function nodes ──────────────────────────────────
         for child in cursor.get_children():
-            self._walk_cursor(child, points, loop_counters, depth, func_name, func_depth, depth_map)
+            self._walk_cursor(
+                child, points, loop_counters, depth, func_name, func_depth, depth_map
+            )
 
     def _maybe_emit_state(
         self,
@@ -581,14 +680,16 @@ class ASTWalker:
         if line <= 0 or line in seen:
             return
         seen.add(line)
-        points.append(InjectionPoint(
-            kind=InjectKind.STATE,
-            line=line,
-            col=1,
-            func_name=func_name,
-            depth=func_depth,
-            var_names=list(var_names or []),
-        ))
+        points.append(
+            InjectionPoint(
+                kind=InjectKind.STATE,
+                line=line,
+                col=1,
+                func_name=func_name,
+                depth=func_depth,
+                var_names=list(var_names or []),
+            )
+        )
 
     @staticmethod
     def _loop_body_is_braced(cursor: clang.Cursor, kind: clang.CursorKind) -> bool:
@@ -631,13 +732,15 @@ class ASTWalker:
                 return
             if resolved[0] not in seen and resolved[0] > 0:
                 seen.add(resolved[0])
-                points.append(InjectionPoint(
-                    kind=InjectKind.STATE,
-                    line=resolved[0],
-                    col=1,
-                    func_name=func_name,
-                    depth=func_depth,
-                ))
+                points.append(
+                    InjectionPoint(
+                        kind=InjectKind.STATE,
+                        line=resolved[0],
+                        col=1,
+                        func_name=func_name,
+                        depth=func_depth,
+                    )
+                )
             return
         # Allow all DECL_STMT even if the cursor location is in a system header,
         # which commonly happens with template variable declarations like
@@ -661,13 +764,15 @@ class ASTWalker:
                 return
             if resolved[0] not in seen and resolved[0] > 0:
                 seen.add(resolved[0])
-                points.append(InjectionPoint(
-                    kind=InjectKind.STATE,
-                    line=resolved[0],
-                    col=1,
-                    func_name=func_name,
-                    depth=func_depth,
-                ))
+                points.append(
+                    InjectionPoint(
+                        kind=InjectKind.STATE,
+                        line=resolved[0],
+                        col=1,
+                        func_name=func_name,
+                        depth=func_depth,
+                    )
+                )
             return
 
         # STATE for this statement's own line (one per unique line).
@@ -689,23 +794,28 @@ class ASTWalker:
             decl_names: list[str] = []
             if kind == clang.CursorKind.DECL_STMT:
                 decl_names = [
-                    c.spelling for c in cursor.get_children()
+                    c.spelling
+                    for c in cursor.get_children()
                     if c.kind == clang.CursorKind.VAR_DECL and c.spelling
                 ]
-            self._maybe_emit_state(cursor, points, func_name, func_depth, seen, decl_names)
+            self._maybe_emit_state(
+                cursor, points, func_name, func_depth, seen, decl_names
+            )
 
         # ── Return statement → FUNC_EXIT ──────────────────────────────────────
         if kind == clang.CursorKind.RETURN_STMT:
             # Extract the return expression text for __TRACE_FUNC_EXIT
             ret_expr = self._get_return_expr_text(cursor)
-            points.append(InjectionPoint(
-                kind=InjectKind.FUNC_EXIT,
-                line=cursor.location.line,
-                col=cursor.location.column,
-                func_name=func_name,
-                depth=func_depth,
-                condition_text=ret_expr,  # reuse field to carry return expr
-            ))
+            points.append(
+                InjectionPoint(
+                    kind=InjectKind.FUNC_EXIT,
+                    line=cursor.location.line,
+                    col=cursor.location.column,
+                    func_name=func_name,
+                    depth=func_depth,
+                    condition_text=ret_expr,  # reuse field to carry return expr
+                )
+            )
             return
 
         # ── If statement → BRANCH ─────────────────────────────────────────────
@@ -718,31 +828,64 @@ class ASTWalker:
                 if any(tok in cond_text for tok in ("cin", "scanf", "getline")):
                     # Recurse into then/else bodies without adding BRANCH
                     if len(children) > 1:
-                        self._walk_stmt(children[1], points, loop_counters, func_name, func_depth, seen)
+                        self._walk_stmt(
+                            children[1],
+                            points,
+                            loop_counters,
+                            func_name,
+                            func_depth,
+                            seen,
+                        )
                     if len(children) > 2:
                         else_branch = children[2]
                         if else_branch.kind == clang.CursorKind.IF_STMT:
                             else_children = list(else_branch.get_children())
                             for ec in else_children[1:]:
-                                self._walk_stmt(ec, points, loop_counters, func_name, func_depth, seen)
+                                self._walk_stmt(
+                                    ec,
+                                    points,
+                                    loop_counters,
+                                    func_name,
+                                    func_depth,
+                                    seen,
+                                )
                         else:
-                            self._walk_stmt(else_branch, points, loop_counters, func_name, func_depth, seen)
+                            self._walk_stmt(
+                                else_branch,
+                                points,
+                                loop_counters,
+                                func_name,
+                                func_depth,
+                                seen,
+                            )
                     return
                 # Inject BRANCH for this if only.
                 # We do NOT inject for else-if — that would insert a statement
                 # between `if` and `else`, breaking the chain.
-                points.append(InjectionPoint(
-                    kind=InjectKind.BRANCH,
-                    line=cursor.location.line,
-                    col=cursor.location.column,
-                    func_name=func_name,
-                    depth=func_depth,
-                    condition_text=cond_text,
-                    cond_vars=self._get_condition_vars(cond),
-                ))
+                try:
+                    _cs, _ce = cond.extent.start.offset, cond.extent.end.offset
+                except (AttributeError, ValueError, TypeError):
+                    _cs, _ce = -1, -1
+                if _cs is None or _ce is None or _ce <= _cs:
+                    _cs, _ce = -1, -1
+                points.append(
+                    InjectionPoint(
+                        kind=InjectKind.BRANCH,
+                        line=cursor.location.line,
+                        col=cursor.location.column,
+                        func_name=func_name,
+                        depth=func_depth,
+                        condition_text=cond_text,
+                        cond_vars=self._get_condition_vars(cond),
+                        cond_start=_cs,
+                        cond_end=_ce,
+                    )
+                )
             # Recurse into then-body (children[1])
             if len(children) > 1:
-                self._walk_stmt(children[1], points, loop_counters, func_name, func_depth, seen)
+                self._walk_stmt(
+                    children[1], points, loop_counters, func_name, func_depth, seen
+                )
             # Recurse into else branch — but if it's another IF_STMT (else-if),
             # recurse into its bodies without injecting another BRANCH at the top.
             if len(children) > 2:
@@ -751,9 +894,13 @@ class ASTWalker:
                     # else-if: recurse into its then/else bodies only
                     else_children = list(else_branch.get_children())
                     for ec in else_children[1:]:
-                        self._walk_stmt(ec, points, loop_counters, func_name, func_depth, seen)
+                        self._walk_stmt(
+                            ec, points, loop_counters, func_name, func_depth, seen
+                        )
                 else:
-                    self._walk_stmt(else_branch, points, loop_counters, func_name, func_depth, seen)
+                    self._walk_stmt(
+                        else_branch, points, loop_counters, func_name, func_depth, seen
+                    )
             return
 
         # ── Switch statement → BRANCH per case ──────────────────────────────────
@@ -799,17 +946,21 @@ class ASTWalker:
                     else:
                         inject_line = child.extent.start.line
 
-                    points.append(InjectionPoint(
-                        kind=InjectKind.BRANCH,
-                        line=inject_line,
-                        col=1,
-                        func_name=func_name,
-                        depth=func_depth,
-                        condition_text=label,
-                    ))
+                    points.append(
+                        InjectionPoint(
+                            kind=InjectKind.BRANCH,
+                            line=inject_line,
+                            col=1,
+                            func_name=func_name,
+                            depth=func_depth,
+                            condition_text=label,
+                        )
+                    )
 
                     for stmt in body_stmts:
-                        self._walk_stmt(stmt, points, loop_counters, func_name, func_depth, seen)
+                        self._walk_stmt(
+                            stmt, points, loop_counters, func_name, func_depth, seen
+                        )
 
                 elif child.kind == clang.CursorKind.DEFAULT_STMT:
                     label = f"true /* switch({cond_text}) == default */"
@@ -820,21 +971,27 @@ class ASTWalker:
                     else:
                         inject_line = child.extent.start.line
 
-                    points.append(InjectionPoint(
-                        kind=InjectKind.BRANCH,
-                        line=inject_line,
-                        col=1,
-                        func_name=func_name,
-                        depth=func_depth,
-                        condition_text=label,
-                    ))
+                    points.append(
+                        InjectionPoint(
+                            kind=InjectKind.BRANCH,
+                            line=inject_line,
+                            col=1,
+                            func_name=func_name,
+                            depth=func_depth,
+                            condition_text=label,
+                        )
+                    )
 
                     for stmt in body_stmts:
-                        self._walk_stmt(stmt, points, loop_counters, func_name, func_depth, seen)
+                        self._walk_stmt(
+                            stmt, points, loop_counters, func_name, func_depth, seen
+                        )
 
                 else:
                     # Non-case statement inside switch body (declaration, etc.)
-                    self._walk_stmt(child, points, loop_counters, func_name, func_depth, seen)
+                    self._walk_stmt(
+                        child, points, loop_counters, func_name, func_depth, seen
+                    )
 
             return
 
@@ -858,58 +1015,83 @@ class ASTWalker:
 
             if body and body.kind == clang.CursorKind.COMPOUND_STMT:
                 # Inject LOOP_ITER at the start of the body
-                points.append(InjectionPoint(
-                    kind=InjectKind.LOOP_ITER,
-                    line=body.extent.start.line,
-                    col=body.extent.start.column + 1,
-                    func_name=func_name,
-                    depth=func_depth,
-                    counter_var=counter_var,
-                ))
+                points.append(
+                    InjectionPoint(
+                        kind=InjectKind.LOOP_ITER,
+                        line=body.extent.start.line,
+                        col=body.extent.start.column + 1,
+                        func_name=func_name,
+                        depth=func_depth,
+                        counter_var=counter_var,
+                    )
+                )
                 # Recurse into body statements
                 for child in body.get_children():
-                    self._walk_stmt(child, points, loop_counters, func_name, func_depth, seen)
+                    self._walk_stmt(
+                        child, points, loop_counters, func_name, func_depth, seen
+                    )
             elif body is not None:
                 # R3 (M4) policy: NO LOOP_ITER for braceless single-statement
                 # bodies. One statement is one step and the STATE emitted above
                 # already covers it; an extra iter event would inflate scrubber
                 # step counts without adding variables.
-                self._walk_stmt(body, points, loop_counters, func_name, func_depth, seen)
+                self._walk_stmt(
+                    body, points, loop_counters, func_name, func_depth, seen
+                )
             return
 
         # ── Try/catch + lambda → recurse like COMPOUND ─────────────────────────
         # v1 scope: no TRACE on the header itself (skip-not-brace-wrap); bodies
         # recurse so inner statements get STATE. Params/conditions are skipped.
-        if kind in _TRY_CATCH_KINDS or (_LAMBDA_KIND is not None and kind == _LAMBDA_KIND):
+        if kind in _TRY_CATCH_KINDS or (
+            _LAMBDA_KIND is not None and kind == _LAMBDA_KIND
+        ):
             for child in cursor.get_children():
                 ck = _cursor_kind(child)
-                if ck == clang.CursorKind.COMPOUND_STMT or ck in _TRY_CATCH_KINDS or (
-                    _LAMBDA_KIND is not None and ck == _LAMBDA_KIND
+                if (
+                    ck == clang.CursorKind.COMPOUND_STMT
+                    or ck in _TRY_CATCH_KINDS
+                    or (_LAMBDA_KIND is not None and ck == _LAMBDA_KIND)
                 ):
-                    self._walk_stmt(child, points, loop_counters, func_name, func_depth, seen)
+                    self._walk_stmt(
+                        child, points, loop_counters, func_name, func_depth, seen
+                    )
             return
 
         # v1 scope: never splice inside template definitions (members instantiate per specialization).
         if kind in _CLASS_TEMPLATE_KINDS or kind in _FUNCTION_TEMPLATE_KINDS:
+            self._note_template_skip(cursor)
             return
 
         # ── Compound statement → recurse ──────────────────────────────────────
         if kind == clang.CursorKind.COMPOUND_STMT:
             for child in cursor.get_children():
-                self._walk_stmt(child, points, loop_counters, func_name, func_depth, seen)
+                self._walk_stmt(
+                    child, points, loop_counters, func_name, func_depth, seen
+                )
             return
 
         # Lambdas nested in declarations/initializers (e.g. `auto f = [...]{};`):
         # the lambda body recurses like COMPOUND; nothing else descended into.
         for child in cursor.get_children():
             ck = _cursor_kind(child)
-            if ck in _TRY_CATCH_KINDS or (_LAMBDA_KIND is not None and ck == _LAMBDA_KIND):
-                self._walk_stmt(child, points, loop_counters, func_name, func_depth, seen)
-            elif ck is not None and (ck in _UNEXPOSED_KINDS or ck == clang.CursorKind.VAR_DECL):
+            if ck in _TRY_CATCH_KINDS or (
+                _LAMBDA_KIND is not None and ck == _LAMBDA_KIND
+            ):
+                self._walk_stmt(
+                    child, points, loop_counters, func_name, func_depth, seen
+                )
+            elif ck is not None and (
+                ck in _UNEXPOSED_KINDS or ck == clang.CursorKind.VAR_DECL
+            ):
                 for gchild in child.get_children():
                     gk = _cursor_kind(gchild)
-                    if gk in _TRY_CATCH_KINDS or (_LAMBDA_KIND is not None and gk == _LAMBDA_KIND):
-                        self._walk_stmt(gchild, points, loop_counters, func_name, func_depth, seen)
+                    if gk in _TRY_CATCH_KINDS or (
+                        _LAMBDA_KIND is not None and gk == _LAMBDA_KIND
+                    ):
+                        self._walk_stmt(
+                            gchild, points, loop_counters, func_name, func_depth, seen
+                        )
         return
 
 

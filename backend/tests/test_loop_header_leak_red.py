@@ -55,9 +55,19 @@ def _compile(source: str) -> tuple[int, str]:
         shutil.copy(TRACER_H, tmp_path / "tracer.h")
         binary = tmp_path / "prog"
         result = subprocess.run(
-            ["g++", "-O0", "-std=c++17", "-I", str(tmp_path),
-             "-o", str(binary), str(src)],
-            capture_output=True, text=True, check=False,
+            [
+                "g++",
+                "-O0",
+                "-std=c++17",
+                "-I",
+                str(tmp_path),
+                "-o",
+                str(binary),
+                str(src),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
         )
         return result.returncode, result.stderr
 
@@ -69,14 +79,11 @@ def _offending_post_body_lines(instrumented: str) -> list[str]:
         body_idx = next(i for i, l in enumerate(lines) if BODY_SUBSTR in l)
     except StopIteration:
         return [f"<{BODY_SUBSTR!r} body line missing from instrumented source>"]
-    shadow_idx = next(
-        (i for i, l in enumerate(lines) if "int x = 5;" in l), len(lines)
-    )
+    shadow_idx = next((i for i, l in enumerate(lines) if "int x = 5;" in l), len(lines))
     return [
         f"instr-line {i + 1}: {l.strip()}"
         for i, l in enumerate(lines)
-        if i > body_idx and i < shadow_idx
-        and "__TRACE_STATE" in l and '"x", x' in l
+        if i > body_idx and i < shadow_idx and "__TRACE_STATE" in l and '"x", x' in l
     ]
 
 
@@ -115,7 +122,8 @@ class TestS1LoopHeaderStateLeak:
 
         result = walk(str(src))
         header_states = [
-            p for p in result.injection_points
+            p
+            for p in result.injection_points
             if p.kind == InjectKind.STATE and p.line == HEADER_LINE
         ]
         assert header_states, (
@@ -138,8 +146,7 @@ class TestS1LoopHeaderStateLeak:
         leaked = [
             f"instr-line {i + 1}: {l.strip()}"
             for i, l in enumerate(lines)
-            if f"__TRACE_STATE({HEADER_LINE}," in l and '"x", x' in l
-            and i > body_idx
+            if f"__TRACE_STATE({HEADER_LINE}," in l and '"x", x' in l and i > body_idx
         ]
         print("\nHEADER-event TRACE lines placed after loop body:")
         for line in leaked:

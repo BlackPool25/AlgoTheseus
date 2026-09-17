@@ -9,6 +9,8 @@ import subprocess
 import tempfile
 from pathlib import Path
 
+import pytest
+
 from app.core.instrumenter.injector import instrument
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -24,21 +26,76 @@ def _compile_and_run(source: str, stdin: str = "") -> tuple[str, str, int]:
 
         # Copy tracer.h into the temp dir
         import shutil
+
         shutil.copy(TRACER_H, tmp_path / "tracer.h")
 
         binary = tmp_path / "prog"
         compile_result = subprocess.run(
-            ["g++", "-O0", "-std=c++17", "-I", str(tmp_path), "-o", str(binary), str(src)],
-            capture_output=True, text=True, check=False,
+            [
+                "g++",
+                "-O0",
+                "-std=c++17",
+                "-I",
+                str(tmp_path),
+                "-o",
+                str(binary),
+                str(src),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
         )
         if compile_result.returncode != 0:
             return "", compile_result.stderr, compile_result.returncode
 
         run_result = subprocess.run(
             [str(binary)],
-            input=stdin, capture_output=True, text=True, timeout=5, check=False,
+            input=stdin,
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
         )
         return run_result.stdout, run_result.stderr, run_result.returncode
+
+
+@pytest.mark.parametrize("guard", ["if (n == 0) return;", "if (n == 0) { return; }"])
+def test_void_recursive_returns_compile_and_preserve_stdout(guard: str) -> None:
+    source = f"""#include <iostream>
+void visit(int n) {{
+    {guard}
+    std::cout << n;
+    visit(n - 1);
+    return;
+}}
+int main() {{ visit(3); return 0; }}
+"""
+    generated = instrument(source)
+    stdout, stderr, code = _compile_and_run(generated)
+    assert code == 0, stderr
+    assert stdout == "321"
+    assert "__TRACE_FUNC_EXIT_VOID" in generated
+
+
+@pytest.mark.parametrize("braced", [False, True])
+def test_range_binding_branch_stays_inside_loop(braced: bool) -> None:
+    body = "if (v < w) total += v + w;"
+    if braced:
+        body = "{ " + body + " }"
+    source = f"""#include <iostream>
+#include <vector>
+#include <utility>
+int main() {{
+    std::vector<std::pair<int, int>> edges = {{{{1, 2}}, {{4, 3}}}};
+    int total = 0;
+    for (auto [v, w] : edges) {body}
+    std::cout << total;
+    return 0;
+}}
+"""
+    stdout, stderr, code = _compile_and_run(instrument(source))
+    assert code == 0, stderr
+    assert stdout == "3"
 
 
 class TestInjector:

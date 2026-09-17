@@ -21,9 +21,9 @@ class TestDiagnosticsGate:
         src.write_text(BROKEN_SRC)
         with __import__("pytest").raises(InstrumentParseError) as excinfo:
             instrument(BROKEN_SRC, str(src))
-        assert re.search(r":\d+", str(excinfo.value)), (
-            f"error message must carry file:line, got: {excinfo.value}"
-        )
+        assert re.search(
+            r":\d+", str(excinfo.value)
+        ), f"error message must carry file:line, got: {excinfo.value}"
 
     def test_valid_fixture_instruments_no_raise(self, tmp_path):
         from app.core.instrumenter.injector import instrument

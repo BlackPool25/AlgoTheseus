@@ -33,15 +33,30 @@ def _compile_and_run(source: str, stdin: str = "") -> tuple[str, str, int]:
 
         binary = tmp_path / "prog"
         compile_result = subprocess.run(
-            ["g++", "-O0", "-std=c++17", "-I", str(tmp_path), "-o", str(binary), str(src)],
-            capture_output=True, text=True, check=False,
+            [
+                "g++",
+                "-O0",
+                "-std=c++17",
+                "-I",
+                str(tmp_path),
+                "-o",
+                str(binary),
+                str(src),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
         )
         if compile_result.returncode != 0:
             return "", compile_result.stderr, compile_result.returncode
 
         run_result = subprocess.run(
             [str(binary)],
-            input=stdin, capture_output=True, text=True, timeout=10, check=False,
+            input=stdin,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
         )
         return run_result.stdout, run_result.stderr, run_result.returncode
 
@@ -50,7 +65,7 @@ def _trace_events(stderr: str) -> list[dict]:
     events = []
     for line in stderr.splitlines():
         if line.startswith("TRACE:"):
-            events.append(json.loads(line[len("TRACE:"):]))
+            events.append(json.loads(line[len("TRACE:") :]))
     return events
 
 
@@ -100,7 +115,9 @@ class TestGlobalsTrace:
         _, stderr, code = _compile_and_run(GLOBALS_SRC)
         events = _trace_events(stderr)
         assert code == 0, f"run failed:\n{stderr}"
-        main_states = [e for e in events if e.get("t") == "state" and e.get("f") == "main"]
+        main_states = [
+            e for e in events if e.get("t") == "state" and e.get("f") == "main"
+        ]
         assert main_states, "no main STATE events"
         with_g = [e for e in main_states if "g" in e]
         assert with_g, "no STATE carries globals"
@@ -111,14 +128,20 @@ class TestGlobalsTrace:
         _, stderr, code = _compile_and_run(GLOBALS_SRC)
         events = _trace_events(stderr)
         assert code == 0, f"run failed:\n{stderr}"
-        main_states = [e for e in events if e.get("t") == "state" and e.get("f") == "main"]
+        main_states = [
+            e for e in events if e.get("t") == "state" and e.get("f") == "main"
+        ]
         assert len(main_states) > 1, "need multiple STATEs to prove dedup"
         with_g = [e for e in main_states if "g" in e]
-        assert len(with_g) == 1, f"expected exactly 1 STATE with globals, got {len(with_g)}"
+        assert (
+            len(with_g) == 1
+        ), f"expected exactly 1 STATE with globals, got {len(with_g)}"
 
     def test_no_globals_key_without_globals(self):
         """A program with zero globals emits NO `globals` key at all."""
         _, stderr, _ = _compile_and_run(NO_GLOBALS_SRC)
         events = _trace_events(stderr)
         assert events, "no trace events"
-        assert all("g" not in e for e in events), "globals key leaked into zero-globals trace"
+        assert all(
+            "g" not in e for e in events
+        ), "globals key leaked into zero-globals trace"

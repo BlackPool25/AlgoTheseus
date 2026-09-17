@@ -97,16 +97,30 @@ def test_parent_vars_persist():
 
 def test_frames_compose_with_globals_and_post_decl_vars():
     """Frames carry locals while STATE events keep globals/post-decl vars."""
-    raw = _raw([
-        {"t": "enter", "l": 2, "f": "main", "d": 0, "p": {}},
-        {"t": "state", "l": 3, "f": "main", "d": 0,
-         "v": {"x": 10, "result": 3}, "g": {"N": 10}},
-        {"t": "enter", "l": 8, "f": "solve", "d": 0, "p": {"n": 5}},
-        {"t": "state", "l": 9, "f": "solve", "d": 0,
-         "v": {"n": 5, "mid": 2}, "g": {"N": 10}},
-        {"t": "exit", "l": 12, "f": "solve", "d": 0, "r": 3},
-        {"t": "exit", "l": 5, "f": "main", "d": 0, "r": 0},
-    ])
+    raw = _raw(
+        [
+            {"t": "enter", "l": 2, "f": "main", "d": 0, "p": {}},
+            {
+                "t": "state",
+                "l": 3,
+                "f": "main",
+                "d": 0,
+                "v": {"x": 10, "result": 3},
+                "g": {"N": 10},
+            },
+            {"t": "enter", "l": 8, "f": "solve", "d": 0, "p": {"n": 5}},
+            {
+                "t": "state",
+                "l": 9,
+                "f": "solve",
+                "d": 0,
+                "v": {"n": 5, "mid": 2},
+                "g": {"N": 10},
+            },
+            {"t": "exit", "l": 12, "f": "solve", "d": 0, "r": 3},
+            {"t": "exit", "l": 5, "f": "main", "d": 0, "r": 0},
+        ]
+    )
     events = parse(raw)
     frames = frames_at_step(events)
 
@@ -120,12 +134,16 @@ def test_frames_compose_with_globals_and_post_decl_vars():
 
 def test_unbalanced_exit_truncates_gracefully():
     """A FUNC_EXIT with no matching frame (e.g. user exit() call) never raises."""
-    events = parse(_raw([
-        {"t": "enter", "l": 1, "f": "main", "d": 0, "p": {}},
-        {"t": "state", "l": 2, "f": "main", "d": 0, "v": {"x": 1}},
-        {"t": "exit", "l": 99, "f": "ghost", "d": 0, "r": 0},
-        {"t": "state", "l": 3, "f": "main", "d": 0, "v": {"x": 2}},
-    ]))
+    events = parse(
+        _raw(
+            [
+                {"t": "enter", "l": 1, "f": "main", "d": 0, "p": {}},
+                {"t": "state", "l": 2, "f": "main", "d": 0, "v": {"x": 1}},
+                {"t": "exit", "l": 99, "f": "ghost", "d": 0, "r": 0},
+                {"t": "state", "l": 3, "f": "main", "d": 0, "v": {"x": 2}},
+            ]
+        )
+    )
     frames = frames_at_step(events)  # must not raise
     assert len(frames) == len(events)
     # Unknown exit leaves the live stack untouched; later steps still render.

@@ -36,16 +36,19 @@ class TestOldFixtureParses:
         """Given old v1 lines / When parsed / Then discriminant types match."""
         events = parse(OLD_FIXTURE_LINES)
         assert [e.type.value for e in events] == [
-            "enter", "state", "branch", "iter", "state", "exit",
+            "enter",
+            "state",
+            "branch",
+            "iter",
+            "state",
+            "exit",
         ]
 
     def test_old_fixture_renders_flat_fallback(self):
         """Given distinct STATE vars / When compressed / Then no groups (flat)."""
         events = parse(OLD_FIXTURE_LINES, compressed=True)
         assert len(events) == 6  # nothing collapsed → flat fallback
-        assert all(
-            e.__pydantic_extra__.get("group_count", 1) == 1 for e in events
-        )
+        assert all(e.__pydantic_extra__.get("group_count", 1) == 1 for e in events)
 
 
 class TestV2OptionalFields:
@@ -85,10 +88,17 @@ class TestV2OptionalFields:
     def test_new_fields_accepted_when_present(self):
         e = models.StateEvent.model_validate(
             {
-                "t": "state", "l": 1, "f": "main", "d": 0, "v": {"x": 1},
-                "stdout": "hi\n", "stdout_truncated": False,
-                "globals": {"g": 1}, "step_desc": "assign x",
-                "prev_line": 1, "heap": {"1": [1, 2]},
+                "t": "state",
+                "l": 1,
+                "f": "main",
+                "d": 0,
+                "v": {"x": 1},
+                "stdout": "hi\n",
+                "stdout_truncated": False,
+                "globals": {"g": 1},
+                "step_desc": "assign x",
+                "prev_line": 1,
+                "heap": {"1": [1, 2]},
             }
         )
         assert e.stdout == "hi\n"
@@ -103,8 +113,14 @@ class TestAdversarial:
             "not json at all{{{",
             json.dumps({"t": "state", "l": 1}),  # missing required f/d → invalid
             json.dumps(
-                {"t": "state", "l": 1, "f": "m", "d": 0, "v": {},
-                 "some_future_field": 123}
+                {
+                    "t": "state",
+                    "l": 1,
+                    "f": "m",
+                    "d": 0,
+                    "v": {},
+                    "some_future_field": 123,
+                }
             ),
             json.dumps({"t": "state", "l": 2, "f": "m", "d": 0, "v": {"a": 1}}),
         ]
@@ -138,9 +154,7 @@ class TestCompressionRespectsStdoutHeap:
         assert len(states) == 2  # both survive, nothing merged
         assert states[0].stdout == "a"
         assert states[1].stdout == "a\nb"
-        assert all(
-            e.__pydantic_extra__.get("group_count", 1) == 1 for e in events
-        )
+        assert all(e.__pydantic_extra__.get("group_count", 1) == 1 for e in events)
 
     def test_identical_stdout_still_merges(self):
         events = parse(_phase2_lines(["a", ""]), compressed=True)

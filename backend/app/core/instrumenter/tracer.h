@@ -22,6 +22,9 @@
 
 #pragma once
 #include <cstdio>
+#include <cmath>
+#include <limits>
+#include <locale>
 #include <string>
 #include <sstream>
 #include <vector>
@@ -40,6 +43,20 @@
 #include <iostream>
 #include <unistd.h>
 #include <fcntl.h>
+
+inline std::unordered_set<const void*> __trace_freed_addresses;
+
+template<typename T>
+T* __trace_allocated(T* p) {
+    __trace_freed_addresses.erase(p);
+    return p;
+}
+
+template<typename T>
+T* __trace_deleting(T* p) {
+    if (p) __trace_freed_addresses.insert(p);
+    return p;
+}
 
 // ── Incremental stdout capture (T7, engine-agnostic "o" protocol) ───────────
 // fd 1 is redirected to a temp file at program start so BOTH std::cout and
@@ -160,33 +177,96 @@ inline std::string __ser(long long v)          { return std::to_string(v); }
 inline std::string __ser(unsigned v)           { return std::to_string(v); }
 inline std::string __ser(unsigned long v)      { return std::to_string(v); }
 inline std::string __ser(unsigned long long v) { return std::to_string(v); }
-inline std::string __ser(float v)              { std::ostringstream o; o << v; return o.str(); }
-inline std::string __ser(double v)             { std::ostringstream o; o << v; return o.str(); }
-inline std::string __ser(bool v)               { return v ? "true" : "false"; }
+template<typename T>
+std::enable_if_t<std::is_floating_point_v<T>, std::string> __ser(const T& v) {
+    if (std::isnan(v)) return "\"NaN\"";
+    if (std::isinf(v)) return std::signbit(v) ? "\"-Infinity\"" : "\"Infinity\"";
+    std::ostringstream out;
+    out.imbue(std::locale::classic());
+    out.precision(std::numeric_limits<T>::max_digits10);
+    out << v;
+    return out.str();
+}
+template<typename T>
+std::enable_if_t<std::is_same_v<T, bool>, std::string> __ser(const T& v) {
+    return v ? "true" : "false";
+}
 inline std::string __ser(char v) {
-    // Escape special chars
-    if (v == '"')  return "\"\\\"\"";
-    if (v == '\\') return "\"\\\\\"";
-    if (v == '\n') return "\"\\n\"";
-    if (v == '\t') return "\"\\t\"";
-    std::string s = "\"_\""; s[1] = v; return s;
+    unsigned char c = static_cast<unsigned char>(v);
+    if (c >= 0x7f) {
+        const char* hex = "0123456789abcdef";
+        std::string out = "\"\\u00";
+        out += hex[c >> 4];
+        out += hex[c & 15];
+        return out + "\"";
+    }
+    return "\"" + __trace_json_escape(&v, 1) + "\"";
 }
 inline std::string __ser(const std::string& v) {
-    std::string out = "\"";
-    for (char c : v) {
-        if (c == '"')  { out += "\\\""; }
-        else if (c == '\\') { out += "\\\\"; }
-        else if (c == '\n') { out += "\\n"; }
-        else if (c == '\t') { out += "\\t"; }
-        else { out += c; }
-    }
-    out += "\"";
-    return out;
+    return "\"" + __trace_json_escape(v.data(), v.size()) + "\"";
 }
-inline std::string __ser(const char* v) {
-    if (!v) return "null";
-    return __ser(std::string(v));
-}
+
+// ── Forward declarations for two-phase lookup ───────────────────────────────
+template<typename T1, typename T2>
+std::string __ser(const std::pair<T1,T2>& p);
+
+template<typename... Ts>
+std::string __ser(const std::tuple<Ts...>& t);
+
+template<typename T>
+std::string __ser(const std::vector<T>& v);
+
+template<typename T>
+std::string __ser(const std::deque<T>& v);
+
+template<typename K, typename V>
+std::string __ser(const std::map<K,V>& m);
+
+template<typename K, typename V>
+std::string __ser(const std::unordered_map<K,V>& m);
+
+template<typename T>
+std::string __ser(const std::set<T>& s);
+
+template<typename T>
+std::string __ser(const std::unordered_set<T>& s);
+
+template<typename T>
+std::string __ser(const std::multiset<T>& s);
+
+template<typename V>
+std::string __ser(const std::map<std::string,V>& m);
+
+template<typename V>
+std::string __ser(const std::unordered_map<std::string,V>& m);
+
+template<typename T>
+std::string __ser(const std::vector<std::vector<T>>& v);
+
+inline std::string __ser(const std::vector<bool>& v);
+inline std::string __ser(const std::vector<std::vector<bool>>& v);
+
+template<typename T>
+std::string __ser(std::stack<T> v);
+
+template<typename T>
+std::string __ser(std::queue<T> v);
+
+template<typename T, typename Container, typename Compare>
+std::string __ser(std::priority_queue<T, Container, Compare> v);
+
+template<typename T, std::size_t N>
+std::string __ser(const std::array<T,N>& a);
+
+template<typename T, std::size_t N>
+std::string __ser(T (&arr)[N]);
+
+template<typename T>
+std::enable_if_t<std::is_pointer_v<T>, std::string> __ser(const T& p);
+
+template<typename T>
+std::enable_if_t<!std::is_array_v<T> && !std::is_pointer_v<T>
+    && !std::is_arithmetic_v<T>, std::string> __ser(const T&);
 
 // ── STL container serializers ────────────────────────────────────────────────
 
@@ -444,16 +524,21 @@ std::string __ser_ptr(T* p, std::set<void*>& visited, int depth) {
 
 // Convenience wrapper for when no visited set is available at call site
 template<typename T>
-std::string __ser(T* p) {
+std::enable_if_t<std::is_pointer_v<T>, std::string> __ser(const T& p) {
     if (!p) return "null";
-    std::set<void*> visited;
-    return __ser_ptr(p, visited, 0);
+    if constexpr (std::is_same_v<T, char*> || std::is_same_v<T, const char*>) {
+        return __ser(std::string(p));
+    } else {
+        std::set<void*> visited;
+        return __ser_ptr(p, visited, 0);
+    }
 }
 
 // ── Catch-all for types without a specific serializer ───────────────────────
 // Returns a placeholder so compilation never fails on unknown types.
 template<typename T>
-std::string __ser(const T&) { return "\"<opaque>\""; }
+std::enable_if_t<!std::is_array_v<T> && !std::is_pointer_v<T>
+    && !std::is_arithmetic_v<T>, std::string> __ser(const T&) { return "\"<opaque>\""; }
 
 // ── Var-list builder helpers ─────────────────────────────────────────────────
 // Used by the injected macros to build {"name":value,...} JSON objects.

@@ -44,9 +44,19 @@ def _compile(source: str) -> tuple[int, str]:
         shutil.copy(TRACER_H, tmp_path / "tracer.h")
         binary = tmp_path / "prog"
         result = subprocess.run(
-            ["g++", "-O0", "-std=c++17", "-I", str(tmp_path),
-             "-o", str(binary), str(src)],
-            capture_output=True, text=True, check=False,
+            [
+                "g++",
+                "-O0",
+                "-std=c++17",
+                "-I",
+                str(tmp_path),
+                "-o",
+                str(binary),
+                str(src),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
         )
         return result.returncode, result.stderr
 
@@ -54,26 +64,26 @@ def _compile(source: str) -> tuple[int, str]:
 SIBLING_SRC = "int f() {\n    int a=1; int b=2;\n    return a+b;\n}\n"
 
 BLOCK_SRC = (
-    "int f(int n) {\n"      # line 1
-    "    if (n > 0) {\n"    # line 2
+    "int f(int n) {\n"  # line 1
+    "    if (n > 0) {\n"  # line 2
     "        int q = 5;\n"  # line 3
     "        int r = q + n;\n"  # line 4
-    "    }\n"               # line 5
+    "    }\n"  # line 5
     "    int after = 1;\n"  # line 6
     "    return after + n;\n"  # line 7
-    "}\n"                  # line 8
+    "}\n"  # line 8
 )
 
 NESTED_SRC = (
-    "int h() {\n"                    # line 1
-    "    int s=0;\n"                 # line 2
+    "int h() {\n"  # line 1
+    "    int s=0;\n"  # line 2
     "    for (int i=0;i<2;++i) {\n"  # line 3 outer
     "        for (int i=0;i<2;++i) {\n"  # line 4 inner
-    "            s+=i;\n"            # line 5
-    "        }\n"                    # line 6
-    "    }\n"                       # line 7
-    "    return s;\n"                # line 8
-    "}\n"                           # line 9
+    "            s+=i;\n"  # line 5
+    "        }\n"  # line 6
+    "    }\n"  # line 7
+    "    return s;\n"  # line 8
+    "}\n"  # line 9
 )
 
 
@@ -88,7 +98,9 @@ class TestSameLineSiblingsPre:
         scopes = build_scope_map(src)
         pre_names = {v.name for v in scopes["f"].vars_at_line_pre.get(2, [])}
         assert "b" not in pre_names, f"`b` leaked into `a`'s pre-snapshot: {pre_names}"
-        assert "a" not in pre_names, f"`a` leaked into its own pre-snapshot: {pre_names}"
+        assert (
+            "a" not in pre_names
+        ), f"`a` leaked into its own pre-snapshot: {pre_names}"
 
     def test_post_snapshot_keeps_both_and_compiles(self, tmp_path: Path) -> None:
         """Post (R1) still carries both siblings; instrumented code compiles."""
@@ -114,8 +126,9 @@ class TestMultilineBodyLeak:
         scope = scopes["f"]
         post_names = {v.name for v in scope.vars_at_line_post.get(4, [])}
         assert {"q", "r"} <= post_names  # anchor really sees the block vars
-        point = InjectionPoint(kind=InjectKind.STATE, line=4, col=1,
-                               func_name="f", depth=0)
+        point = InjectionPoint(
+            kind=InjectKind.STATE, line=4, col=1, func_name="f", depth=0
+        )
         out = _trace_state(point, scope, None, 6)
         assert '"q"' not in out, f"block var `q` leaked past extent end: {out}"
         assert '"r"' not in out, f"block var `r` leaked past extent end: {out}"
@@ -125,8 +138,9 @@ class TestMultilineBodyLeak:
         """Same anchor placed inside the block keeps the block vars (no R1 change)."""
         src = _write(tmp_path, "blk2.cpp", BLOCK_SRC)
         scope = build_scope_map(src)["f"]
-        point = InjectionPoint(kind=InjectKind.STATE, line=4, col=1,
-                               func_name="f", depth=0)
+        point = InjectionPoint(
+            kind=InjectKind.STATE, line=4, col=1, func_name="f", depth=0
+        )
         out = _trace_state(point, scope, None, 4)
         assert '"q"' in out and '"r"' in out, f"in-extent vars dropped: {out}"
 
@@ -140,8 +154,9 @@ class TestNestedSameNameLoops:
     def test_inner_body_keeps_i_past_both_drops(self, tmp_path: Path) -> None:
         src = _write(tmp_path, "nest2.cpp", NESTED_SRC)
         scope = build_scope_map(src)["h"]
-        point = InjectionPoint(kind=InjectKind.STATE, line=5, col=1,
-                               func_name="h", depth=0)
+        point = InjectionPoint(
+            kind=InjectKind.STATE, line=5, col=1, func_name="h", depth=0
+        )
         assert '"i"' in _trace_state(point, scope, None, 5)
         assert '"i"' not in _trace_state(point, scope, None, 8)
 
@@ -150,4 +165,6 @@ class TestNestedSameNameLoops:
         src = _write(tmp_path, "nest3.cpp", prog)
         out = instrument(prog, src)
         code, stderr = _compile(out)
-        assert code == 0, f"nested same-name instrumented source failed to compile:\n{stderr}"
+        assert (
+            code == 0
+        ), f"nested same-name instrumented source failed to compile:\n{stderr}"

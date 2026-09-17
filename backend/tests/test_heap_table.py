@@ -46,22 +46,43 @@ def _instrument_compile_run(fixture: str) -> list[dict]:
         shutil.copy(TRACER_H, tmp_path / "tracer.h")
         binary = tmp_path / "prog"
         compile_result = subprocess.run(
-            ["g++", "-O0", "-std=c++17", "-I", str(tmp_path),
-             "-o", str(binary), str(prog)],
-            capture_output=True, text=True, timeout=30, check=False,
+            [
+                "g++",
+                "-O0",
+                "-std=c++17",
+                "-I",
+                str(tmp_path),
+                "-o",
+                str(binary),
+                str(prog),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
         )
-        assert compile_result.returncode == 0, f"Compile error:\n{compile_result.stderr}"
-        run = subprocess.run([str(binary)], capture_output=True, text=True, timeout=10, check=False)
+        assert (
+            compile_result.returncode == 0
+        ), f"Compile error:\n{compile_result.stderr}"
+        run = subprocess.run(
+            [str(binary)], capture_output=True, text=True, timeout=10, check=False
+        )
     assert run.returncode == 0, f"nonzero exit:\n{run.stderr}"
     return [
-        json.loads(line[len("TRACE:"):]) for line in run.stderr.splitlines()
+        json.loads(line[len("TRACE:") :])
+        for line in run.stderr.splitlines()
         if line.startswith("TRACE:")
     ]
 
 
 def _node(id_: int, val: int, left=None, right=None) -> dict:
-    return {"$id": id_, "$addr": f"0x{id_:x}000", "val": val,
-            "left": left, "right": right}
+    return {
+        "$id": id_,
+        "$addr": f"0x{id_:x}000",
+        "val": val,
+        "left": left,
+        "right": right,
+    }
 
 
 def test_heap_table_contains_structs():
@@ -100,19 +121,28 @@ def test_heap_table_contains_structs():
 
     # Stable ids: some $id survives across consecutive STATEs.
     ids_per_state = [set(t) for _, t in states if t]
-    assert any(a & b for a, b in itertools.pairwise(ids_per_state)), (
-        "no stable $id across consecutive steps"
-    )
+    assert any(
+        a & b for a, b in itertools.pairwise(ids_per_state)
+    ), "no stable $id across consecutive steps"
 
 
 def test_in_step_ref_resolves_to_child_key():
     """Given a parent with a PRESENT child id / When extracted /
     Then the ref equals the child's (string) table key — never "unknown"."""
-    lines = _raw([
-        {"t": "state", "l": 1, "f": "main", "d": 0,
-         "v": {"root": _node(1, 1, left=_node(2, 2), right=None),
-               "alias": {"$ref": 1}}},
-    ])
+    lines = _raw(
+        [
+            {
+                "t": "state",
+                "l": 1,
+                "f": "main",
+                "d": 0,
+                "v": {
+                    "root": _node(1, 1, left=_node(2, 2), right=None),
+                    "alias": {"$ref": 1},
+                },
+            },
+        ]
+    )
     events = parse(lines)
     table = heap_at_step(events)[0]
     assert set(table) == {"1", "2"}
@@ -124,14 +154,26 @@ def test_in_step_ref_resolves_to_child_key():
 def test_heap_dedup_same_object_across_steps():
     """Given two STATEs with a byte-identical $id object / When parsed /
     Then the entry object is shared (is-identical), not duplicated."""
-    lines = _raw([
-        {"t": "enter", "l": 1, "f": "main", "d": 0, "p": {}},
-        {"t": "state", "l": 2, "f": "main", "d": 0,
-         "v": {"x": 1, "root": _node(1, 1)}},
-        {"t": "state", "l": 3, "f": "main", "d": 0,
-         "v": {"x": 2, "root": _node(1, 1)}},
-        {"t": "exit", "l": 4, "f": "main", "d": 0, "r": 0},
-    ])
+    lines = _raw(
+        [
+            {"t": "enter", "l": 1, "f": "main", "d": 0, "p": {}},
+            {
+                "t": "state",
+                "l": 2,
+                "f": "main",
+                "d": 0,
+                "v": {"x": 1, "root": _node(1, 1)},
+            },
+            {
+                "t": "state",
+                "l": 3,
+                "f": "main",
+                "d": 0,
+                "v": {"x": 2, "root": _node(1, 1)},
+            },
+            {"t": "exit", "l": 4, "f": "main", "d": 0, "r": 0},
+        ]
+    )
     events = parse(lines)
     tables = heap_at_step(events)
 
@@ -144,14 +186,26 @@ def test_heap_dedup_same_object_across_steps():
 def test_mutation_detected_by_id():
     """Given same $id with one changed field / When diffed /
     Then mutated=[id] with exactly that field in changed_fields."""
-    lines = _raw([
-        {"t": "enter", "l": 1, "f": "main", "d": 0, "p": {}},
-        {"t": "state", "l": 2, "f": "main", "d": 0,
-         "v": {"root": _node(1, 1, left=_node(2, 2))}},
-        {"t": "state", "l": 3, "f": "main", "d": 0,
-         "v": {"root": _node(1, 42, left=_node(2, 2))}},
-        {"t": "exit", "l": 4, "f": "main", "d": 0, "r": 0},
-    ])
+    lines = _raw(
+        [
+            {"t": "enter", "l": 1, "f": "main", "d": 0, "p": {}},
+            {
+                "t": "state",
+                "l": 2,
+                "f": "main",
+                "d": 0,
+                "v": {"root": _node(1, 1, left=_node(2, 2))},
+            },
+            {
+                "t": "state",
+                "l": 3,
+                "f": "main",
+                "d": 0,
+                "v": {"root": _node(1, 42, left=_node(2, 2))},
+            },
+            {"t": "exit", "l": 4, "f": "main", "d": 0, "r": 0},
+        ]
+    )
     events = parse(lines)
     tables = heap_at_step(events)
 
@@ -180,25 +234,35 @@ def test_zero_id_trace_yields_empty_heap():
 
     states = [e for e in events if e.type.value == "state"]
     assert states, "expected STATE events"
-    assert all(t == {} for e, t in zip(events, tables)
-               if e.type.value == "state")
+    assert all(t == {} for e, t in zip(events, tables) if e.type.value == "state")
     assert all(e.heap is None for e in states), "no new wire key on $id-less traces"
     assert all(e.heap_diff is None for e in states)
     assert any(e.vars for e in states), "scalar vars still carried (old path)"
     assert heap_diff({}, {}) == {
-        "added": [], "removed": [], "mutated": [], "changed_fields": {},
+        "added": [],
+        "removed": [],
+        "mutated": [],
+        "changed_fields": {},
     }
 
 
 def test_dangling_ref_renders_unknown_never_raises():
     """Given a $ref to an id absent from this step / When extracted /
     Then the ref renders as 'unknown' instead of raising."""
-    lines = _raw([
-        {"t": "state", "l": 1, "f": "main", "d": 0,
-         "v": {"root": {"$id": 1, "$addr": "0x1",
-                        "val": 1, "next": {"$ref": 99}}}},
-        {"t": "state", "l": 2, "f": "main", "d": 0, "v": {"x": "garbage"}},
-    ])
+    lines = _raw(
+        [
+            {
+                "t": "state",
+                "l": 1,
+                "f": "main",
+                "d": 0,
+                "v": {
+                    "root": {"$id": 1, "$addr": "0x1", "val": 1, "next": {"$ref": 99}}
+                },
+            },
+            {"t": "state", "l": 2, "f": "main", "d": 0, "v": {"x": "garbage"}},
+        ]
+    )
     events = parse(lines)  # must not raise (parse stays total)
     tables = heap_at_step(events)
     assert tables[0]["1"]["refs"] == {"next": "unknown"}

@@ -22,7 +22,9 @@ TRACER_H = Path(__file__).parent.parent / "app" / "core" / "instrumenter" / "tra
 FIXTURES = Path(__file__).parent / "fixtures"
 
 
-def _compile_and_run_extra(source: str, timeout: int = 5) -> subprocess.CompletedProcess:
+def _compile_and_run_extra(
+    source: str, timeout: int = 5
+) -> subprocess.CompletedProcess:
     """Compile *source* (already containing tracer.h include + generated code)
     and run it. Returns the CompletedProcess (stdout/stderr/rc)."""
     with tempfile.TemporaryDirectory() as tmp:
@@ -32,12 +34,30 @@ def _compile_and_run_extra(source: str, timeout: int = 5) -> subprocess.Complete
         shutil.copy(TRACER_H, tmp_path / "tracer.h")
         binary = tmp_path / "prog"
         compile_result = subprocess.run(
-            ["g++", "-O0", "-std=c++17", "-I", str(tmp_path), "-o", str(binary), str(src)],
-            capture_output=True, text=True, timeout=30, check=False,
+            [
+                "g++",
+                "-O0",
+                "-std=c++17",
+                "-I",
+                str(tmp_path),
+                "-o",
+                str(binary),
+                str(src),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
         )
-        assert compile_result.returncode == 0, f"Compile error:\n{compile_result.stderr}"
+        assert (
+            compile_result.returncode == 0
+        ), f"Compile error:\n{compile_result.stderr}"
         return subprocess.run(
-            [str(binary)], capture_output=True, text=True, timeout=timeout, check=False,
+            [str(binary)],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
         )
 
 
@@ -48,7 +68,15 @@ def _gen_for(body_main: str, structs_src: str) -> str:
         tu = Path(tmp) / "tu.cpp"
         tu.write_text(structs_src + "\n" + body_main + "\n")
         gen = serializer_gen.generate_serializers(str(tu))
-    return '#include "tracer.h"\n#include <iostream>\n' + structs_src + "\n" + gen + "\n" + body_main + "\n"
+    return (
+        '#include "tracer.h"\n#include <iostream>\n'
+        + structs_src
+        + "\n"
+        + gen
+        + "\n"
+        + body_main
+        + "\n"
+    )
 
 
 TREENODE = """\
@@ -163,7 +191,9 @@ def test_instrumented_fixture_trace_carries_id_ref_addr():
     from app.core.instrumenter.injector import instrument
 
     fixture_src = (FIXTURES / "linked_list.cpp").read_text()
-    instrumented = instrument(fixture_src, source_path=str(FIXTURES / "linked_list.cpp"))
+    instrumented = instrument(
+        fixture_src, source_path=str(FIXTURES / "linked_list.cpp")
+    )
     with tempfile.TemporaryDirectory() as tmp:
         tmp_path = Path(tmp)
         src = tmp_path / "prog.cpp"
@@ -171,15 +201,31 @@ def test_instrumented_fixture_trace_carries_id_ref_addr():
         shutil.copy(TRACER_H, tmp_path / "tracer.h")
         binary = tmp_path / "prog"
         compile_result = subprocess.run(
-            ["g++", "-O0", "-std=c++17", "-I", str(tmp_path),
-             "-o", str(binary), str(src)],
-            capture_output=True, text=True, timeout=30, check=False,
+            [
+                "g++",
+                "-O0",
+                "-std=c++17",
+                "-I",
+                str(tmp_path),
+                "-o",
+                str(binary),
+                str(src),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
         )
-        assert compile_result.returncode == 0, f"Compile error:\n{compile_result.stderr}"
-        run = subprocess.run([str(binary)], capture_output=True, text=True, timeout=10, check=False)
+        assert (
+            compile_result.returncode == 0
+        ), f"Compile error:\n{compile_result.stderr}"
+        run = subprocess.run(
+            [str(binary)], capture_output=True, text=True, timeout=10, check=False
+        )
     assert run.returncode == 0, f"nonzero exit:\n{run.stderr}"
     trace_vals = [
-        json.loads(line[len("TRACE:"):]) for line in run.stderr.splitlines()
+        json.loads(line[len("TRACE:") :])
+        for line in run.stderr.splitlines()
         if line.startswith("TRACE:")
     ]
     states = [e for e in trace_vals if e.get("t") == "state" and e.get("v")]
@@ -194,9 +240,9 @@ def test_instrumented_fixture_trace_carries_id_ref_addr():
         return False
 
     assert states, "expected STATE events with vars"
-    assert any(has_identity(e["v"]) for e in states), (
-        "no STATE value carries $id + $addr"
-    )
+    assert any(
+        has_identity(e["v"]) for e in states
+    ), "no STATE value carries $id + $addr"
 
 
 def test_single_field_mutation_keeps_others_identical():
@@ -219,5 +265,12 @@ int main() {
     before, after = (json.loads(l) for l in proc.stdout.strip().splitlines())
     assert before["$id"] == after["$id"]  # stable identity across events
     assert after["val"] == 42
-    del before["val"], after["val"], before["$id"], after["$id"], before["$addr"], after["$addr"]
+    del (
+        before["val"],
+        after["val"],
+        before["$id"],
+        after["$id"],
+        before["$addr"],
+        after["$addr"],
+    )
     assert before == after

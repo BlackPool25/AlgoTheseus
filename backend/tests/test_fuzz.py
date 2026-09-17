@@ -40,13 +40,36 @@ SEED = int(os.environ.get("SEED", "29"))
 
 ALIAS_EVENTS: list[dict] = [
     {"t": "enter", "l": 1, "f": "main", "d": 0, "p": {}},
-    {"t": "enter", "l": 5, "f": "bsearch", "d": 0, "p": {"arr": [1, 3, 5], "target": 7}},
+    {
+        "t": "enter",
+        "l": 5,
+        "f": "bsearch",
+        "d": 0,
+        "p": {"arr": [1, 3, 5], "target": 7},
+    },
     {"t": "state", "l": 6, "f": "bsearch", "d": 0, "v": {"lo": 0, "hi": 4}},
-    {"t": "state", "l": 6, "f": "main", "d": 0, "v": {"x": "héllo wörld"},
-     "o": "out\n", "g": {"gv": 1}, "sd": "assign x", "pl": 5,
-     "h": {"1": {"$id": 1, "$addr": "0x1", "val": 3}}},
-    {"t": "branch", "l": 9, "f": "bsearch", "d": 0, "c": "arr[mid] == target",
-     "tk": False, "op": ["arr[mid]=5", "target=7"], "sd": "branch not taken"},
+    {
+        "t": "state",
+        "l": 6,
+        "f": "main",
+        "d": 0,
+        "v": {"x": "héllo wörld"},
+        "o": "out\n",
+        "g": {"gv": 1},
+        "sd": "assign x",
+        "pl": 5,
+        "h": {"1": {"$id": 1, "$addr": "0x1", "val": 3}},
+    },
+    {
+        "t": "branch",
+        "l": 9,
+        "f": "bsearch",
+        "d": 0,
+        "c": "arr[mid] == target",
+        "tk": False,
+        "op": ["arr[mid]=5", "target=7"],
+        "sd": "branch not taken",
+    },
     {"t": "iter", "l": 7, "f": "bsearch", "d": 0, "it": 0},
     {"t": "exit", "l": 13, "f": "bsearch", "d": 0, "r": 3, "rl": 12, "sd": "return 3"},
     {"t": "exit", "l": 2, "f": "main", "d": 0, "r": None},
@@ -54,15 +77,36 @@ ALIAS_EVENTS: list[dict] = [
 
 PYTHON_NAME_EVENTS: list[dict] = [
     {"type": "enter", "line": 1, "func": "main", "depth": 0, "params": {}},
-    {"type": "state", "line": 2, "func": "main", "depth": 0,
-     "vars": {"x": 10}, "stdout": "", "globals": {},
-     "step_desc": "assign x = 10", "prev_line": 1,
-     "heap": {"1": {"$id": 1, "$addr": "0x1", "val": 10}}},
-    {"type": "branch", "line": 3, "func": "main", "depth": 0,
-     "condition": "x > 5", "taken": True, "ops": ["x=10"]},
+    {
+        "type": "state",
+        "line": 2,
+        "func": "main",
+        "depth": 0,
+        "vars": {"x": 10},
+        "stdout": "",
+        "globals": {},
+        "step_desc": "assign x = 10",
+        "prev_line": 1,
+        "heap": {"1": {"$id": 1, "$addr": "0x1", "val": 10}},
+    },
+    {
+        "type": "branch",
+        "line": 3,
+        "func": "main",
+        "depth": 0,
+        "condition": "x > 5",
+        "taken": True,
+        "ops": ["x=10"],
+    },
     {"type": "iter", "line": 4, "func": "main", "depth": 0, "iteration": 2},
-    {"type": "exit", "line": 5, "func": "main", "depth": 0,
-     "return_val": 0, "return_line": 5},
+    {
+        "type": "exit",
+        "line": 5,
+        "func": "main",
+        "depth": 0,
+        "return_val": 0,
+        "return_line": 5,
+    },
 ]
 
 GARBAGE_LINES: list[str] = [
@@ -123,17 +167,21 @@ def build_cases(seed: int = SEED) -> list[tuple[str, list[str]]]:
     for pool_i, pool in enumerate(pools):
         for ev_i, ev in enumerate(pool):
             for rep in range(16):
-                cases.append((
-                    f"dropkeys/p{pool_i}/e{ev_i}/r{rep}",
-                    [json.dumps(_mutate_drop_keys(rng, ev))],
-                ))
+                cases.append(
+                    (
+                        f"dropkeys/p{pool_i}/e{ev_i}/r{rep}",
+                        [json.dumps(_mutate_drop_keys(rng, ev))],
+                    )
+                )
     # 2. Shuffle key order within each event.
     for pool_i, pool in enumerate(pools):
         for ev_i, ev in enumerate(pool):
-            cases.append((
-                f"shuffle-keys/p{pool_i}/e{ev_i}",
-                [json.dumps(_mutate_shuffle_keys(rng, ev))],
-            ))
+            cases.append(
+                (
+                    f"shuffle-keys/p{pool_i}/e{ev_i}",
+                    [json.dumps(_mutate_shuffle_keys(rng, ev))],
+                )
+            )
     # 3. Shuffle event order of a full valid stream.
     for rep in range(30):
         stream = [json.dumps(e) for e in ALIAS_EVENTS]
@@ -143,10 +191,12 @@ def build_cases(seed: int = SEED) -> list[tuple[str, list[str]]]:
     for pool_i, pool in enumerate(pools):
         for ev_i, ev in enumerate(pool):
             for rep in range(6):
-                cases.append((
-                    f"value-noise/p{pool_i}/e{ev_i}/r{rep}",
-                    [json.dumps(_mutate_value_noise(rng, ev))],
-                ))
+                cases.append(
+                    (
+                        f"value-noise/p{pool_i}/e{ev_i}/r{rep}",
+                        [json.dumps(_mutate_value_noise(rng, ev))],
+                    )
+                )
     # 5. Truncate mid-stream: cut the concatenated stream at byte offsets
     #    from every class — mid-line, mid-JSON, mid-UTF8 (multibyte value).
     full = "\n".join(json.dumps(e) for e in ALIAS_EVENTS) + "\n"
@@ -154,7 +204,9 @@ def build_cases(seed: int = SEED) -> list[tuple[str, list[str]]]:
     cut_classes: list[int] = []
     step = max(1, len(raw) // 60)
     cut_classes += list(range(0, len(raw), step))  # mid-line / mid-JSON mix
-    mb_anchor = full.encode("utf-8").find("hÃ".encode("latin1", errors="ignore")[:0])  # noop guard
+    mb_anchor = full.encode("utf-8").find(
+        "hÃ".encode("latin1", errors="ignore")[:0]
+    )  # noop guard
     del mb_anchor
     # Mid-UTF8: cut inside the multibyte "héllo wörld" bytes explicitly.
     mb_seg = "héllo wörld".encode()
@@ -185,8 +237,9 @@ def build_cases(seed: int = SEED) -> list[tuple[str, list[str]]]:
     return cases
 
 
-def _shrink_and_fail(name: str, lines: list[str], exc: BaseException,
-                     seed: int, idx: int) -> None:
+def _shrink_and_fail(
+    name: str, lines: list[str], exc: BaseException, seed: int, idx: int
+) -> None:
     """Shrink to the minimal failing input, then fail loudly."""
     minimal = list(lines)
     # Try single lines first.
@@ -288,7 +341,9 @@ def _run_with_timeout(func, timeout_s: int = 60):
 
 
 @pytest.mark.parametrize("edge", sorted(EDGE_SOURCES))
-def test_instrumenter_edge_graceful(edge: str, caplog: pytest.LogCaptureFixture) -> None:
+def test_instrumenter_edge_graceful(
+    edge: str, caplog: pytest.LogCaptureFixture
+) -> None:
     """Each edge source must return a string — skip + warning, never crash/hang."""
     from app.core.instrumenter.injector import instrument
 

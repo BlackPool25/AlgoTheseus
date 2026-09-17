@@ -38,15 +38,29 @@ def _compile_and_run(source: str, stdin: str = "") -> str:
 
         binary = tmp_path / "prog"
         compile_result = subprocess.run(
-            ["g++", "-O0", "-std=c++17", "-I", str(tmp_path), "-o", str(binary), str(src)],
-            capture_output=True, text=True, timeout=10,
+            [
+                "g++",
+                "-O0",
+                "-std=c++17",
+                "-I",
+                str(tmp_path),
+                "-o",
+                str(binary),
+                str(src),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
         )
         if compile_result.returncode != 0:
             raise RuntimeError(f"Compile error:\n{compile_result.stderr}")
 
         run_result = subprocess.run(
             [str(binary)],
-            input=stdin, capture_output=True, text=True, timeout=5,
+            input=stdin,
+            capture_output=True,
+            text=True,
+            timeout=5,
         )
         return run_result.stdout.strip()
 
@@ -72,7 +86,7 @@ def _assert_printed(source: str, expected_str: str) -> None:
 # ── Serializer test skeleton (include + boilerplate) ──────────────────────────
 # Every test below fills in the BODY placeholder.
 
-_SKELETON = '''\
+_SKELETON = """\
 #include "tracer.h"
 #include <iostream>
 #include <string>
@@ -85,7 +99,7 @@ int main() {{
     std::cout << __ser({body}) << std::endl;
     return 0;
 }}
-'''
+"""
 
 
 def _make_source(body: str) -> str:
@@ -107,9 +121,11 @@ class TestPairSerializer:
 
     def test_pair_string_double(self):
         """pair<string,double> → [\"pi\", 3.14] (within floating tolerance)"""
-        stdout = _compile_and_run(_make_source(
-            'std::pair<std::string,double>{"pi", 3.14}',
-        ))
+        stdout = _compile_and_run(
+            _make_source(
+                'std::pair<std::string,double>{"pi", 3.14}',
+            )
+        )
         parsed = json.loads(stdout)
         assert parsed[0] == "pi"
         assert abs(parsed[1] - 3.14) < 1e-6
@@ -117,7 +133,7 @@ class TestPairSerializer:
     def test_pair_bool_char(self):
         """pair<bool,char> → [true, \"X\"]"""
         _assert_serializes(
-            _make_source('std::pair<bool,char>{true, \'X\'}'),
+            _make_source("std::pair<bool,char>{true, 'X'}"),
             [True, "X"],
         )
 
@@ -131,15 +147,19 @@ class TestPairSerializer:
     def test_pair_deep_nested(self):
         """pair<pair<int,int>,pair<int,int>> → [[1,2],[3,4]]"""
         _assert_serializes(
-            _make_source("std::pair<std::pair<int,int>,std::pair<int,int>>{{1,2},{3,4}}"),
+            _make_source(
+                "std::pair<std::pair<int,int>,std::pair<int,int>>{{1,2},{3,4}}"
+            ),
             [[1, 2], [3, 4]],
         )
 
     def test_pair_large_values(self):
         """pair<long long, double> with large values."""
-        stdout = _compile_and_run(_make_source(
-            "std::pair<long long, double>{9223372036854775807LL, 1.0e100}",
-        ))
+        stdout = _compile_and_run(
+            _make_source(
+                "std::pair<long long, double>{9223372036854775807LL, 1.0e100}",
+            )
+        )
         parsed = json.loads(stdout)
         assert parsed[0] == 9223372036854775807
         assert abs(parsed[1] / 1.0e100 - 1.0) < 1e-6
@@ -157,9 +177,11 @@ class TestTupleSerializer:
 
     def test_tuple_int_string_double(self):
         """tuple<int,string,double> → [42, \"hello\", 3.14]"""
-        stdout = _compile_and_run(_make_source(
-            'std::tuple<int,std::string,double>{42, "hello", 3.14}',
-        ))
+        stdout = _compile_and_run(
+            _make_source(
+                'std::tuple<int,std::string,double>{42, "hello", 3.14}',
+            )
+        )
         parsed = json.loads(stdout)
         assert parsed[0] == 42
         assert parsed[1] == "hello"
@@ -181,9 +203,11 @@ class TestTupleSerializer:
 
     def test_tuple_mixed_types(self):
         """tuple<bool,int,double,char,string> → [true, -1, 0.5, \"Z\", \"text\"]"""
-        stdout = _compile_and_run(_make_source(
-            'std::tuple<bool,int,double,char,std::string>{true, -1, 0.5, \'Z\', "text"}',
-        ))
+        stdout = _compile_and_run(
+            _make_source(
+                "std::tuple<bool,int,double,char,std::string>{true, -1, 0.5, 'Z', \"text\"}",
+            )
+        )
         parsed = json.loads(stdout)
         assert parsed == [True, -1, 0.5, "Z", "text"]
 
@@ -223,7 +247,7 @@ class TestArraySerializer:
         """array<int,100> with sequential values."""
         body = "std::array<int,100>{}"
         # Fill with index values at runtime
-        source = '''\
+        source = """\
 #include "tracer.h"
 #include <iostream>
 #include <array>
@@ -234,7 +258,7 @@ int main() {
     std::cout << __ser(a) << std::endl;
     return 0;
 }
-'''
+"""
         stdout = _compile_and_run(source)
         parsed = json.loads(stdout)
         assert len(parsed) == 100
@@ -250,56 +274,50 @@ int main() {
 
 
 class TestRawArraySerializer:
-    """Raw C array T[N] → JSON array (reference overload).
-
-    Uses explicit template arguments ``__ser<T, N>(arr)`` to disambiguate
-    between the ``T(&)[N]`` array overload (2 template params: element type +
-    size) and the ``T*`` pointer overload (1 template param), which GCC
-    considers ambiguous when passed an array expression directly.
-    """
+    """Raw C array T[N] → JSON array (reference overload)."""
 
     def test_raw_int_array_5(self):
         """int[5]{1,2,3,4,5} → [1,2,3,4,5]"""
-        source = '''\
+        source = """\
 #include "tracer.h"
 #include <iostream>
 
 int main() {
     int arr[5] = {1,2,3,4,5};
-    std::cout << __ser<int, 5>(arr) << std::endl;
+    std::cout << __ser(arr) << std::endl;
     return 0;
 }
-'''
+"""
         _assert_serializes(source, [1, 2, 3, 4, 5])
 
     def test_raw_char_array(self):
         """char[4]{'a','b','c','d'} → [\"a\",\"b\",\"c\",\"d\"]"""
-        source = '''\
+        source = """\
 #include "tracer.h"
 #include <iostream>
 
 int main() {
     char arr[4] = {'a','b','c','d'};
-    std::cout << __ser<char, 4>(arr) << std::endl;
+    std::cout << __ser(arr) << std::endl;
     return 0;
 }
-'''
+"""
         stdout = _compile_and_run(source)
         parsed = json.loads(stdout)
         assert parsed == ["a", "b", "c", "d"]
 
     def test_raw_double_array(self):
         """double[3] → [1.5, 2.5, 3.5]"""
-        source = '''\
+        source = """\
 #include "tracer.h"
 #include <iostream>
 
 int main() {
     double arr[3] = {1.5, 2.5, 3.5};
-    std::cout << __ser<double, 3>(arr) << std::endl;
+    std::cout << __ser(arr) << std::endl;
     return 0;
 }
-'''
+"""
         stdout = _compile_and_run(source)
         parsed = json.loads(stdout)
         assert len(parsed) == 3
@@ -309,16 +327,16 @@ int main() {
 
     def test_raw_array_empty_initializer(self):
         """int[3]{} → [0, 0, 0] (value-initialised)"""
-        source = '''\
+        source = """\
 #include "tracer.h"
 #include <iostream>
 
 int main() {
     int arr[3] = {};
-    std::cout << __ser<int, 3>(arr) << std::endl;
+    std::cout << __ser(arr) << std::endl;
     return 0;
 }
-'''
+"""
         _assert_serializes(source, [0, 0, 0])
 
 
@@ -327,7 +345,7 @@ class TestEdgeCases:
 
     def test_empty_vector(self):
         """Empty vector<int> → []"""
-        source = '''\
+        source = """\
 #include "tracer.h"
 #include <iostream>
 #include <vector>
@@ -337,7 +355,7 @@ int main() {
     std::cout << __ser(v) << std::endl;
     return 0;
 }
-'''
+"""
         _assert_serializes(source, [])
 
     def test_vector_of_pairs(self):
@@ -349,7 +367,7 @@ int main() {
         for arguments in ``std::``.  We test the equivalent by serializing each
         element directly.
         """
-        source = '''\
+        source = """\
 #include "tracer.h"
 #include <iostream>
 #include <vector>
@@ -364,13 +382,13 @@ int main() {
     std::cout << std::endl;
     return 0;
 }
-'''
+"""
         stdout = _compile_and_run(source)
         assert stdout == "[1,2] [3,4]"
 
     def test_null_pointer_serialization(self):
         """nullptr → \"null\" """
-        source = '''\
+        source = """\
 #include "tracer.h"
 #include <iostream>
 
@@ -379,12 +397,12 @@ int main() {
     std::cout << __ser(p) << std::endl;
     return 0;
 }
-'''
+"""
         _assert_printed(source, "null")
 
     def test_nested_vector_empty_inner(self):
-        """vector<vector<int>> with inner empty → [[],[1]]"""
-        source = '''\
+        """Jagged vectors retain every row in the existing graph/adj representation."""
+        source = """\
 #include "tracer.h"
 #include <iostream>
 #include <vector>
@@ -394,12 +412,12 @@ int main() {
     std::cout << __ser(v) << std::endl;
     return 0;
 }
-'''
-        _assert_serializes(source, [[], [1]])
+"""
+        _assert_serializes(source, {"_type": "graph", "adj": [[], [1]]})
 
     def test_string_serialization(self):
         """std::string → \"hello\" (with JSON escaping)"""
-        source = '''\
+        source = """\
 #include "tracer.h"
 #include <iostream>
 #include <string>
@@ -409,12 +427,12 @@ int main() {
     std::cout << __ser(s) << std::endl;
     return 0;
 }
-'''
+"""
         _assert_printed(source, '"hello"')
 
     def test_string_with_escaped_chars(self):
         """String with embedded quotes and newlines is properly escaped."""
-        source = '''\
+        source = """\
 #include "tracer.h"
 #include <iostream>
 #include <string>
@@ -424,14 +442,14 @@ int main() {
     std::cout << __ser(s) << std::endl;
     return 0;
 }
-'''
+"""
         stdout = _compile_and_run(source)
         parsed = json.loads(stdout)
         assert parsed == 'he said "hi"\nok'
 
     def test_bool_true_false(self):
         """true → \"true\", false → \"false\" """
-        source = '''\
+        source = """\
 #include "tracer.h"
 #include <iostream>
 
@@ -440,12 +458,12 @@ int main() {
     std::cout << __ser(a) << "," << __ser(b) << std::endl;
     return 0;
 }
-'''
+"""
         _assert_printed(source, "true,false")
 
     def test_int_min_max(self):
         """Extreme int values: INT_MIN, INT_MAX."""
-        source = '''\
+        source = """\
 #include "tracer.h"
 #include <iostream>
 #include <climits>
@@ -454,7 +472,7 @@ int main() {
     std::cout << __ser(INT_MIN) << "," << __ser(INT_MAX) << std::endl;
     return 0;
 }
-'''
+"""
         stdout = _compile_and_run(source)
         parts = stdout.split(",")
         assert int(parts[0]) == -2147483648

@@ -16,6 +16,7 @@ BSEARCH = str(FIXTURES / "simple_bsearch.cpp")
 
 # ── ast_walker tests ──────────────────────────────────────────────────────────
 
+
 class TestASTWalker:
     def test_finds_func_enter_for_user_functions(self):
         """Should produce FUNC_ENTER points for bsearch and main."""
@@ -28,23 +29,32 @@ class TestASTWalker:
     def test_finds_func_exit_for_return_statements(self):
         """bsearch has two return statements — should produce two FUNC_EXIT points."""
         result = walk(BSEARCH)
-        exits = [p for p in result.injection_points if p.kind == InjectKind.FUNC_EXIT
-                 and p.func_name == "bsearch"]
+        exits = [
+            p
+            for p in result.injection_points
+            if p.kind == InjectKind.FUNC_EXIT and p.func_name == "bsearch"
+        ]
         assert len(exits) >= 2
 
     def test_finds_branch_for_if_statements(self):
         """bsearch has one top-level if (else-if is skipped to preserve the chain).
         We inject BRANCH only for the first if in an if/else-if chain."""
         result = walk(BSEARCH)
-        branches = [p for p in result.injection_points if p.kind == InjectKind.BRANCH
-                    and p.func_name == "bsearch"]
+        branches = [
+            p
+            for p in result.injection_points
+            if p.kind == InjectKind.BRANCH and p.func_name == "bsearch"
+        ]
         assert len(branches) >= 1
 
     def test_finds_loop_iter_for_while(self):
         """bsearch has one while loop — should produce one LOOP_ITER point."""
         result = walk(BSEARCH)
-        iters = [p for p in result.injection_points if p.kind == InjectKind.LOOP_ITER
-                 and p.func_name == "bsearch"]
+        iters = [
+            p
+            for p in result.injection_points
+            if p.kind == InjectKind.LOOP_ITER and p.func_name == "bsearch"
+        ]
         assert len(iters) == 1
 
     def test_loop_counter_registered_for_function(self):
@@ -71,7 +81,8 @@ class TestASTWalker:
         """Nested STATE: `int mid` line inside the while body needs a STATE point."""
         result = walk(BSEARCH)
         states = [
-            p for p in result.injection_points
+            p
+            for p in result.injection_points
             if p.kind == InjectKind.STATE and p.func_name == "bsearch"
         ]
         state_lines = [p.line for p in states]
@@ -84,7 +95,8 @@ class TestASTWalker:
         """Nested STATE: statements inside if/else-if/else bodies need STATE points."""
         result = walk(BSEARCH)
         state_lines = {
-            p.line for p in result.injection_points
+            p.line
+            for p in result.injection_points
             if p.kind == InjectKind.STATE and p.func_name == "bsearch"
         }
         assert 10 in state_lines
@@ -92,6 +104,7 @@ class TestASTWalker:
 
 
 # ── scope_tracker tests ───────────────────────────────────────────────────────
+
 
 class TestScopeTracker:
     def test_builds_scope_for_user_functions(self):
@@ -131,8 +144,9 @@ class TestScopeTracker:
         for fn_scope in scopes.values():
             for vars_list in fn_scope.vars_at_line.values():
                 for v in vars_list:
-                    assert not v.name.startswith("__"), \
-                        f"Internal variable leaked into scope: {v.name}"
+                    assert not v.name.startswith(
+                        "__"
+                    ), f"Internal variable leaked into scope: {v.name}"
 
     def test_declared_var_included_in_same_line_state(self, tmp_path):
         """Post-decl snapshot: `int x = 5;` STATE carries x (pre does not)."""
@@ -151,7 +165,9 @@ class TestScopeTracker:
     def test_params_plus_declared_vars(self, tmp_path):
         """Post set on a decl line carries params + the newly declared var."""
         src = tmp_path / "params.cpp"
-        src.write_text("int add(int a, int b) {\n    int s = a + b;\n    return s;\n}\n")
+        src.write_text(
+            "int add(int a, int b) {\n    int s = a + b;\n    return s;\n}\n"
+        )
         scopes = build_scope_map(str(src))
         post = scopes["add"].vars_at_line_post[2]
         assert {v.name for v in post} == {"a", "b", "s"}

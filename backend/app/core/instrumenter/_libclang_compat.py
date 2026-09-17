@@ -142,7 +142,9 @@ def _gcc_internal_include() -> str | None:
     try:
         out = subprocess.run(
             [gxx, "-print-file-name=include"],
-            capture_output=True, text=True, timeout=10,
+            capture_output=True,
+            text=True,
+            timeout=10,
         )
         if out.returncode != 0:
             return None

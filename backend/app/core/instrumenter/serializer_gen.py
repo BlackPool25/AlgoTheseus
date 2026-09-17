@@ -89,9 +89,8 @@ class StructDef:
 
 def _is_user_code(cursor: clang.Cursor, source_path: str) -> bool:
     loc = cursor.location
-    return (
-        loc.file is not None
-        and os.path.abspath(loc.file.name) == os.path.abspath(source_path)
+    return loc.file is not None and os.path.abspath(loc.file.name) == os.path.abspath(
+        source_path
     )
 
 
@@ -99,11 +98,11 @@ def _normalize_type(spelling: str) -> str:
     s = spelling.strip()
     for prefix in ("const ", "volatile ", "struct ", "class ", "enum "):
         while s.startswith(prefix):
-            s = s[len(prefix):]
+            s = s[len(prefix) :]
     s = s.rstrip("&").rstrip("*").strip()
     for prefix in ("const ", "volatile "):
         while s.startswith(prefix):
-            s = s[len(prefix):]
+            s = s[len(prefix) :]
     return s.strip()
 
 
@@ -136,10 +135,14 @@ def _collect_from_tu(tu: object, source_path: str) -> list[StructDef]:
         try:
             if cursor.kind == clang.CursorKind.UNION_DECL:
                 return  # carve-out: never descend into unions
-            if cursor.kind in (
-                clang.CursorKind.STRUCT_DECL,
-                clang.CursorKind.CLASS_DECL,
-            ) and cursor.is_definition():
+            if (
+                cursor.kind
+                in (
+                    clang.CursorKind.STRUCT_DECL,
+                    clang.CursorKind.CLASS_DECL,
+                )
+                and cursor.is_definition()
+            ):
                 try:
                     if _is_user_code(cursor, source_path) and cursor.spelling:
                         records.append(cursor)
@@ -189,9 +192,7 @@ def _struct_def(
     return StructDef(name=cursor.spelling, fields=fields)
 
 
-def _classify_field(
-    field_cursor: clang.Cursor, names: set[str]
-) -> tuple[str, str]:
+def _classify_field(field_cursor: clang.Cursor, names: set[str]) -> tuple[str, str]:
     """Return (kind, target-struct-name) for a FIELD_DECL."""
     try:
         canon = field_cursor.type.get_canonical()
@@ -259,7 +260,7 @@ def generate_serializers(source_path: str) -> str:
     except (AttributeError, TypeError, RuntimeError, ValueError, OSError):
         structs = []
     if not structs:
-        return "// serializer_gen: no emittable structs (manifest {\"structs\": []})\n"
+        return '// serializer_gen: no emittable structs (manifest {"structs": []})\n'
     try:
         parts = [_RUNTIME]
         parts.append(
@@ -286,33 +287,32 @@ def _emit_struct(s: StructDef) -> str:
             f"inline std::string __serialize_{s.name}(const {s.name}& obj, "
             "std::set<void*>& visited, std::set<void*>& emitted, int depth) {"
         ),
-        "    if (depth > 50) return \"{\\\"$depth_limit\\\":true}\";",
+        '    if (depth > 50) return "{\\"$depth_limit\\":true}";',
         "    void* addr = (void*)&obj;",
         "    int id = __heap_id_for(addr);",
-        '    if (visited.count(addr)) return __heap_ref(id, true);',
-        '    if (emitted.count(addr)) return __heap_ref(id, false);',
+        '    if (__trace_freed_addresses.count(addr)) return "{\\"$ref\\":" + std::to_string(id) + ",\\"$freed\\":true}";',
+        "    if (visited.count(addr)) return __heap_ref(id, true);",
+        "    if (emitted.count(addr)) return __heap_ref(id, false);",
         "    visited.insert(addr);",
         "    std::ostringstream o;",
-        "    o << \"{\\\"$id\\\":\" << id << \",\\\"$addr\\\":\\\"\" << addr << \"\\\"\";",
+        '    o << "{\\"$id\\":" << id << ",\\"$addr\\":\\"" << addr << "\\"";',
     ]
     for f in s.fields:
         if f.kind == "struct_ptr":
             lines.append(
-                f"    o << \",\\\"{f.name}\\\":\";"
-                f"if (!obj.{f.name}) o << \"null\"; "
+                f'    o << ",\\"{f.name}\\":";'
+                f'if (!obj.{f.name}) o << "null"; '
                 f"else o << __serialize_{f.target}"
                 f"(*obj.{f.name}, visited, emitted, depth + 1);"
             )
         elif f.kind == "struct_value":
             lines.append(
-                f"    o << \",\\\"{f.name}\\\":\" "
+                f'    o << ",\\"{f.name}\\":" '
                 f"<< __serialize_{f.target}"
                 f"(obj.{f.name}, visited, emitted, depth + 1);"
             )
         else:
-            lines.append(
-                f"    o << \",\\\"{f.name}\\\":\" << __ser(obj.{f.name});"
-            )
+            lines.append(f'    o << ",\\"{f.name}\\":" << __ser(obj.{f.name});')
     lines += [
         '    o << "}";',
         "    visited.erase(addr);",

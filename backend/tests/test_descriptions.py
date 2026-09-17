@@ -55,13 +55,11 @@ def _ev(payload: dict[str, Any]) -> Any:
         ),
         # branch without ops
         (
-            {"t": "branch", "l": 16, "f": "solve", "d": 1,
-             "c": "i < n", "tk": True},
+            {"t": "branch", "l": 16, "f": "solve", "d": 1, "c": "i < n", "tk": True},
             "branch taken: i < n",
         ),
         (
-            {"t": "branch", "l": 16, "f": "solve", "d": 1,
-             "c": "x > 0", "tk": False},
+            {"t": "branch", "l": 16, "f": "solve", "d": 1, "c": "x > 0", "tk": False},
             "branch not taken: x > 0",
         ),
         # iter
@@ -79,8 +77,15 @@ def test_desc_formats(payload: dict[str, Any], expected: str):
 def test_desc_branch_with_ops():
     """Given a BRANCH with operand values / When described / Then ops shown."""
     event = _ev(
-        {"t": "branch", "l": 16, "f": "solve", "d": 1,
-         "c": "x > 0", "tk": True, "op": ["x=2", "0"]}
+        {
+            "t": "branch",
+            "l": 16,
+            "f": "solve",
+            "d": 1,
+            "c": "x > 0",
+            "tk": True,
+            "op": ["x=2", "0"],
+        }
     )
     assert describe(event) == "branch taken: x > 0 (x=2, 0)"
 
@@ -104,12 +109,20 @@ def test_desc_garbage_object_never_raises():
 def test_parse_attaches_non_empty_step_desc_to_every_event():
     """Given a mixed NDJSON stream / When parsed / Then every event has desc."""
     raw = [
-        json.dumps({"t": "enter", "l": 5, "f": "bsearch", "d": 0,
-                    "p": {"target": 7}}),
-        json.dumps({"t": "state", "l": 6, "f": "bsearch", "d": 0,
-                    "v": {"lo": 0, "hi": 4}}),
-        json.dumps({"t": "branch", "l": 9, "f": "bsearch", "d": 0,
-                    "c": "arr[mid] == target", "tk": False}),
+        json.dumps({"t": "enter", "l": 5, "f": "bsearch", "d": 0, "p": {"target": 7}}),
+        json.dumps(
+            {"t": "state", "l": 6, "f": "bsearch", "d": 0, "v": {"lo": 0, "hi": 4}}
+        ),
+        json.dumps(
+            {
+                "t": "branch",
+                "l": 9,
+                "f": "bsearch",
+                "d": 0,
+                "c": "arr[mid] == target",
+                "tk": False,
+            }
+        ),
         json.dumps({"t": "iter", "l": 7, "f": "bsearch", "d": 0, "it": 0}),
         json.dumps({"t": "exit", "l": 13, "f": "bsearch", "d": 0, "r": 3}),
     ]

@@ -39,29 +39,49 @@ def _pipeline(name: str, timeout: int = 10):
         shutil.copy(TRACER_H, tmp_path / "tracer.h")
         binary = tmp_path / "prog"
         compile_result = subprocess.run(
-            ["g++", "-O0", "-std=c++17", "-I", str(tmp_path),
-             "-o", str(binary), str(tmp_path / "prog.cpp")],
-            capture_output=True, text=True, timeout=60, check=False,
+            [
+                "g++",
+                "-O0",
+                "-std=c++17",
+                "-I",
+                str(tmp_path),
+                "-o",
+                str(binary),
+                str(tmp_path / "prog.cpp"),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=False,
         )
-        assert compile_result.returncode == 0, (
-            f"{name}: compile error:\n{compile_result.stderr}"
-        )
+        assert (
+            compile_result.returncode == 0
+        ), f"{name}: compile error:\n{compile_result.stderr}"
         # Timeout-guard: a broken fixture must fail, never hang the suite.
         proc = subprocess.run(
-            [str(binary)], capture_output=True, text=True, timeout=timeout, check=False,
+            [str(binary)],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
         )
     assert proc.returncode == 0, f"{name}: nonzero exit:\n{proc.stderr}"
-    raw = [ln[len("TRACE:"):] for ln in proc.stderr.splitlines()
-           if ln.startswith("TRACE:")]
+    raw = [
+        ln[len("TRACE:") :]
+        for ln in proc.stderr.splitlines()
+        if ln.startswith("TRACE:")
+    ]
     assert raw, f"{name}: no TRACE: lines produced"
     return parse(raw), src.splitlines(), proc
 
 
 def _state_lines_with(events, var: str) -> set[int]:
     """Source lines of STATE events whose top-level vars contain *var*."""
-    return {e.line for e in events
-            if str(getattr(e.type, "value", e.type)) == "state"
-            and var in (e.vars or {})}
+    return {
+        e.line
+        for e in events
+        if str(getattr(e.type, "value", e.type)) == "state" and var in (e.vars or {})
+    }
 
 
 def _state_lines_nested(events, key: str) -> set[int]:
@@ -99,9 +119,9 @@ def _check_key_var(events, src_lines, var: str, anchor_token: str) -> None:
         f"mention it ({sorted(token_lines)})"
     )
     anchor = _decl_line(src_lines, anchor_token)
-    assert anchor in hits, (
-        f"{var!r} missing at headline line {anchor}: {src_lines[anchor - 1]!r}"
-    )
+    assert (
+        anchor in hits
+    ), f"{var!r} missing at headline line {anchor}: {src_lines[anchor - 1]!r}"
 
 
 def test_corpus_linear_scan():
@@ -119,9 +139,11 @@ def test_corpus_binary_search():
 def test_corpus_dfs():
     events, src, _ = _pipeline("dfs.cpp")
     _check_key_var(events, src, "visited", "visited[u] = 1")
-    enters = [e for e in events
-              if str(getattr(e.type, "value", e.type)) == "enter"
-              and e.func == "dfs"]
+    enters = [
+        e
+        for e in events
+        if str(getattr(e.type, "value", e.type)) == "enter" and e.func == "dfs"
+    ]
     assert len(enters) >= 4, f"expected recursive dfs frames, got {len(enters)}"
 
 
@@ -171,9 +193,11 @@ def test_corpus_heap_sort():
 def test_corpus_fibonacci():
     events, src, _ = _pipeline("fibonacci.cpp")
     # Recursion frames: fib(n) ENTER events nest to depth ≥ 3 for fib(6).
-    depths = [e.depth for e in events
-              if str(getattr(e.type, "value", e.type)) == "enter"
-              and e.func == "fib"]
+    depths = [
+        e.depth
+        for e in events
+        if str(getattr(e.type, "value", e.type)) == "enter" and e.func == "fib"
+    ]
     assert depths, "no fib ENTER events"
     assert max(depths) >= 3, f"fib recursion too shallow: {sorted(set(depths))}"
     _check_key_var(events, src, "n", "int a = fib(n - 1)")
@@ -191,13 +215,14 @@ def test_corpus_macro_define_skipped_with_warning():
     define_lines = _lines_with(src, "#define")
     assert define_lines, "fixture lost its #define lines"
     traced = {e.line for e in events}
-    assert not (traced & define_lines), (
-        f"macro-definition lines unexpectedly traced: {sorted(traced & define_lines)}"
-    )
+    assert not (
+        traced & define_lines
+    ), f"macro-definition lines unexpectedly traced: {sorted(traced & define_lines)}"
     # Ordinary vars around the macro uses still trace — graceful, not broken.
     assert _state_lines_with(events, "total"), "total never traced"
     warnings.warn(
         "macro bodies (SQUARE/LIMIT) carry no trace events — known "
         "instrumenter limitation; macro coverage SKIPPED, pipeline green",
-        UserWarning, stacklevel=2,
+        UserWarning,
+        stacklevel=2,
     )

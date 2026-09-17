@@ -69,9 +69,19 @@ def _compile_and_run(source: str) -> tuple[int, str, str]:
         shutil.copy(TRACER_H, tmp_path / "tracer.h")
         binary = tmp_path / "prog"
         comp = subprocess.run(
-            ["g++", "-O0", "-std=c++17", "-I", str(tmp_path),
-             "-o", str(binary), str(src)],
-            capture_output=True, text=True, check=False,
+            [
+                "g++",
+                "-O0",
+                "-std=c++17",
+                "-I",
+                str(tmp_path),
+                "-o",
+                str(binary),
+                str(src),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
         )
         if comp.returncode != 0:
             return comp.returncode, "", comp.stderr
@@ -88,7 +98,9 @@ def _syntax_only(source: str) -> tuple[int, str]:
         shutil.copy(TRACER_H, tmp_path / "tracer.h")
         result = subprocess.run(
             ["g++", "-fsyntax-only", "-std=c++17", "-I", str(tmp_path), str(src)],
-            capture_output=True, text=True, check=False,
+            capture_output=True,
+            text=True,
+            check=False,
         )
         return result.returncode, result.stderr
 
@@ -106,10 +118,16 @@ class TestMacroTokenFallback:
         src = tmp_path / "macro.cpp"
         src.write_text(MACRO_SRC)
         instrumented = instrument(MACRO_SRC, str(src))
-        bad = [ln for ln in instrumented.splitlines()
-               if "__TRACE" in ln and ("__TRACE_FUNC_ENTER(1," in ln
-                                       or "__TRACE_STATE(1," in ln
-                                       or "__TRACE_BRANCH(1," in ln)]
+        bad = [
+            ln
+            for ln in instrumented.splitlines()
+            if "__TRACE" in ln
+            and (
+                "__TRACE_FUNC_ENTER(1," in ln
+                or "__TRACE_STATE(1," in ln
+                or "__TRACE_BRANCH(1," in ln
+            )
+        ]
         assert not bad, f"TRACE spliced for macro-definition line 1:\n" + "\n".join(bad)
         assert "#define INC(x) ((x)+1)" in instrumented
 
@@ -122,10 +140,15 @@ class TestTemplateMemberFallback:
         lines = instrumented.splitlines()
         open_idx = next(i for i, l in enumerate(lines) if "class Box" in l)
         close_idx = next(i for i, l in enumerate(lines) if l.strip() == "};")
-        inside = [f"instr-line {i + 1}: {l.strip()}" for i, l in enumerate(lines)
-                  if open_idx < i < close_idx and "__TRACE" in l]
-        assert not inside, (
-            "bogus splice: __TRACE inside class-template definition:\n" + "\n".join(inside)
+        inside = [
+            f"instr-line {i + 1}: {l.strip()}"
+            for i, l in enumerate(lines)
+            if open_idx < i < close_idx and "__TRACE" in l
+        ]
+        assert (
+            not inside
+        ), "bogus splice: __TRACE inside class-template definition:\n" + "\n".join(
+            inside
         )
 
     def test_template_instrumented_syntax_clean_and_main_traced(self, tmp_path):
@@ -134,13 +157,15 @@ class TestTemplateMemberFallback:
         instrumented = instrument(TEMPLATE_SRC, str(src))
         code, stderr = _syntax_only(instrumented)
         assert code == 0, f"template instrumented source not syntax-clean:\n{stderr}"
-        assert '__TRACE_FUNC_ENTER' in instrumented and '"main"' in instrumented
+        assert "__TRACE_FUNC_ENTER" in instrumented and '"main"' in instrumented
 
 
 class TestFallbackHelpersGuarded:
     def test_safe_get_tokens_never_raises_on_macro_tu(self, tmp_path):
         assert hasattr(ast_walker, "_safe_get_tokens"), "missing _safe_get_tokens (RED)"
-        assert hasattr(ast_walker, "_fallback_user_lines"), "missing _fallback_user_lines (RED)"
+        assert hasattr(
+            ast_walker, "_fallback_user_lines"
+        ), "missing _fallback_user_lines (RED)"
         import clang.cindex as clang
         from app.core.instrumenter import _libclang_compat
 
@@ -157,7 +182,8 @@ class TestFallbackHelpersGuarded:
             assert isinstance(toks, list)
             resolved = ast_walker._fallback_user_lines(cursor, str(src))  # never raises
             assert resolved is None or (
-                isinstance(resolved, tuple) and len(resolved) == 2
+                isinstance(resolved, tuple)
+                and len(resolved) == 2
                 and all(isinstance(v, int) for v in resolved)
             )
             seen.append((str(cursor.kind), len(toks)))

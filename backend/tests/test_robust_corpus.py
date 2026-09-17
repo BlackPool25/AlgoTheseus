@@ -17,7 +17,7 @@ TRACER_H = Path(__file__).parent.parent / "app" / "core" / "instrumenter" / "tra
 
 SRC_MACRO_UTF8 = (
     "#define DOUBLE(x) ((x)*2)\n"
-    '#include <iostream>\n'
+    "#include <iostream>\n"
     "#include <string>\n"
     "int main() {\n"
     '    std::string s = "h\\u00e9llo\\u2192\\u2713";\n'
@@ -36,7 +36,7 @@ SRC_FUNC_TEMPLATE = (
     "#include <iostream>\n"
     "int main() {\n"
     "    int v = add<int>(2, 3);\n"
-    '    std::cout << v << std::endl;\n'
+    "    std::cout << v << std::endl;\n"
     "    return 0;\n"
     "}\n"
 )
@@ -59,7 +59,7 @@ SRC_CLASS_TEMPLATE = (
     "    Box<int> b;\n"
     "    b.set(3);\n"
     "    int x = b.get();\n"
-    '    std::cout << x << std::endl;\n'
+    "    std::cout << x << std::endl;\n"
     "    return 0;\n"
     "}\n"
 )
@@ -73,7 +73,7 @@ SRC_LAMBDA = (
     "        return w;\n"
     "    };\n"
     "    int r = f(5);\n"
-    '    std::cout << r << std::endl;\n'
+    "    std::cout << r << std::endl;\n"
     "    return 0;\n"
     "}\n"
 )
@@ -88,7 +88,7 @@ SRC_NAMESPACE = (
     "}\n"
     "int main() {\n"
     "    int v = myns::helper(21);\n"
-    '    std::cout << v << std::endl;\n'
+    "    std::cout << v << std::endl;\n"
     "    return 0;\n"
     "}\n"
 )
@@ -148,13 +148,16 @@ def _build_and_run(source: str, tmp_path: Path, name: str):
     shutil.copy(TRACER_H, tmp_path / "tracer.h")
     binary = tmp_path / name.replace(".cpp", "")
     comp = subprocess.run(
-        ["g++", "-O0", "-std=c++17", "-I", str(tmp_path),
-         "-o", str(binary), str(src)],
-        capture_output=True, text=True, check=False, timeout=60,
+        ["g++", "-O0", "-std=c++17", "-I", str(tmp_path), "-o", str(binary), str(src)],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=60,
     )
     assert comp.returncode == 0, f"{name}: compile failed:\n{comp.stderr}"
-    run = subprocess.run([str(binary)], capture_output=True, text=True,
-                         check=False, timeout=10)
+    run = subprocess.run(
+        [str(binary)], capture_output=True, text=True, check=False, timeout=10
+    )
     assert run.returncode == 0, f"{name}: run rc={run.returncode} err={run.stderr!r}"
     return run.stdout, run.stderr
 
@@ -165,8 +168,9 @@ def _check(source: str, tmp_path: Path, name: str):
     instrumented = instrument(source, str(src))  # must not raise InstrumentParseError
     out_instr, err_instr = _build_and_run(instrumented, tmp_path, f"i_{name}")
     out_plain, _ = _build_and_run(source, tmp_path, f"p_{name}")
-    assert out_instr == out_plain, (
-        f"{name}: stdout mismatch: instrumented={out_instr!r} plain={out_plain!r}")
+    assert (
+        out_instr == out_plain
+    ), f"{name}: stdout mismatch: instrumented={out_instr!r} plain={out_plain!r}"
     assert '"t":"enter"' in err_instr, f"{name}: no enter event:\n{err_instr}"
     assert '"t":"state"' in err_instr, f"{name}: no state event:\n{err_instr}"
     assert '"t":"exit"' in err_instr, f"{name}: no exit event:\n{err_instr}"

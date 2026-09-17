@@ -23,7 +23,10 @@ from dataclasses import dataclass, field
 import clang.cindex as clang
 
 from app.core.instrumenter import _libclang_compat
-from app.core.instrumenter.diagnostics import collect_diagnostics, parse_with_diagnostics
+from app.core.instrumenter.diagnostics import (
+    collect_diagnostics,
+    parse_with_diagnostics,
+)
 
 _libclang_compat.ensure_libclang()
 
@@ -54,9 +57,7 @@ _TRY_CATCH_KINDS: tuple = tuple(
     )
     if k is not None
 )
-_LAMBDA_KIND: clang.CursorKind | None = getattr(
-    clang.CursorKind, "LAMBDA_EXPR", None
-)
+_LAMBDA_KIND: clang.CursorKind | None = getattr(clang.CursorKind, "LAMBDA_EXPR", None)
 
 _TEMPLATE_DEF_KINDS: tuple = tuple(
     k
@@ -72,10 +73,11 @@ _TEMPLATE_DEF_KINDS: tuple = tuple(
 @dataclass
 class ScopeVar:
     """A variable visible at a particular point in the source."""
+
     name: str
-    unique_id: str      # name + scope depth suffix for disambiguation
-    decl_line: int      # user-file line where it was declared (see _decl_line)
-    scope_depth: int    # nesting depth (0 = function params, 1 = function body, ...)
+    unique_id: str  # name + scope depth suffix for disambiguation
+    decl_line: int  # user-file line where it was declared (see _decl_line)
+    scope_depth: int  # nesting depth (0 = function params, 1 = function body, ...)
     extent_end: int = 0  # enclosing-scope end line; live iff decl <= place < end.
     # 0 = unbounded (function params, alive for the whole body).
 
@@ -83,6 +85,7 @@ class ScopeVar:
 @dataclass
 class FunctionScope:
     """All variables visible at each line within a function."""
+
     func_name: str
     # Maps line number → list of ScopeVar visible at that line.
     # POST-declaration semantics (R1): names declared on the line itself ARE
@@ -114,7 +117,11 @@ class ScopeTracker:
     def __init__(self, source_path: str, extra_args: list[str] | None = None):
         self.source_path = os.path.abspath(source_path)
         # W0.1 pin: same shared default as the walker (see ast_walker).
-        self.extra_args = extra_args if extra_args is not None else _libclang_compat.default_extra_args()
+        self.extra_args = (
+            extra_args
+            if extra_args is not None
+            else _libclang_compat.default_extra_args()
+        )
         self._index = clang.Index.create()
         self.last_diagnostics: list[str] = []
 
@@ -133,8 +140,7 @@ class ScopeTracker:
     def _is_user_code(self, cursor: clang.Cursor) -> bool:
         loc = cursor.location
         return (
-            loc.file is not None
-            and os.path.abspath(loc.file.name) == self.source_path
+            loc.file is not None and os.path.abspath(loc.file.name) == self.source_path
         )
 
     @staticmethod
@@ -150,7 +156,9 @@ class ScopeTracker:
                 node_kind = _cursor_kind(node)
                 if node_kind is not None and node_kind in (
                     clang.CursorKind.CLASS_TEMPLATE,
-                    getattr(clang.CursorKind, "CLASS_TEMPLATE_PARTIAL_SPECIALIZATION", None),
+                    getattr(
+                        clang.CursorKind, "CLASS_TEMPLATE_PARTIAL_SPECIALIZATION", None
+                    ),
                 ):
                     return True
                 node = node.semantic_parent
@@ -162,7 +170,10 @@ class ScopeTracker:
         kind = _cursor_kind(cursor)
         if kind in _TEMPLATE_DEF_KINDS:
             return
-        if kind in (clang.CursorKind.FUNCTION_DECL, clang.CursorKind.CXX_METHOD) and cursor.is_definition():
+        if (
+            kind in (clang.CursorKind.FUNCTION_DECL, clang.CursorKind.CXX_METHOD)
+            and cursor.is_definition()
+        ):
             if not self._is_user_code(cursor):
                 return
             if self._is_in_class_template(cursor):
@@ -175,17 +186,22 @@ class ScopeTracker:
             params: list[ScopeVar] = []
             for c in cursor.get_children():
                 if c.kind == clang.CursorKind.PARM_DECL and c.spelling:
-                    params.append(ScopeVar(
-                        name=c.spelling,
-                        unique_id=c.spelling,
-                        decl_line=c.location.line,
-                        scope_depth=0,
-                    ))
+                    params.append(
+                        ScopeVar(
+                            name=c.spelling,
+                            unique_id=c.spelling,
+                            decl_line=c.location.line,
+                            scope_depth=0,
+                        )
+                    )
 
             # Walk the body with a scope stack
             body = next(
-                (c for c in cursor.get_children()
-                 if c.kind == clang.CursorKind.COMPOUND_STMT),
+                (
+                    c
+                    for c in cursor.get_children()
+                    if c.kind == clang.CursorKind.COMPOUND_STMT
+                ),
                 None,
             )
             if body:
@@ -426,8 +442,11 @@ class ScopeTracker:
             if child.kind == clang.CursorKind.DECL_STMT:
                 loop_new.extend(
                     self._collect_decl_vars(
-                        child, loop_visible, depth,
-                        decl_line=header_line, extent_end=loop_end,
+                        child,
+                        loop_visible,
+                        depth,
+                        decl_line=header_line,
+                        extent_end=loop_end,
                     )
                 )
             elif child.kind == clang.CursorKind.VAR_DECL and child.spelling:
@@ -505,14 +524,18 @@ class ScopeTracker:
     ) -> None:
         for child in node.get_children():
             ck = _cursor_kind(child)
-            if ck in _TRY_CATCH_KINDS or (_LAMBDA_KIND is not None and ck == _LAMBDA_KIND):
+            if ck in _TRY_CATCH_KINDS or (
+                _LAMBDA_KIND is not None and ck == _LAMBDA_KIND
+            ):
                 self._walk_try(child, scope, visible, depth)
 
     @staticmethod
     def _subtree_has_callable(node: clang.Cursor) -> bool:
         for child in node.get_children():
             ck = _cursor_kind(child)
-            if ck in _TRY_CATCH_KINDS or (_LAMBDA_KIND is not None and ck == _LAMBDA_KIND):
+            if ck in _TRY_CATCH_KINDS or (
+                _LAMBDA_KIND is not None and ck == _LAMBDA_KIND
+            ):
                 return True
             if ScopeTracker._subtree_has_callable(child):
                 return True

@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "C++ DSA trace visualiser backend — libclang instrumentation + Docker sandbox"
 requires-python = ">=3.11"
 dependencies = [
-    "fastapi==0.115.12",
+    "fastapi==0.141.1",
     "uvicorn[standard]==0.34.3",
     "pydantic==2.11.4",
     # Toolchain pin (Task W0.1): libclang==18.1.1 bundles MATCHED Python bindings

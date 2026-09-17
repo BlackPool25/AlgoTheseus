@@ -98,7 +98,7 @@ cd AlgoTheseus
 docker compose up --build
 ```
 
-Open **[http://localhost:9001](http://localhost:9001)** and paste your C++ code.
+Open `http://localhost:9001` and paste your C++ code.
 
 Contributors (local Python/Node without Docker): `scripts/setup.sh` wires the same ports; the `docker compose` quickstart above stays the canonical path.
 

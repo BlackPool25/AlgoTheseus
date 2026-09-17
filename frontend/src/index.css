@@ -58,7 +58,9 @@
   --viz-gutter-prev: #009E73;
   --viz-gutter-next: #D55E00;
   --viz-exception: #D55E00;
-  --viz-flash: #E69F00;
+  /* Darkened from #E69F00: flash doubles as text (changed fields, index
+     labels, "N changed") and #E69F00 on white is ~2:1. #8a5a00 ≈ 5.2:1. */
+  --viz-flash: #8a5a00;
   --viz-alias-edge: #0072B2;
 }
 
@@ -71,8 +73,236 @@
   --viz-gutter-prev: #d9e8c9;
   --viz-gutter-next: #c0392b;
   --viz-exception: #a93226;
-  --viz-flash: #d4a017;
+  /* Darkened from #d4a017: flash doubles as text (changed fields, index
+     labels, "N changed") and #d4a017 on beige is ~2:1. #8a5a00 ≈ 5.3:1. */
+  --viz-flash: #8a5a00;
   --viz-alias-edge: #5f5340;
+}
+
+/* Papyrus sidebar contrast: translucent dark-brown ink + bright dark-theme
+   accents wash out on the beige panel. Remap to solid readable tones,
+   scoped to the state panel — dark themes are byte-identical.
+   Hierarchy preserved: primary #3e2f1c > secondary #54432a > hint #6f5f42. */
+[data-theme="papyrus"] [data-testid="state-panel"] [class*="text-viz-ink/60"] {
+  color: #54432a;
+}
+[data-theme="papyrus"] [data-testid="state-panel"] [class*="text-viz-ink/50"] {
+  color: #62513a;
+}
+[data-theme="papyrus"] [data-testid="state-panel"] [class*="text-viz-ink/40"] {
+  color: #6f5f42;
+}
+[data-theme="papyrus"] [data-testid="state-panel"] [class*="text-amber-400"] {
+  color: #8a5a00;
+}
+[data-theme="papyrus"] [data-testid="state-panel"] [class*="text-amber-300"] {
+  color: #7a5200;
+}
+[data-theme="papyrus"] [data-testid="state-panel"] [class*="text-emerald-400"] {
+  color: #0b6e4f;
+}
+[data-theme="papyrus"] [data-testid="state-panel"] [class*="text-orange-400"] {
+  color: #9a3412;
+}
+[data-theme="papyrus"] [data-testid="state-panel"] [class*="text-red-400"] {
+  color: #b91c1c;
+}
+[data-theme="papyrus"] [data-testid="state-panel"] [class*="text-viz-flash"] {
+  color: #8a5a00;
+}
+/* SVG labels inside variable visuals (LinkedList head/addr). */
+[data-theme="papyrus"] [data-testid="state-panel"] .fill-zinc-500 {
+  fill: #57534e;
+}
+/* Current-frame header uses a dark inline wash meant for dark themes —
+   unreadable behind dark-brown text on papyrus. Keep the accent border. */
+[data-theme="papyrus"] [data-testid="state-panel"] [data-testid="frame-header"] {
+  background: rgba(138, 90, 0, 0.12) !important;
+}
+[data-theme="papyrus"] [data-testid="state-panel"] [data-changed-field="true"] {
+  color: #8a5a00 !important;
+}
+
+/* Papyrus trace-graph contrast: node pills use bright dark-theme accents
+   (amber-300/blue-300/emerald-300/purple-400 ≈ 1.1–2.1:1 on beige).
+   Remap to solid readable tones scoped to the React Flow canvas —
+   dark themes are byte-identical. Inactive borders (blue-700/emerald-700/
+   purple-800, all ≥5:1) and edge strokes (accent active, tan inactive)
+   are already legible, so only text + the active border are remapped. */
+[data-theme="papyrus"] .react-flow [class*="text-amber-300"] {
+  color: #7a5200;
+}
+[data-theme="papyrus"] .react-flow [class*="text-amber-400"] {
+  color: #8a5a00;
+}
+[data-theme="papyrus"] .react-flow [class*="border-amber-400"] {
+  border-color: #8a5a00;
+}
+[data-theme="papyrus"] .react-flow [class*="text-blue-300"] {
+  color: #1d4ed8;
+}
+[data-theme="papyrus"] .react-flow [class*="text-emerald-300"] {
+  color: #0b6e4f;
+}
+[data-theme="papyrus"] .react-flow [class*="text-purple-400"] {
+  color: #7e22ce;
+}
+[data-theme="papyrus"] .react-flow [class*="text-purple-500"] {
+  color: #7e22ce;
+}
+[data-theme="papyrus"] .react-flow [class*="text-viz-ink/60"] {
+  color: #54432a;
+}
+[data-theme="papyrus"] .react-flow [class*="text-viz-ink/70"] {
+  color: #54432a;
+}
+
+/* Theseus (zinc-dark) sidebar lift: translucent white ink sinks into the
+   dark panel (/40 ≈ 3.5:1, /50 ≈ 4.7:1) and zinc-500/600 SVG + badge text
+   (≈ 3.1:1 / 1.9:1) wash out. Brighten one step to solid zinc tones,
+   scoped to the state panel — papyrus and other themes are untouched,
+   FRAME accent headers are unchanged. Hierarchy: #fafafa > #d4d4d8 >
+   #bcbcc2 > #a1a1aa. Amber/emerald accents already pass, left alone. */
+[data-theme="zinc-dark"] [data-testid="state-panel"] [class*="text-viz-ink/60"] {
+  color: #d4d4d8;
+}
+[data-theme="zinc-dark"] [data-testid="state-panel"] [class*="text-viz-ink/50"] {
+  color: #bcbcc2;
+}
+[data-theme="zinc-dark"] [data-testid="state-panel"] [class*="text-viz-ink/40"] {
+  color: #a1a1aa;
+}
+[data-theme="zinc-dark"] [data-testid="state-panel"] [class*="text-zinc-600"] {
+  color: #a1a1aa;
+}
+/* SVG labels inside variable visuals (LinkedList head/addr). */
+[data-theme="zinc-dark"] [data-testid="state-panel"] .fill-zinc-500 {
+  fill: #a1a1aa;
+}
+[data-theme="zinc-dark"] [data-testid="state-panel"] .fill-zinc-600 {
+  fill: #a1a1aa;
+}
+
+/* Cross-theme audit: only failing (<4.5:1) tokens are remapped, scoped to
+   the state panel + trace-graph canvas. Passing tokens, FRAME headers
+   (dark washes read fine on dark panels) and dark edge strokes are
+   untouched. High-contrast: only /40 hints + zinc labels fail. */
+[data-theme="high-contrast"] [data-testid="state-panel"] [class*="text-viz-ink/60"],
+[data-theme="high-contrast"] .react-flow [class*="text-viz-ink/60"] {
+  color: #ffffff;
+}
+[data-theme="high-contrast"] [data-testid="state-panel"] [class*="text-viz-ink/50"] {
+  color: #d4d4d4;
+}
+[data-theme="high-contrast"] [data-testid="state-panel"] [class*="text-viz-ink/40"] {
+  color: #a3a3a3;
+}
+[data-theme="high-contrast"] [data-testid="state-panel"] [class*="text-zinc-600"] {
+  color: #a3a3a3;
+}
+[data-theme="high-contrast"] [data-testid="state-panel"] .fill-zinc-500,
+[data-theme="high-contrast"] [data-testid="state-panel"] .fill-zinc-600 {
+  fill: #d4d4d4;
+}
+
+/* Colorblind-safe (light panel): /60 passes (4.75:1) and is left alone;
+   every bright dark-theme accent fails, so all are remapped into darker
+   palette-adjacent tones. Palette vermillion #D55E00 fails as text
+   (3.4:1), hence the darkened #A04000 for orange/red. */
+[data-theme="colorblind-safe"] [data-testid="state-panel"] [class*="text-viz-ink/50"],
+[data-theme="colorblind-safe"] .react-flow [class*="text-viz-ink/50"] {
+  color: #424242;
+}
+[data-theme="colorblind-safe"] [data-testid="state-panel"] [class*="text-viz-ink/40"] {
+  color: #595959;
+}
+[data-theme="colorblind-safe"] [data-testid="state-panel"] [class*="text-amber-400"],
+[data-theme="colorblind-safe"] .react-flow [class*="text-amber-400"],
+[data-theme="colorblind-safe"] .react-flow [class*="text-amber-300"] {
+  color: #8a5a00;
+}
+[data-theme="colorblind-safe"] .react-flow [class*="border-amber-400"] {
+  border-color: #8a5a00;
+}
+[data-theme="colorblind-safe"] [data-testid="state-panel"] [class*="text-emerald-400"],
+[data-theme="colorblind-safe"] .react-flow [class*="text-emerald-300"] {
+  color: #007a5a;
+}
+[data-theme="colorblind-safe"] .react-flow [class*="text-blue-300"] {
+  color: #0072b2;
+}
+[data-theme="colorblind-safe"] .react-flow [class*="text-purple-400"],
+[data-theme="colorblind-safe"] .react-flow [class*="text-purple-500"],
+[data-theme="colorblind-safe"] [data-testid="state-panel"] [class*="text-purple-400"] {
+  color: #6a3d9a;
+}
+[data-theme="colorblind-safe"] [data-testid="state-panel"] [class*="text-orange-400"],
+[data-theme="colorblind-safe"] .react-flow [class*="text-orange-400"],
+[data-theme="colorblind-safe"] [data-testid="state-panel"] [class*="text-red-400"],
+[data-theme="colorblind-safe"] .react-flow [class*="text-red-400"] {
+  color: #a04000;
+}
+[data-theme="colorblind-safe"] [data-testid="state-panel"] [class*="text-viz-flash"],
+[data-theme="colorblind-safe"] .react-flow [class*="text-viz-flash"] {
+  color: #8a5a00;
+}
+[data-theme="colorblind-safe"] [data-testid="state-panel"] [data-changed-field="true"] {
+  color: #8a5a00 !important;
+}
+[data-theme="colorblind-safe"] [data-testid="state-panel"] .fill-zinc-500 {
+  fill: #595959;
+}
+[data-theme="colorblind-safe"] [data-testid="state-panel"] [data-testid="frame-header"] {
+  background: rgba(0, 114, 178, 0.12) !important;
+}
+
+/* Catppuccin-mocha: ink blends + zinc labels fail; accents pass. Catppuccin
+   subtext tones preserve the palette (overlay2 #9399b2 fails at 4.45:1,
+   hence the slightly lifted #9ca2ba for hints). */
+[data-theme="catppuccin-mocha"] [data-testid="state-panel"] [class*="text-viz-ink/60"],
+[data-theme="catppuccin-mocha"] .react-flow [class*="text-viz-ink/60"] {
+  color: #bac2de;
+}
+[data-theme="catppuccin-mocha"] [data-testid="state-panel"] [class*="text-viz-ink/50"] {
+  color: #a6adc8;
+}
+[data-theme="catppuccin-mocha"] [data-testid="state-panel"] [class*="text-viz-ink/40"] {
+  color: #9ca2ba;
+}
+[data-theme="catppuccin-mocha"] [data-testid="state-panel"] [class*="text-zinc-600"] {
+  color: #a6adc8;
+}
+[data-theme="catppuccin-mocha"] [data-testid="state-panel"] .fill-zinc-500,
+[data-theme="catppuccin-mocha"] [data-testid="state-panel"] .fill-zinc-600 {
+  fill: #a6adc8;
+}
+
+/* Gruvbox-dark: ink blends + zinc labels + purple/red pills fail; warm
+   accents pass. Replacements stay in the gruvbox hue families. */
+[data-theme="gruvbox-dark"] [data-testid="state-panel"] [class*="text-viz-ink/60"],
+[data-theme="gruvbox-dark"] .react-flow [class*="text-viz-ink/60"] {
+  color: #d5c4a1;
+}
+[data-theme="gruvbox-dark"] [data-testid="state-panel"] [class*="text-viz-ink/50"] {
+  color: #bdae93;
+}
+[data-theme="gruvbox-dark"] [data-testid="state-panel"] [class*="text-viz-ink/40"] {
+  color: #b3a48d;
+}
+[data-theme="gruvbox-dark"] [data-testid="state-panel"] [class*="text-zinc-600"] {
+  color: #bdae93;
+}
+[data-theme="gruvbox-dark"] [data-testid="state-panel"] .fill-zinc-500,
+[data-theme="gruvbox-dark"] [data-testid="state-panel"] .fill-zinc-600 {
+  fill: #bdae93;
+}
+[data-theme="gruvbox-dark"] .react-flow [class*="text-purple-400"],
+[data-theme="gruvbox-dark"] .react-flow [class*="text-purple-500"] {
+  color: #d9a0b6;
+}
+[data-theme="gruvbox-dark"] .react-flow [class*="text-red-400"],
+[data-theme="gruvbox-dark"] [data-testid="state-panel"] [class*="text-red-400"] {
+  color: #ffa06b;
 }
 
 [data-theme="catppuccin-mocha"] {

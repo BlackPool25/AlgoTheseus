@@ -1,5 +1,7 @@
 # CLOUDRUN.md — Cloud Run production backend (the scale-to-zero upgrade)
 
+> Unified guide: [SELF-HOSTING.md](SELF-HOSTING.md) is the canonical self-host reference; this file keeps the Cloud Run detail.
+
 Why: free-tier backends sleep — SnapDeploy auto-sleeps idle (~60 s wake),
 Render spins down after 15 min idle (~1 min spin-up). Cloud Run scales to zero
 too, but wake is seconds and you pay per-request instead of per-sleep-cycle.

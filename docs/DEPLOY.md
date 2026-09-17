@@ -1,5 +1,7 @@
 # DEPLOY.md — free-tier deployment (todo 21, D4)
 
+> Unified guide: [SELF-HOSTING.md](SELF-HOSTING.md) is the canonical self-host reference; this file keeps the free-tier detail.
+
 Decision context: `docs/deploy-decision.md` (D1 kill-criteria fired —
 browser-WASM is dead as primary). **Server-container is THE path**; the
 frontend below is a static shell that talks to it. This doc proves the

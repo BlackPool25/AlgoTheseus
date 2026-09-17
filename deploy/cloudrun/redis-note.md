@@ -1,3 +1,4 @@
+# Unified guide: docs/SELF-HOSTING.md §Redis-note is canonical; this file keeps the option detail.
 # AlgoTheseus — Redis options for Cloud Run (no in-image Redis, no volume)
 #
 # The API/worker YAMLs read REDIS_URL from the `algo-theseus-redis-url` secret.

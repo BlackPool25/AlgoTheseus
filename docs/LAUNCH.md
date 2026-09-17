@@ -1,5 +1,7 @@
 # Launch checklist
 
+> Self-hosting consolidated in [SELF-HOSTING.md](SELF-HOSTING.md); this file keeps the launch checklist.
+
 ## 1. Domain swap (before first prod build)
 Real domain replaces `https://www.example.com` in: `frontend/index.html`
 (%VITE_SITE_URL%), `frontend/public/_redirects`, `frontend/public/_headers`

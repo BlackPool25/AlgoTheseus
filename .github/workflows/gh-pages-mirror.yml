@@ -17,7 +17,7 @@ name: gh-pages-mirror
 on:
   workflow_dispatch: {}
   push:
-    branches: [feat/dsa-visualiser-improvements]
+    branches: [main]
     paths: [frontend/**]
 
 permissions:

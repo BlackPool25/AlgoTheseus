@@ -77,13 +77,17 @@ export default function App() {
   const [mobileTab, setMobileTab] = useState<MobileTab>("code");
   const [ioSeen, setIoSeen] = useState(true);
 
-  useEffect(() => {
+  const [prevStatus, setPrevStatus] = useState(status);
+  if (prevStatus !== status) {
+    setPrevStatus(status);
     if (status === "executing") setIoSeen(false);
-  }, [status]);
+  }
 
-  useEffect(() => {
+  const [prevMobileTab, setPrevMobileTab] = useState(mobileTab);
+  if (prevMobileTab !== mobileTab) {
+    setPrevMobileTab(mobileTab);
     if (mobileTab === "console") setIoSeen(true);
-  }, [mobileTab]);
+  }
 
   const showIoDot = !ioSeen && (status === "done" || status === "error");
 

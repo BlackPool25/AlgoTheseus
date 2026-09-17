@@ -60,6 +60,5 @@ export function useSeo(tags: SeoTags, jsonLd: Record<string, unknown>) {
     return () => {
       script.remove();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tags.title, tags.description, tags.canonical, tags.ogImage, jsonLdText]);
 }

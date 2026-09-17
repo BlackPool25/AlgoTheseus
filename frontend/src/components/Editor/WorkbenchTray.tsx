@@ -26,13 +26,17 @@ export function WorkbenchTray({ onToggleCollapse, isCollapsed = false, segmented
   const status = useUIStore((s) => s.status);
   const [outputSeen, setOutputSeen] = useState(true);
 
-  useEffect(() => {
+  const [prevStatus, setPrevStatus] = useState(status);
+  if (prevStatus !== status) {
+    setPrevStatus(status);
     if (status === "executing") setOutputSeen(false);
-  }, [status]);
+  }
 
-  useEffect(() => {
+  const [prevActiveTab, setPrevActiveTab] = useState(activeTab);
+  if (prevActiveTab !== activeTab) {
+    setPrevActiveTab(activeTab);
     if (activeTab === "stdout") setOutputSeen(true);
-  }, [activeTab]);
+  }
 
   const showRunDot = !outputSeen && (status === "done" || status === "error");
 

@@ -31,3 +31,13 @@ frontend/bench/fixtures/
 # Environment
 .env
 .env.local
+.pytest_cache/
+.ruff_cache/
+**/.pytest_cache/
+**/.ruff_cache/
+.env.*
+!*.example
+frontend/debug-*.png
+frontend/bench/*.json
+coverage/
+*.log

@@ -561,6 +561,20 @@ def _state_insert_line(point_line: int, lines: list[str]) -> int:
                 return k
             k += 1
         return point_line
+    if re.search(r"=\s*\{\s*$", code0) or code0.strip().endswith("="):
+        # Braced-initializer DECL (`int values[] = {`): the statement only
+        # completes at the closing `};` — placing after the header lands
+        # inside the initializer list (g++: expected primary-expression
+        # before 'do' via __TRACE_STATE). Same brace-balance scan as lambda.
+        k = point_line + 1
+        bdepth = code0.count("{") - code0.count("}")
+        while k <= n and k - point_line <= 100:
+            codek = re.sub(r'"(?:\\.|[^"\\])*"', '""', lines[k - 1].split("//")[0])
+            bdepth += codek.count("{") - codek.count("}")
+            if bdepth <= 0 and codek.strip().endswith(";"):
+                return k
+            k += 1
+        return point_line
     depth = 0
     k = point_line
     while k <= n:

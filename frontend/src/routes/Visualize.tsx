@@ -60,6 +60,7 @@ int main() {
 function VisualizePage({ entry }: { entry: AlgorithmEntry }) {
   const navigate = useNavigate();
   const setCode = useUIStore((s) => s.setCode);
+  const setActiveSlug = useUIStore((s) => s.setActiveSlug);
   const setRawInput = useUIStore((s) => s.setRawInput);
   const resetUI = useUIStore((s) => s.reset);
   const preset = findPreset(entry);
@@ -69,6 +70,7 @@ function VisualizePage({ entry }: { entry: AlgorithmEntry }) {
   function handleTryIt() {
     const runnable = preset?.code ?? fallbackProgram(entry);
     setCode(runnable);
+    setActiveSlug(entry.slug);
     setRawInput(preset?.stdin ?? "");
     resetUI();
     useTraceStore.getState().reset();

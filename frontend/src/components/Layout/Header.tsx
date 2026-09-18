@@ -26,13 +26,14 @@ export function Header({
   isLoading,
   engineSel,
 }: HeaderProps) {
-  const { setCode, setRawInput, reset: resetUI, status, formatOnRun, setFormatOnRun } = useUIStore();
+  const { setCode, setRawInput, reset: resetUI, status, formatOnRun, setFormatOnRun, setActiveSlug } = useUIStore();
   const [presetsOpen, setPresetsOpen] = useState(false);
   const [kebabOpen, setKebabOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   function handleSelectPreset(preset: CodePreset) {
     setCode(preset.code);
+    setActiveSlug(preset.id);
     if (preset.stdin) {
       setRawInput(preset.stdin);
     } else {

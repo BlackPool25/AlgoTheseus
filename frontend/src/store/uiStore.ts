@@ -27,6 +27,14 @@ interface UIStore {
   selectedBatchIds: string[];
   batchLabels: Record<string, string>;
   formatOnRun: boolean;
+  /**
+   * Algorithm/preset key active in the tool, set at click time by the
+   * preset-select / try-it handlers alongside setCode. The tool route (/)
+   * carries no slug (Visualize navigates away from /visualize/:slug), so
+   * dp_table overlay reads this instead of the URL. Null = direct
+   * navigation / no preset chosen (today's behavior).
+   */
+  activeSlug: string | null;
 
   setCode: (code: string) => void;
   setRawInput: (input: string) => void;
@@ -49,6 +57,7 @@ interface UIStore {
   setSelectedBatchIds: (ids: string[]) => void;
   setBatchLabel: (id: string, label: string) => void;
   addBatchCase: (id: string, label?: string) => void;
+  setActiveSlug: (slug: string | null) => void;
 }
 
 const DEFAULT_CODE = `#include <vector>
@@ -98,6 +107,7 @@ export const useUIStore = create<UIStore>((set) => ({
   selectedBatchIds: [],
   batchLabels: {},
   formatOnRun: readFormatOnRun(),
+  activeSlug: null,
 
   setCode: (code) => set({ code }),
   setRawInput: (rawInput) => set({ rawInput }),
@@ -168,6 +178,7 @@ export const useUIStore = create<UIStore>((set) => ({
         : [...s.selectedBatchIds, id],
     })),
   setSelectedBatchIds: (ids) => set({ selectedBatchIds: ids }),
+  setActiveSlug: (activeSlug) => set({ activeSlug }),
   setBatchLabel: (id, label) =>
     set((s) => ({ batchLabels: { ...s.batchLabels, [id]: label } })),
   addBatchCase: (id, label) =>

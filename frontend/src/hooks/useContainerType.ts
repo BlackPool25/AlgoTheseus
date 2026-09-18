@@ -113,7 +113,47 @@ function hasScalarLabel(obj: Record<string, unknown>): boolean {
   );
 }
 
-export function useContainerType(value: unknown): ContainerKind {  if (value === null || value === undefined) return "primitive";
+// DP overlay allowlist: exact algorithm slugs (content/algorithms.ts) and
+// preset ids (content/presets.ts) for DP-family guides. Unknown slugs fail
+// closed (no dp_table). Seeded from: knapsack-01, coin-change, edit-distance,
+// climbing-stairs, sieve-of-eratosthenes (identical in both files);
+// LIS: longest-increasing-subsequence (slug) / lis (preset);
+// LCS: longest-common-subsequence (slug) / lcs (preset);
+// KMP: kmp-string-matching (slug) / kmp (preset);
+// palindrome-dp (preset only, no algorithm guide).
+export const DP_SLUG_ALLOWLIST: ReadonlySet<string> = new Set([
+  "knapsack-01",
+  "longest-common-subsequence",
+  "longest-increasing-subsequence",
+  "coin-change",
+  "edit-distance",
+  "climbing-stairs",
+  "kmp-string-matching",
+  "sieve-of-eratosthenes",
+  "lis",
+  "lcs",
+  "kmp",
+  "palindrome-dp",
+]);
+
+function isDpSlug(slug: string | null | undefined): slug is string {
+  return typeof slug === "string" && DP_SLUG_ALLOWLIST.has(slug);
+}
+
+// 1D int vector only: floats/strings/mixed/empty fail closed to vector.
+function isIntVector(value: unknown[]): boolean {
+  return (
+    value.length > 0 &&
+    value.every((v) => typeof v === "number" && Number.isInteger(v))
+  );
+}
+
+// Plain 2D number array only: any non-number cell fails closed to grid.
+function isPlainNumberGrid(rows: unknown[][]): boolean {
+  return rows.every((row) => row.every((v) => typeof v === "number"));
+}
+
+export function useContainerType(value: unknown, slug?: string | null): ContainerKind {  if (value === null || value === undefined) return "primitive";
   // JSON strings (palindrome/LCS/...) render as indexed char boxes;
   // numbers/booleans stay primitive.
   if (typeof value === "string") return "string";
@@ -122,10 +162,18 @@ export function useContainerType(value: unknown): ContainerKind {  if (value ===
   if (Array.isArray(value)) {
     // 2D array: differentiate grid (rectangular matrix) from graph (jagged adjacency list)
     if (value.length > 0 && value.every((item) => Array.isArray(item))) {
-      const firstLen = value[0].length;
-      const isRectangular = firstLen > 0 && value.every((item) => item.length === firstLen);
-      return isRectangular ? "grid" : "graph";
+      const rows = value as unknown[][];
+      const firstLen = rows[0].length;
+      const isRectangular = firstLen > 0 && rows.every((item) => item.length === firstLen);
+      // Jagged shape returns here under EVERY slug — DP context never
+      // promotes adjacency lists to tables.
+      if (!isRectangular) return "graph";
+      if (isDpSlug(slug) && isPlainNumberGrid(rows)) return "dp_table";
+      return "grid";
     }
+    // DP context overlay: a bare vector<int> is a DP row/table only when the
+    // active algorithm is DP-family. Null/unknown slugs keep today's route.
+    if (isDpSlug(slug) && isIntVector(value)) return "dp_table";
     return "vector";
   }
 

@@ -62,6 +62,7 @@ export function Algorithms() {
   const [cat, setCat] = useState("All");
   const navigate = useNavigate();
   const setCode = useUIStore((s) => s.setCode);
+  const setActiveSlug = useUIStore((s) => s.setActiveSlug);
   const setRawInput = useUIStore((s) => s.setRawInput);
   const resetUI = useUIStore((s) => s.reset);
 
@@ -114,6 +115,7 @@ export function Algorithms() {
 
   function handleTryIt(preset: CodePreset) {
     setCode(preset.code);
+    setActiveSlug(preset.id);
     setRawInput(preset.stdin ?? "");
     resetUI();
     useTraceStore.getState().reset();

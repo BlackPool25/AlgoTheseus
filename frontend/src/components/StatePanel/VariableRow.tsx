@@ -8,6 +8,7 @@
  */
 
 import { useContainerType } from "../../hooks/useContainerType";
+import { useUIStore } from "../../store/uiStore";
 import { VISUAL_REGISTRY } from "../ContainerVisuals/registry";
 import { ErrorBoundary } from "../ContainerVisuals/ErrorBoundary";
 import type { HeapDiffShape } from "../ContainerVisuals/HeapPanel";
@@ -117,7 +118,8 @@ function diffGridCells(prev: unknown, next: number[][]): [number, number][] | nu
 }
 
 export function VariableRow({ name, value, status, highlightIndex, heap, heapDiff, prevValue }: Props) {
-  const containerKind = useContainerType(value);
+  const activeSlug = useUIStore((s) => s.activeSlug);
+  const containerKind = useContainerType(value, activeSlug);
   const badge = BADGE[status];
 
   return (

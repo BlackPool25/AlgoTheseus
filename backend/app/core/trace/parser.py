@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import Any
 
 from pydantic import TypeAdapter, ValidationError
@@ -135,9 +136,19 @@ def parse(raw_lines: list[str], compressed: bool = False) -> list[Any]:
 
 
 def _apply_gutter_lines(events: list[Any]) -> None:
+    # P1-08a: switch-case BRANCH probes fire at the first body-statement
+    # line with a vacuous `true /* switch(cond) == case v */` condition,
+    # but the decision belongs to the `switch` header. The header probe
+    # itself is unreachable at runtime (control jumps straight to the
+    # case label), so the parser attributes the decision to the header
+    # line: the line right after the previously executed line in the same
+    # function (canonical layout). Guards stay conservative — remap only
+    # when the previous step is a non-switch event in the same function
+    # with the header strictly between (one-liners no-op, fallthrough
+    # chains and calls inside the switch condition keep emitted lines).
     enter_stack: list[tuple[str, int]] = []  # (func, enter line) per live frame
     prev: int | None = None  # previous executed line
-    for event in events:
+    for i, event in enumerate(events):
         if event.type == EventType.FUNC_ENTER:
             enter_stack.append((event.func, event.line))
         elif event.type == EventType.FUNC_EXIT:
@@ -151,15 +162,47 @@ def _apply_gutter_lines(events: list[Any]) -> None:
                     None,
                 )
                 if idx is not None and idx > 0:
-                    event.return_line = enter_stack[idx][1]
+                    # P1-08b: the gutter arrow lands on the call-site line —
+                    # the first step back in the caller after this exit
+                    # (normally the post-call STATE; the return/branch line
+                    # for tail calls and calls in conditions) — not the
+                    # callee brace line. Outermost exits keep None.
+                    caller = enter_stack[idx - 1][0]
+                    j = i + 1
+                    n = len(events)
+                    while j < n and events[j].func != caller:
+                        j += 1
+                    if j < n:
+                        event.return_line = events[j].line
             if enter_stack and enter_stack[-1][0] == event.func:
                 enter_stack.pop()
             elif any(f == event.func for f, _ in enter_stack):
                 cut = max(i for i, (f, _) in enumerate(enter_stack) if f == event.func)
                 del enter_stack[cut:]
+        elif event.type == EventType.BRANCH and _is_switch_branch(
+            getattr(event, "condition", None)
+        ):
+            prev_event = events[i - 1] if i > 0 else None
+            if (
+                prev_event is not None
+                and prev_event.func == event.func
+                and not _is_switch_branch(getattr(prev_event, "condition", None))
+                and prev_event.line + 1 < event.line
+            ):
+                event.line = prev_event.line + 1
         elif event.type == EventType.STATE and event.prev_line is None:
             event.prev_line = prev
         prev = event.line
+
+
+# P1-08a: matches the injector's vacuous switch-label conditions
+# (`true /* switch(x) == case 2 */`, `true /* switch(x) == default */`).
+_SWITCH_BRANCH_RE = re.compile(r"^true\s*/\*\s*switch\(.*\)\s*==\s*(?:case\b.*|default)\s*\*/$")
+
+
+def _is_switch_branch(condition: Any) -> bool:
+    """Whether a branch condition is a switch-case label (never raises)."""
+    return isinstance(condition, str) and _SWITCH_BRANCH_RE.match(condition) is not None
 
 
 def frames_at_step(events: list[Any]) -> list[list[StackFrame]]:

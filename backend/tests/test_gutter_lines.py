@@ -43,4 +43,7 @@ def test_live_stream_synthesizes_return_line_on_nested_exit():
     exits = [e for e in events if e.type.value == "exit"]
     helper_exit = [e for e in exits if e.func == "helper"]
     assert len(helper_exit) == 1
-    assert helper_exit[0].return_line == 3
+    # P1-08 (todo 16): return_line maps back to the call site — the first
+    # step back in the caller after the exit — not the callee enter line.
+    # This wire carries no post-call STATE, so resumption is main's exit.
+    assert helper_exit[0].return_line == 6

@@ -42,6 +42,52 @@ function isRankArrayShape(r: unknown, n: number): r is number[] {
   return r.every((v) => typeof v === "number" && Number.isInteger(v) && v >= 0);
 }
 
+/**
+ * isDsuLike — frontend-only DSU gate. Shape alone ({p,r} int arrays) is not
+ * semantics: any scoreboard struct classifies as `dsu` without this. Requires
+ * ALL of:
+ *  1. same-length integer arrays, n > 0;
+ *  2. every p[i] in [0, n);
+ *  3. roots idempotent: every parent chain resolves to a root r with
+ *     p[r] === r within n hops (no cycles, no dangling parents);
+ *  4. r entries non-negative integers bounded by n. Bound note: union-by-rank
+ *     guarantees rank <= floor(log2(n)), but size-convention DSUs store
+ *     component size (up to n) in the same slot — so the bound is permissive
+ *     by design (<= n) and real discrimination comes from 5-6;
+ *  5. merge evidence: at least one i with p[i] !== i. A fresh/identity parent
+ *     array is indistinguishable from a scoreboard — fail closed to struct;
+ *  6. singleton roots carry rank 0 (a lone set has rank/size 0).
+ */
+function isDsuLike(p: unknown, r: unknown): boolean {
+  if (!isParentArrayShape(p)) return false;
+  const n = p.length;
+  if (!isRankArrayShape(r, n)) return false;
+  if (r.some((v) => v > n)) return false;
+
+  // 3. every chain lands on an idempotent root.
+  for (let i = 0; i < n; i++) {
+    let cur = p[i];
+    for (let hops = 0; hops < n; hops++) {
+      if (p[cur] === cur) break;
+      cur = p[cur];
+      if (hops === n - 1) return false;
+    }
+    if (p[cur] !== cur) return false;
+  }
+
+  // 5. merge evidence.
+  if (p.every((v, i) => v === i)) return false;
+
+  // 6. singleton roots carry rank 0.
+  const childCount = new Array<number>(n).fill(0);
+  for (const v of p) childCount[v]++;
+  for (let i = 0; i < n; i++) {
+    if (p[i] === i && childCount[i] === 1 && r[i] !== 0) return false;
+  }
+
+  return true;
+}
+
 // Pointer-shaped child: a struct object or null (nullptr). Scalars and
 // arrays are NOT pointers — this is what keeps {left:1,right:2} out of tree.
 function isPointerShaped(v: unknown): boolean {
@@ -91,7 +137,7 @@ export function useContainerType(value: unknown): ContainerKind {  if (value ===
   // Backend serializes DSU through the generic struct path as
   // {"$id", "$addr", "p": [...], "r": [...]} (no _type emitter —
   // deliberate: avoids touching tracer.h/serializer_gen codegen).
-  if (isParentArrayShape(obj.p) && isRankArrayShape(obj.r, obj.p.length)) {
+  if (isDsuLike(obj.p, obj.r)) {
     return "dsu";
   }
 

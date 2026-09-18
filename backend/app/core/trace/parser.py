@@ -195,15 +195,23 @@ def frames_at_step(events: list[Any]) -> list[list[StackFrame]]:
                 del stack[idx:]
             # else: unbalanced exit — leave the stack unchanged.
         elif event.type == EventType.STATE and stack:
+            # P1-07: a non-empty probe names the full in-scope set at that
+            # line (the injector filters dead loop vars via loop_var_ranges),
+            # so the frame becomes exactly that set — names absent from it
+            # are out of scope and dropped, keeping rendered frames in
+            # agreement with STATE events. A var-less probe (v={}, e.g. the
+            # `try {` line) carries no scope information: the frame is kept.
             if event.func == stack[-1].func:
-                stack[-1].vars.update(event.vars or {})
+                if event.vars:
+                    stack[-1].vars = dict(event.vars)
             elif any(f.func == event.func for f in stack):
                 # Throw-path cleanup: the STATE belongs to an outer frame, so
                 # every frame above it died with the exception. Truncate to the
                 # matching frame, then merge there — never into the corpse.
                 idx = max(i for i, f in enumerate(stack) if f.func == event.func)
                 del stack[idx + 1 :]
-                stack[-1].vars.update(event.vars or {})
+                if event.vars:
+                    stack[-1].vars = dict(event.vars)
             # else: STATE for a frame never entered — leave the stack unchanged.
 
         frames.append(

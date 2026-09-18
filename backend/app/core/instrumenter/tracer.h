@@ -591,46 +591,46 @@ std::string __ops_build(const char* name, const V& val, Rest&&... rest) {
 #define __TRACE_FUNC_ENTER(line, func, depth, ...)                              \
     do {                                                                         \
         if (!__trace_active) {                                                   \
-            __TraceGuard __tg;                                                   \
-            std::string __p = __vars_build(__VA_ARGS__);                         \
-            std::string __o = __trace_stdout_delta();                            \
+            __TraceGuard __algotrace_tg;                                                   \
+            std::string __algotrace_p = __vars_build(__VA_ARGS__);                         \
+            std::string __algotrace_o = __trace_stdout_delta();                            \
             fprintf(stderr,                                                      \
                 "TRACE:{\"t\":\"enter\",\"l\":%d,\"f\":\"%s\",\"d\":%d,\"p\":{%s},\"o\":\"%s\"}\n", \
-                line, func, depth, __p.c_str(), __o.c_str());                    \
+                line, func, depth, __algotrace_p.c_str(), __algotrace_o.c_str());                    \
         }                                                                        \
     } while(0)
 
 #define __TRACE_FUNC_EXIT(line, func, depth, retval)                            \
     do {                                                                         \
         if (!__trace_active) {                                                   \
-            __TraceGuard __tg;                                                   \
-            std::string __o = __trace_stdout_delta();                            \
+            __TraceGuard __algotrace_tg;                                                   \
+            std::string __algotrace_o = __trace_stdout_delta();                            \
             fprintf(stderr,                                                      \
                 "TRACE:{\"t\":\"exit\",\"l\":%d,\"f\":\"%s\",\"d\":%d,\"r\":%s,\"o\":\"%s\"}\n", \
-                line, func, depth, __ser(retval).c_str(), __o.c_str());          \
+                line, func, depth, __ser(retval).c_str(), __algotrace_o.c_str());          \
         }                                                                        \
     } while(0)
 
 #define __TRACE_FUNC_EXIT_VOID(line, func, depth)                               \
     do {                                                                         \
         if (!__trace_active) {                                                   \
-            __TraceGuard __tg;                                                   \
-            std::string __o = __trace_stdout_delta();                            \
+            __TraceGuard __algotrace_tg;                                                   \
+            std::string __algotrace_o = __trace_stdout_delta();                            \
             fprintf(stderr,                                                      \
                 "TRACE:{\"t\":\"exit\",\"l\":%d,\"f\":\"%s\",\"d\":%d,\"r\":null,\"o\":\"%s\"}\n", \
-                line, func, depth, __o.c_str());                                 \
+                line, func, depth, __algotrace_o.c_str());                                 \
         }                                                                        \
     } while(0)
 
 #define __TRACE_STATE(line, func, depth, ...)                                   \
     do {                                                                         \
         if (!__trace_active) {                                                   \
-            __TraceGuard __tg;                                                   \
-            std::string __v = __vars_build(__VA_ARGS__);                         \
-            std::string __o = __trace_stdout_delta();                            \
+            __TraceGuard __algotrace_tg;                                                   \
+            std::string __algotrace_v = __vars_build(__VA_ARGS__);                         \
+            std::string __algotrace_o = __trace_stdout_delta();                            \
             fprintf(stderr,                                                      \
                 "TRACE:{\"t\":\"state\",\"l\":%d,\"f\":\"%s\",\"d\":%d,\"v\":{%s},\"o\":\"%s\"}\n", \
-                line, func, depth, __v.c_str(), __o.c_str());                    \
+                line, func, depth, __algotrace_v.c_str(), __algotrace_o.c_str());                    \
         }                                                                        \
     } while(0)
 
@@ -644,20 +644,20 @@ static bool __trace_g_first = true;
 #define __TRACE_STATE_G(line, func, depth, VJSON, GJSON)                        \
     do {                                                                         \
         if (!__trace_active) {                                                   \
-            __TraceGuard __tg;                                                   \
-            std::string __v = (VJSON);                                            \
-            std::string __g = (GJSON);                                            \
-            std::string __o = __trace_stdout_delta();                            \
-            if (__trace_g_first || __g != __trace_prev_g) {                       \
+            __TraceGuard __algotrace_tg;                                                   \
+            std::string __algotrace_v = (VJSON);                                            \
+            std::string __algotrace_g = (GJSON);                                            \
+            std::string __algotrace_o = __trace_stdout_delta();                            \
+            if (__trace_g_first || __algotrace_g != __trace_prev_g) {                       \
                 __trace_g_first = false;                                         \
-                __trace_prev_g = __g;                                             \
+                __trace_prev_g = __algotrace_g;                                             \
                 fprintf(stderr,                                                  \
                     "TRACE:{\"t\":\"state\",\"l\":%d,\"f\":\"%s\",\"d\":%d,\"v\":{%s},\"g\":{%s},\"o\":\"%s\"}\n", \
-                    line, func, depth, __v.c_str(), __g.c_str(), __o.c_str());   \
+                    line, func, depth, __algotrace_v.c_str(), __algotrace_g.c_str(), __algotrace_o.c_str());   \
             } else {                                                             \
                 fprintf(stderr,                                                  \
                     "TRACE:{\"t\":\"state\",\"l\":%d,\"f\":\"%s\",\"d\":%d,\"v\":{%s},\"o\":\"%s\"}\n", \
-                    line, func, depth, __v.c_str(), __o.c_str());                \
+                    line, func, depth, __algotrace_v.c_str(), __algotrace_o.c_str());                \
             }                                                                    \
         }                                                                        \
     } while(0)
@@ -665,35 +665,35 @@ static bool __trace_g_first = true;
 #define __TRACE_BRANCH(line, func, depth, cond_str, cond_val)                  \
     do {                                                                         \
         if (!__trace_active) {                                                   \
-            __TraceGuard __tg;                                                   \
-            std::string __o = __trace_stdout_delta();                            \
+            __TraceGuard __algotrace_tg;                                                   \
+            std::string __algotrace_o = __trace_stdout_delta();                            \
             fprintf(stderr,                                                      \
                 "TRACE:{\"t\":\"branch\",\"l\":%d,\"f\":\"%s\",\"d\":%d,\"c\":\"%s\",\"tk\":%s,\"o\":\"%s\"}\n", \
                 line, func, depth, cond_str, (cond_val) ? "true" : "false",      \
-                __o.c_str());                                                    \
+                __algotrace_o.c_str());                                                    \
         }                                                                        \
     } while(0)
 
 #define __TRACE_BRANCH_OPS(line, func, depth, cond_str, cond_val, ...)         \
     do {                                                                         \
         if (!__trace_active) {                                                   \
-            __TraceGuard __tg;                                                   \
-            std::string __ops = __ops_build(__VA_ARGS__);                        \
-            std::string __o = __trace_stdout_delta();                            \
+            __TraceGuard __algotrace_tg;                                                   \
+            std::string __algotrace_ops = __ops_build(__VA_ARGS__);                        \
+            std::string __algotrace_o = __trace_stdout_delta();                            \
             fprintf(stderr,                                                      \
                 "TRACE:{\"t\":\"branch\",\"l\":%d,\"f\":\"%s\",\"d\":%d,\"c\":\"%s\",\"tk\":%s,\"op\":[%s],\"o\":\"%s\"}\n", \
-                line, func, depth, cond_str, (cond_val) ? "true" : "false", __ops.c_str(), \
-                __o.c_str()); \
+                line, func, depth, cond_str, (cond_val) ? "true" : "false", __algotrace_ops.c_str(), \
+                __algotrace_o.c_str()); \
         }                                                                        \
     } while(0)
 
 #define __TRACE_LOOP_ITER(line, func, depth, iter)                              \
     do {                                                                         \
         if (!__trace_active) {                                                   \
-            __TraceGuard __tg;                                                   \
-            std::string __o = __trace_stdout_delta();                            \
+            __TraceGuard __algotrace_tg;                                                   \
+            std::string __algotrace_o = __trace_stdout_delta();                            \
             fprintf(stderr,                                                      \
                 "TRACE:{\"t\":\"iter\",\"l\":%d,\"f\":\"%s\",\"d\":%d,\"it\":%d,\"o\":\"%s\"}\n", \
-                line, func, depth, iter, __o.c_str());                           \
+                line, func, depth, iter, __algotrace_o.c_str());                           \
         }                                                                        \
     } while(0)

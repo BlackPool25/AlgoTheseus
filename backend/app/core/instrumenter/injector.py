@@ -1064,7 +1064,7 @@ def instrument(
 
             def make_ret_temp() -> str:
                 nonlocal ret_temp_seq
-                name = f"__trace_ret_{ret_temp_seq}"
+                name = f"__algotrace_ret_{ret_temp_seq}"
                 ret_temp_seq += 1
                 return name
 
@@ -1105,7 +1105,7 @@ def instrument(
                         # P0-07/P0-08: temp scoped in its own brace block so
                         # case/goto jumps never cross its init (jumping over
                         # a whole block is legal; every path here returns).
-                        # Names/binding stay: todos 8-9 own rename/`auto&&`.
+                        # `auto` spelling kept: todo 9 owns `auto&&`.
                         ret_var = make_ret_temp()
                         lines[point.line - 1] = (
                             f"{indent}{{ auto {ret_var} = ({ret_expr}); "
@@ -1203,7 +1203,7 @@ def instrument(
             # bool conversions, so the ternary replays the if's own
             # contextual conversion exactly once. while/for/else-if emit no
             # BRANCH points, so their conditions already evaluate once.
-            temp = f"__trace_c_{cond_temp_seq}"
+            temp = f"__algotrace_c_{cond_temp_seq}"
             norm = _try_hoist_branch(point, lines, raw, line_starts, temp, claimed_cond_lines)
             if norm is None:
                 add_before(point.line, _trace_branch(point))
@@ -1250,7 +1250,7 @@ def instrument(
                 if not expr:
                     add_before(i + 1, f'__TRACE_FUNC_EXIT_VOID({i + 1}, "{fn}", 0);')
                     break
-                ret_var = f"__trace_ret_fallback_{fn}"
+                ret_var = f"__algotrace_ret_fallback_{fn}"
                 # P0-07/P0-08: same brace-block scoping as the main temp
                 # path — the temp never leaks to case/goto-crossed scope.
                 indent_fb = " " * (len(line) - len(line.lstrip()))

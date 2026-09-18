@@ -109,33 +109,34 @@ class TestS1LoopHeaderStateLeak:
         )
 
     def test_header_state_point_scoped_to_loop(self, tmp_path):
-        """Scope-level: the header STATE point exists and must stay in-loop.
+        """Scope-level: braceless headers emit no STATE point (S8, all levels).
 
-        walk() anchors a STATE point at the for-header line carrying the
-        header var; build_scope_map() proves `x` there is the loop var.
-        The injected `__TRACE_STATE(<header>,...,"x",x)` event must then be
-        emitted before (or inside) the loop body — never post-loop where
-        the header var is dead.
+        Since the top-level S8 skip, walk() emits no STATE point for the
+        braceless range-for header — a header probe is unspliceable (any
+        pre-body splice detaches the body; post-body leaves the header var
+        dead). build_scope_map() still proves `x` there is the loop var,
+        the single-statement body keeps its own STATE point, and no
+        `__TRACE_STATE(<header>,...,"x",x)` event may appear post-loop.
         """
         src = tmp_path / "s1scope.cpp"
         src.write_text(S1_SRC)
 
         result = walk(str(src))
-        header_states = [
-            p
-            for p in result.injection_points
-            if p.kind == InjectKind.STATE and p.line == HEADER_LINE
-        ]
-        assert header_states, (
-            f"expected a header STATE point at line {HEADER_LINE}, "
-            f"got STATE lines: {sorted(p.line for p in result.injection_points if p.kind == InjectKind.STATE)}"
+        state_lines = sorted(
+            p.line for p in result.injection_points if p.kind == InjectKind.STATE
+        )
+        assert HEADER_LINE not in state_lines, (
+            f"braceless loop header must not emit STATE (S8): {state_lines}"
+        )
+        assert any(line > HEADER_LINE for line in state_lines), (
+            f"expected the loop body to keep its own STATE point: {state_lines}"
         )
 
         scopes = build_scope_map(str(src))
         assert "x" in [v.name for v in scopes["main"].vars_at_line.get(HEADER_LINE, [])]
         # `_trace_state` unions point vars with vars_at_line_post[line]:
-        # this is the union source that smuggles dead loop-`x` into the
-        # post-loop emission.
+        # this is the union source that smuggled dead loop-`x` into the
+        # post-loop emission before the header point was removed.
         assert "x" in [v.name for v in scopes["main"].vars_at_line_post.get(HEADER_LINE, [])]
 
         instrumented = instrument(S1_SRC, str(src))

@@ -613,16 +613,26 @@ class ASTWalker:
             for child in body.get_children():
                 line = child.location.line
                 if line not in seen_lines and line > 0:
-                    seen_lines.add(line)
-                    points.append(
-                        InjectionPoint(
-                            kind=InjectKind.STATE,
-                            line=line,
-                            col=1,
-                            func_name=fn,
-                            depth=fn_depth,
+                    # S8 parity with _walk_stmt: braceless loop headers get
+                    # no header STATE — any splice between header and body
+                    # detaches the body, and post-body placement leaves the
+                    # header var dead. The loop body still emits its own
+                    # STATE via _walk_stmt below. Braced headers and all
+                    # other statements keep their snapshots.
+                    child_kind = _cursor_kind(child)
+                    if child_kind not in _LOOP_KINDS or self._loop_body_is_braced(
+                        child, child_kind
+                    ):
+                        seen_lines.add(line)
+                        points.append(
+                            InjectionPoint(
+                                kind=InjectKind.STATE,
+                                line=line,
+                                col=1,
+                                func_name=fn,
+                                depth=fn_depth,
+                            )
                         )
-                    )
                 self._walk_stmt(child, points, loop_counters, fn, fn_depth, seen_lines)
 
             return  # Don't recurse further — _walk_stmt handles the body

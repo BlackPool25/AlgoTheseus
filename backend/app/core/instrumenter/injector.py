@@ -510,6 +510,31 @@ def _loop_governed_if(point_line: int, lines: list[str]) -> tuple[str, int, int]
     return ("split", j, -1)
 
 
+def _probe_names_loop_var(point: InjectionPoint, scope: FunctionScope | None) -> bool:
+    """True when *point*'s STATE would name a loop-scoped variable.
+
+    Mirrors `_trace_state`'s name resolution (point vars unioned with the
+    scope post set) and its loop-lifetime test: a name counts only when one
+    of its declarations sits inside a loop-var interval. Such probes must
+    never `add_before` onto a line whose next line is `else` — that lands
+    between a bare loop header and its body (detaching it) or before the
+    loop itself (undeclared var).
+    """
+    if scope is None:
+        return False
+    post = scope.vars_at_line_post.get(point.line, [])
+    names = set(point.var_names)
+    names.update(v.name for v in post)
+    for name in names:
+        ranges = scope.loop_var_ranges.get(name)
+        if not ranges:
+            continue
+        decl_lines = [v.decl_line for v in post if v.name == name]
+        if decl_lines and any(h <= d <= e for h, e in ranges for d in decl_lines):
+            return True
+    return False
+
+
 def _loop_body_stmt_end(start_line: int, lines: list[str]) -> int | None:
     """Last line of the (else-absorbing) statement starting at start_line.
 
@@ -1123,6 +1148,24 @@ def instrument(
                 if line_text.lstrip().startswith("else"):
                     continue
                 if _is_braceless_then_body(point.line, lines):
+                    continue
+                if _probe_names_loop_var(point, scope):
+                    # P0-01: add_before here would splice into a chain the
+                    # probe must not split (between a bare loop header and
+                    # its body, before the loop, or between an if-header
+                    # and its then-body, orphaning `else` — the wrap's
+                    # probe prefix blinds the S5 check above, so this gate
+                    # is the backstop). Slide after the whole if/else chain
+                    # instead; _trace_state's lifetime filter drops the dead
+                    # loop var at that placement. Probes without loop vars
+                    # keep the pre-body snapshot below.
+                    end = _loop_body_stmt_end(point.line, lines)
+                    if end is None:
+                        continue
+                    add_after(
+                        end,
+                        _trace_state(point, scope, walk_result.global_vars, end),
+                    )
                     continue
                 add_before(
                     point.line,

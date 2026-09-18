@@ -91,10 +91,19 @@ def parse(raw_lines: list[str], compressed: bool = False) -> list[Any]:
             if call_stack and call_stack[-1] == event.func:
                 call_stack.pop()
             elif event.func in call_stack:
-                # Pop the nearest matching frame to keep stack consistent
+                # Throw-path cleanup: an exit naming an outer frame means every
+                # frame above it died with the exception. Drop the whole dead
+                # suffix (del-style, matching frames_at_step's EXIT idiom).
                 idx = len(call_stack) - 1 - call_stack[::-1].index(event.func)
-                call_stack.pop(idx)
+                del call_stack[idx:]
         else:
+            if event.func in call_stack and call_stack[-1] != event.func:
+                # Throw-path cleanup: executing in an outer frame (C++ unwinding
+                # emits no FUNC_EXIT) means every frame above it is dead. Drop
+                # the whole dead suffix so this and later steps get outer depths.
+                # Balanced traces never mismatch, so their depths are untouched.
+                idx = len(call_stack) - 1 - call_stack[::-1].index(event.func)
+                del call_stack[idx + 1 :]
             event.depth = len(call_stack) - 1 if call_stack else 0
 
     # F3 two-arrow gutter: the live tracer (tracer.h) never emits pl/rl,
@@ -186,7 +195,16 @@ def frames_at_step(events: list[Any]) -> list[list[StackFrame]]:
                 del stack[idx:]
             # else: unbalanced exit — leave the stack unchanged.
         elif event.type == EventType.STATE and stack:
-            stack[-1].vars.update(event.vars or {})
+            if event.func == stack[-1].func:
+                stack[-1].vars.update(event.vars or {})
+            elif any(f.func == event.func for f in stack):
+                # Throw-path cleanup: the STATE belongs to an outer frame, so
+                # every frame above it died with the exception. Truncate to the
+                # matching frame, then merge there — never into the corpse.
+                idx = max(i for i, f in enumerate(stack) if f.func == event.func)
+                del stack[idx + 1 :]
+                stack[-1].vars.update(event.vars or {})
+            # else: STATE for a frame never entered — leave the stack unchanged.
 
         frames.append(
             [

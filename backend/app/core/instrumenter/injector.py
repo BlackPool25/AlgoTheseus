@@ -775,13 +775,22 @@ def _is_safe_return_expr(expr: str) -> bool:
     if expr.lstrip("-").replace(".", "", 1).isdigit():
         return True
     # Simple identifier or member/array-access chain
-    return (
+    if (
         re.fullmatch(
             r"[A-Za-z_][A-Za-z0-9_]*" r"(\.[A-Za-z_][A-Za-z0-9_]*)*" r"(\[[^\]]+\])*",
             expr,
         )
-        is not None
-    )
+        is None
+    ):
+        return False
+    # P1-03: a mutating bracket (`a[i++]`, `a[--i]`, `a[i = 0]`) would run
+    # twice on the safe path (once for __TRACE_FUNC_EXIT, once for return) —
+    # reroute to the temp bind so it evaluates once. Pure `a[i]`/`p.x[0]`
+    # stay safe (fail toward hoist: `==` also reroutes, harmlessly).
+    for bracket in re.findall(r"\[[^\]]*\]", expr):
+        if "++" in bracket or "--" in bracket or "=" in bracket:
+            return False
+    return True
 
 
 def _expand_single_line_bodies(source: str) -> str:

@@ -1105,10 +1105,12 @@ def instrument(
                         # P0-07/P0-08: temp scoped in its own brace block so
                         # case/goto jumps never cross its init (jumping over
                         # a whole block is legal; every path here returns).
-                        # `auto` spelling kept: todo 9 owns `auto&&`.
+                        # P0-11: `auto&&` binds non-copyable refs (ostream&)
+                        # without copying; `__ser` serializes the bound ref
+                        # to the "<opaque>" placeholder.
                         ret_var = make_ret_temp()
                         lines[point.line - 1] = (
-                            f"{indent}{{ auto {ret_var} = ({ret_expr}); "
+                            f"{indent}{{ auto&& {ret_var} = ({ret_expr}); "
                             f"{trace_exit_with(ret_var)} "
                             f"return {ret_var}; }}{trailing}\n"
                         )
@@ -1126,7 +1128,7 @@ def instrument(
                 ret_expr_inline = after.strip().rstrip(";")
                 if ret_expr_inline:
                     ret_var = make_ret_temp()
-                    body = f"auto {ret_var} = ({ret_expr_inline}); {trace_exit_with(ret_var)} return {ret_var};"
+                    body = f"auto&& {ret_var} = ({ret_expr_inline}); {trace_exit_with(ret_var)} return {ret_var};"
                 else:
                     body = f"{_trace_exit(point)} return;"
                 lines[point.line - 1] = f"{indent}{before.strip()} {{ {body} }}\n"
@@ -1256,7 +1258,7 @@ def instrument(
                 indent_fb = " " * (len(line) - len(line.lstrip()))
                 exit_fb = f'__TRACE_FUNC_EXIT({i + 1}, "{fn}", 0, ({ret_var}));'
                 lines[i] = (
-                    f"{indent_fb}{{ auto {ret_var} = ({expr}); "
+                    f"{indent_fb}{{ auto&& {ret_var} = ({expr}); "
                     f"{exit_fb} return {ret_var}; }}\n"
                 )
                 break

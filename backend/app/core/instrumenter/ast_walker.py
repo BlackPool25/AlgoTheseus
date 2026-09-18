@@ -795,6 +795,48 @@ class ASTWalker:
             children = list(cursor.get_children())
             if children:
                 cond = children[0]
+                # P0-04: if-init-statement (`if (int y = x*2; y > 3)`) exposes
+                # the init declaration as children[0] (DECL_STMT). Its text
+                # is not a valid C++ expression — splicing it into
+                # __TRACE_BRANCH fails with `expected primary-expression
+                # before 'int'`, and its init refs (e.g. `x`) would mislabel
+                # a pre-header probe. Emit a constant-true branch instead:
+                # branch events stay, the declaration is never re-spliced,
+                # and the (-1,-1) extent keeps the hoist path off too.
+                if cond.kind in (
+                    clang.CursorKind.DECL_STMT,
+                    clang.CursorKind.VAR_DECL,
+                ):
+                    points.append(
+                        InjectionPoint(
+                            kind=InjectKind.BRANCH,
+                            line=cursor.location.line,
+                            col=cursor.location.column,
+                            func_name=func_name,
+                            depth=func_depth,
+                            condition_text="true",
+                            cond_vars=[],
+                            cond_start=-1,
+                            cond_end=-1,
+                        )
+                    )
+                    if len(children) > 1:
+                        self._walk_stmt(
+                            children[1], points, loop_counters, func_name, func_depth, seen
+                        )
+                    if len(children) > 2:
+                        else_branch = children[2]
+                        if else_branch.kind == clang.CursorKind.IF_STMT:
+                            else_children = list(else_branch.get_children())
+                            for ec in else_children[1:]:
+                                self._walk_stmt(
+                                    ec, points, loop_counters, func_name, func_depth, seen
+                                )
+                        else:
+                            self._walk_stmt(
+                                else_branch, points, loop_counters, func_name, func_depth, seen
+                            )
+                    return
                 cond_text = self._get_condition_text(cond)
                 # Skip branch tracing for input-consuming conditions
                 if any(tok in cond_text for tok in ("cin", "scanf", "getline")):

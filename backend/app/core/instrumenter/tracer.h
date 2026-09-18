@@ -332,10 +332,10 @@ inline std::string __ser(const std::vector<std::vector<bool>>& v) {
 
 template<typename T>
 std::string __ser(const std::deque<T>& v) {
-    std::string out = "[";
+    std::string out = "{\"_type\":\"deque\",\"items\":[";
     bool first = true;
     for (const auto& x : v) { if (!first) out += ","; out += __ser(x); first = false; }
-    return out + "]";
+    return out + "]}";
 }
 
 template<typename T>

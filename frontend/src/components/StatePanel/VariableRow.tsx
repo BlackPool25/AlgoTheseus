@@ -15,6 +15,7 @@ import { diffIndices, diffKeys, diffMembers } from "../ContainerVisuals/flash";
 import { trieNodeIds } from "../ContainerVisuals/trieNormalize";
 import { renderCellValue } from "../../utils/format";
 import { setItems } from "../../utils/setItems";
+import { dequeItems } from "../../utils/dequeItems";
 import type { RowStatus } from "../../utils/scopeDisplay";
 
 
@@ -174,13 +175,15 @@ function ValueVisual({ name, value, kind, highlightIndex, heap, heapDiff, prevVa
       }
     }
   }
-  if ((kind === "vector" || kind === "stack" || kind === "queue" || kind === "priority_queue") && prevValue !== undefined) {
-    const currItems = stackQueueItems(value);
+  if ((kind === "vector" || kind === "deque" || kind === "stack" || kind === "queue" || kind === "priority_queue") && prevValue !== undefined) {
+    // Deque unwraps its own {"_type":"deque","items"} envelope; without
+    // this it would render (registry) but never flash (no items to diff).
+    const currItems = kind === "deque" ? dequeItems(value) : stackQueueItems(value);
     if (currItems) {
       // Envelope idioms (render-spec §2): length change flashes the
       // boundary cell only (new top / new tail / new front), never the
       // shifted body; same-length steps diff cell-by-cell (sift-swap pair).
-      const prevItems = stackQueueItems(prevValue);
+      const prevItems = kind === "deque" ? dequeItems(prevValue) : stackQueueItems(prevValue);
       if (prevItems && prevItems.length !== currItems.length) {
         const grown = currItems.length > prevItems.length;
         if (kind === "queue" || kind === "priority_queue") {

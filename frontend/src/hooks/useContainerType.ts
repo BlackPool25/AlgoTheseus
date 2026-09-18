@@ -3,7 +3,10 @@
  *
  * Heuristic: inspect the shape of the serialized value to guess the container type.
  * The backend serializes containers with distinctive shapes:
- *   - vector/deque/set/multiset: plain array
+ *   - vector/deque: plain array renders as vector; deque has its own
+ *     {"_type":"deque","items":[...]} envelope (tracer.h __ser(deque))
+ *     so front/back semantics survive the wire
+ *   - set: { _type: "set", values: [...] } (items accepted for old fixtures)
  *   - stack: { top: ..., items: [...] }
  *   - queue: { front: ..., items: [...] }
  *   - priority_queue: { top: ..., items: [...] } (same as stack — disambiguate by context)
@@ -13,6 +16,7 @@
 
 export type ContainerKind =
   | "vector"
+  | "deque"
   | "grid"
   | "graph"
   | "dp_table"
@@ -126,6 +130,7 @@ export function useContainerType(value: unknown): ContainerKind {  if (value ===
   if ("_type" in obj) {
     if (obj._type === "pq") return "priority_queue";
     if (obj._type === "set") return "set";
+    if (obj._type === "deque") return "deque";
     if (obj._type === "dp_table") return "dp_table";
     if (obj._type === "graph") return "graph";
     if (obj._type === "trie") return "trie";

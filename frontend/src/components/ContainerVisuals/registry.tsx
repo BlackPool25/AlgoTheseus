@@ -27,6 +27,7 @@ import { LinkedListVisual } from "./LinkedListVisual";
 import {
   MultiStructureAdapter,
   PrimitiveFallback,
+  TreeAdapter,
 } from "./registryComponents";
 import type { ContainerKind } from "../../hooks/useContainerType";
 
@@ -56,6 +57,7 @@ export const VISUAL_REGISTRY: Record<
   trie: TrieVisual,
   dsu: DSUVisual,
   linked_list: LinkedListVisual,
+  tree: TreeAdapter,
   multi_structure: MultiStructureAdapter,
   struct: PrimitiveFallback,
   primitive: PrimitiveFallback,

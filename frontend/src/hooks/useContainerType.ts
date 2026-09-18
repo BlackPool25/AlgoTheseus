@@ -22,6 +22,7 @@ export type ContainerKind =
   | "map"
   | "set"
   | "struct"
+  | "tree"
   | "linked_list"
   | "trie"
   | "dsu"
@@ -39,6 +40,25 @@ function isParentArrayShape(p: unknown): p is number[] {
 function isRankArrayShape(r: unknown, n: number): r is number[] {
   if (!Array.isArray(r) || r.length !== n) return false;
   return r.every((v) => typeof v === "number" && Number.isInteger(v) && v >= 0);
+}
+
+// Pointer-shaped child: a struct object or null (nullptr). Scalars and
+// arrays are NOT pointers — this is what keeps {left:1,right:2} out of tree.
+function isPointerShaped(v: unknown): boolean {
+  return v === null || (typeof v === "object" && !Array.isArray(v));
+}
+
+// A scalar label field must exist alongside left/right (e.g. BST `val`).
+// Wire keys ($id/$addr/...) are excluded: $addr is a string scalar and
+// must not count as a label.
+function hasScalarLabel(obj: Record<string, unknown>): boolean {
+  return Object.entries(obj).some(
+    ([k, v]) =>
+      k !== "left" &&
+      k !== "right" &&
+      !k.startsWith("$") &&
+      (typeof v === "string" || typeof v === "number" || typeof v === "boolean"),
+  );
 }
 
 export function useContainerType(value: unknown): ContainerKind {  if (value === null || value === undefined) return "primitive";
@@ -80,6 +100,21 @@ export function useContainerType(value: unknown): ContainerKind {  if (value ===
 
   // Queue: { front, items }
   if ("front" in obj && "items" in obj && Array.isArray(obj.items)) return "queue";
+
+  // Tree node (e.g. BST TreeNode): left+right present, BOTH pointer-shaped
+  // (object-or-null), AND a scalar label field present. Bare numeric pairs
+  // ({left:1,right:2}) fail closed — they are not pointer trees.
+  // Sentinel markers ($cycle/$depth_limit) never route to tree.
+  if (
+    "left" in obj &&
+    "right" in obj &&
+    !("$cycle" in obj || "$depth_limit" in obj) &&
+    isPointerShaped(obj.left) &&
+    isPointerShaped(obj.right) &&
+    hasScalarLabel(obj)
+  ) {
+    return "tree";
+  }
 
   // Linked list node: has $addr + 'next' pointer field (but not left/right which is a tree)
   if ("$addr" in obj && "next" in obj && !("left" in obj && "right" in obj)) {

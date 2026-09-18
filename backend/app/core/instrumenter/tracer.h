@@ -40,6 +40,7 @@
 #include <type_traits>
 #include <tuple>
 #include <array>
+#include <cstring>
 #include <iostream>
 #include <unistd.h>
 #include <fcntl.h>
@@ -667,9 +668,10 @@ static bool __trace_g_first = true;
         if (!__trace_active) {                                                   \
             __TraceGuard __algotrace_tg;                                                   \
             std::string __algotrace_o = __trace_stdout_delta();                            \
+            std::string __algotrace_c = __trace_json_escape(cond_str, strlen(cond_str)); \
             fprintf(stderr,                                                      \
                 "TRACE:{\"t\":\"branch\",\"l\":%d,\"f\":\"%s\",\"d\":%d,\"c\":\"%s\",\"tk\":%s,\"o\":\"%s\"}\n", \
-                line, func, depth, cond_str, (cond_val) ? "true" : "false",      \
+                line, func, depth, __algotrace_c.c_str(), (cond_val) ? "true" : "false", \
                 __algotrace_o.c_str());                                                    \
         }                                                                        \
     } while(0)
@@ -680,9 +682,11 @@ static bool __trace_g_first = true;
             __TraceGuard __algotrace_tg;                                                   \
             std::string __algotrace_ops = __ops_build(__VA_ARGS__);                        \
             std::string __algotrace_o = __trace_stdout_delta();                            \
+            std::string __algotrace_c = __trace_json_escape(cond_str, strlen(cond_str)); \
             fprintf(stderr,                                                      \
                 "TRACE:{\"t\":\"branch\",\"l\":%d,\"f\":\"%s\",\"d\":%d,\"c\":\"%s\",\"tk\":%s,\"op\":[%s],\"o\":\"%s\"}\n", \
-                line, func, depth, cond_str, (cond_val) ? "true" : "false", __algotrace_ops.c_str(), \
+                line, func, depth, __algotrace_c.c_str(), (cond_val) ? "true" : "false", \
+                __algotrace_ops.c_str(), \
                 __algotrace_o.c_str()); \
         }                                                                        \
     } while(0)

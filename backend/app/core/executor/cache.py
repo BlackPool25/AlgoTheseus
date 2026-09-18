@@ -35,6 +35,7 @@ import json
 import logging
 import os
 import time
+from functools import lru_cache
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -48,15 +49,37 @@ DEFAULT_TTL_SECONDS = 3600.0  # 1h TTL eviction
 TOOLCHAIN_FLAGS = "g++ -O0 -g -std=c++17 -pipe"
 
 
+# Instrumenter identity baked into the source key — bump-proof: any edit to
+# injector.py / tracer.h changes the key, so post-deploy probes can never be
+# shadowed by stale pre-deploy entries (old ones age out via TTL/eviction).
+_INSTRUMENTER_DIR = Path(__file__).resolve().parent.parent / "instrumenter"
+_INSTRUMENTER_FILES = ("injector.py", "tracer.h")
+
+
+@lru_cache(maxsize=1)
+def instrumenter_version() -> str:
+    """SHA-256 over the current injector.py + tracer.h bytes. Never raises."""
+    h = hashlib.sha256()
+    for name in _INSTRUMENTER_FILES:
+        try:
+            h.update((_INSTRUMENTER_DIR / name).read_bytes())
+        except OSError:
+            h.update(name.encode("utf-8") + b":missing\x00")
+        h.update(b"\x00")
+    return h.hexdigest()
+
+
 def _flags_json(flags: dict) -> str:
     """Canonical flags encoding — key order independent, no whitespace drift."""
     return json.dumps(flags, sort_keys=True, separators=(",", ":"))
 
 
 def source_key(code: str, flags: dict) -> str:
-    """Key for the instrumented-source entry: SHA-256(source + flags)."""
+    """Key for the instrumented-source entry: SHA-256(source + flags + instrumenter)."""
     h = hashlib.sha256()
     h.update(b"src/v1\x00")
+    h.update(instrumenter_version().encode("utf-8"))
+    h.update(b"\x00")
     h.update(code.encode("utf-8"))
     h.update(b"\x00")
     h.update(_flags_json(flags).encode("utf-8"))

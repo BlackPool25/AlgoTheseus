@@ -66,6 +66,7 @@ from app.core.budget import consume_budget
 from app.core.executor.cache import (
     TOOLCHAIN_FLAGS,
     SharedCache,
+    instrumenter_version,
     result_key,
     source_key,
 )
@@ -563,6 +564,7 @@ def _flags_for(kind: str, compressed: bool) -> dict:
         "compressed": compressed,
         "toolchain": TOOLCHAIN_FLAGS,
         "max_trace_lines": MAX_TRACE_LINES,
+        "instrumenter": instrumenter_version(),
     }
 
 

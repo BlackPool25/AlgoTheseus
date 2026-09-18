@@ -3,7 +3,7 @@
  *
  * Run: npx tsc tests/dsu-gate.test.ts src/hooks/useContainerType.ts
  *   --outDir /tmp/dsutest --module commonjs --target es2022
- *   --moduleResolution node --skipLibCheck --strict \
+ *   --moduleResolution node --skipLibCheck --strict --esModuleInterop \
  *   && node --test /tmp/dsutest/tests/dsu-gate.test.js
  *
  * RED-first: a plain scoreboard struct {p:[0,1,2,3], r:[0,0,1,2]}

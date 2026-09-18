@@ -14,6 +14,7 @@ import type { HeapDiffShape } from "../ContainerVisuals/HeapPanel";
 import { diffIndices, diffKeys, diffMembers } from "../ContainerVisuals/flash";
 import { trieNodeIds } from "../ContainerVisuals/trieNormalize";
 import { renderCellValue } from "../../utils/format";
+import { setItems } from "../../utils/setItems";
 import type { RowStatus } from "../../utils/scopeDisplay";
 
 
@@ -228,19 +229,4 @@ function stackQueueItems(value: unknown): unknown[] | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const items = (value as Record<string, unknown>).items;
   return Array.isArray(items) ? items : null;
-}
-
-/** items array of a set value (plain array or { _type: "set", items }). */
-export function setItems(value: unknown): unknown[] | null {
-  if (Array.isArray(value)) return value;
-  if (value && typeof value === "object") {
-    const record = value as Record<string, unknown>;
-    // Live backend emits {"_type":"set","values":[...]} (tracer.h __ser);
-    // older fixtures use `items`. Prefer `items` when both are present.
-    const items = record.items;
-    if (Array.isArray(items)) return items;
-    const values = record.values;
-    if (Array.isArray(values)) return values;
-  }
-  return null;
 }

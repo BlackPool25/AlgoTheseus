@@ -1,19 +1,33 @@
 /**
- * tests/tree-routing.spec.ts — tree-shaped struct routing lock (todo 2).
+ * tests/tree-routing.test.ts — tree-shaped struct routing lock (todo 2).
  *
- * Run: npx vitest run tests/tree-routing.spec.ts
+ * Run (no new deps — repo has no vitest; esbuild ships inside vite):
+ *   node node_modules/esbuild/bin/esbuild tests/tree-routing.test.ts --bundle \
+ *     --platform=node --format=cjs --jsx=automatic --loader:.css=empty \
+ *     --define:import.meta.env='{}' \
+ *     --outfile=/tmp/tree-routing.test.cjs --log-level=error \
+ *   && node --test /tmp/tree-routing.test.cjs
+ * (format MUST be cjs: react-dom/server does require("util") internally,
+ * which an esm bundle cannot satisfy — "Dynamic require not supported".)
  *
- * RED on HEAD: a BST TreeNode ({val,left,right} pointer-shaped) routes to
- * "struct" → PrimitiveFallback ({keys} fallback), even though
- * StructGraphVisual already renders trees — nothing routes to it.
+ * (Bare `npx tsc ... && node --test` cannot be used here: the registry
+ * import graph pulls .tsx visuals, a .css import via GraphAlgorithmVisual,
+ * and vite-only `import.meta.env` — all handled by the esbuild flags above.
+ * React.createElement (no-JSX) style is kept in THIS file so no jsx config
+ * beyond the bundler flag is needed for the test body itself.)
+ *
+ * RED on pre-todo-2 tree: a BST TreeNode ({val,left,right} pointer-shaped)
+ * routes to "struct" → PrimitiveFallback, even though StructGraphVisual
+ * already renders trees — nothing routes to it.
  *
  * GREEN: tight predicate routes pointer-shaped left+right + scalar label
  * to "tree"; bare numeric pairs fail closed to struct/map (never tree).
  */
 
+import { describe, it } from "node:test";
+import assert from "node:assert/strict";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, it, expect } from "vitest";
 import { useContainerType } from "../src/hooks/useContainerType";
 import { VISUAL_REGISTRY } from "../src/components/ContainerVisuals/registry";
 import {
@@ -34,71 +48,74 @@ function bst3() {
 
 describe("tree routing", () => {
   it("positive: 3-node BST routes to tree", () => {
-    expect(useContainerType(bst3())).toBe("tree");
+    assert.equal(useContainerType(bst3()), "tree");
   });
 
   it("negative: scalar left/right pair with $addr stays struct (not tree)", () => {
-    expect(
+    assert.equal(
       useContainerType({ $id: 9, $addr: "0xddd", left: 1, right: 2, label: "x" }),
-    ).toBe("struct");
+      "struct",
+    );
   });
 
   it("negative: bare numeric pair without $addr never routes to tree", () => {
-    expect(useContainerType({ left: 1, right: 2 })).not.toBe("tree");
+    assert.notEqual(useContainerType({ left: 1, right: 2 }), "tree");
   });
 
   it("no regression: $addr+next still routes to linked_list", () => {
-    expect(
+    assert.equal(
       useContainerType({
         $id: 1,
         $addr: "0xaaa",
         val: 1,
         next: { $id: 2, $addr: "0xbbb", val: 2, next: null },
       }),
-    ).toBe("linked_list");
+      "linked_list",
+    );
   });
 
   it("no regression: cyclic structs still route to struct sentinel", () => {
-    expect(useContainerType({ $cycle: true })).toBe("struct");
-    expect(useContainerType({ $depth_limit: true })).toBe("struct");
+    assert.equal(useContainerType({ $cycle: true }), "struct");
+    assert.equal(useContainerType({ $depth_limit: true }), "struct");
   });
 
   it("no regression: null children count as pointer-shaped (leaf BST node is a tree)", () => {
-    expect(
+    assert.equal(
       useContainerType({ $id: 2, $addr: "0xbbb", val: 1, left: null, right: null }),
-    ).toBe("tree");
+      "tree",
+    );
   });
 });
 
 describe("tree registry adapter", () => {
   it("registry maps tree kind to TreeAdapter (not PrimitiveFallback)", () => {
-    expect(VISUAL_REGISTRY.tree).toBe(TreeAdapter);
-    expect(VISUAL_REGISTRY.tree).not.toBe(PrimitiveFallback);
-    expect(VISUAL_REGISTRY.struct).toBe(PrimitiveFallback);
+    assert.equal(VISUAL_REGISTRY.tree, TreeAdapter);
+    assert.notEqual(VISUAL_REGISTRY.tree, PrimitiveFallback);
+    assert.equal(VISUAL_REGISTRY.struct, PrimitiveFallback);
   });
 
   it("positive: 3-node BST renders labeled SVG tree nodes", () => {
     const html = renderToStaticMarkup(
       React.createElement(TreeAdapter, { value: bst3(), name: "root" }),
     );
-    expect(html).toContain("<svg");
+    assert.match(html, /<svg/);
     const nodes = html.match(/data-testid="struct-node"/g) ?? [];
-    expect(nodes.length).toBe(3);
-    expect(html).toContain('data-label="2"');
-    expect(html).toContain('data-label="1"');
-    expect(html).toContain('data-label="3"');
+    assert.equal(nodes.length, 3);
+    assert.match(html, /data-label="2"/);
+    assert.match(html, /data-label="1"/);
+    assert.match(html, /data-label="3"/);
   });
 
   it("negative: scalar pair routes to struct → PrimitiveFallback, never SVG", () => {
     const v = { $id: 9, $addr: "0xddd", left: 1, right: 2, label: "x" };
     const kind = useContainerType(v);
-    expect(kind).toBe("struct");
+    assert.equal(kind, "struct");
     const Component = VISUAL_REGISTRY[kind];
-    expect(Component).toBe(PrimitiveFallback);
+    assert.equal(Component, PrimitiveFallback);
     const html = renderToStaticMarkup(
       React.createElement(Component, { value: v, name: "p" }),
     );
-    expect(html).not.toContain("<svg");
-    expect(html).toContain('data-testid="primitive-fallback"');
+    assert.doesNotMatch(html, /<svg/);
+    assert.match(html, /data-testid="primitive-fallback"/);
   });
 });

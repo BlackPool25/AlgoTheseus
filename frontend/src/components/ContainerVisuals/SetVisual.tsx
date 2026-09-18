@@ -8,6 +8,7 @@
  */
 
 import { renderCellValue } from "../../utils/format";
+import { asItems } from "../../utils/setItems";
 import { flashRowStyle } from "./flash";
 
 interface Props {
@@ -15,20 +16,6 @@ interface Props {
   label?: string;
   /** Members added this step — flash via the shared primitive. */
   changedMembers?: unknown[];
-}
-
-export function asItems(value: unknown): unknown[] | null {
-  if (Array.isArray(value)) return value;
-  if (value && typeof value === "object" && !Array.isArray(value)) {
-    const record = value as Record<string, unknown>;
-    // Live backend emits {"_type":"set","values":[...]} (tracer.h __ser);
-    // older fixtures use `items`. Prefer `items` when both are present.
-    const items = record.items;
-    if (Array.isArray(items)) return items;
-    const values = record.values;
-    if (Array.isArray(values)) return values;
-  }
-  return null;
 }
 
 export function SetVisual({ value, label = "set", changedMembers = [] }: Props) {

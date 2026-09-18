@@ -231,11 +231,16 @@ function stackQueueItems(value: unknown): unknown[] | null {
 }
 
 /** items array of a set value (plain array or { _type: "set", items }). */
-function setItems(value: unknown): unknown[] | null {
+export function setItems(value: unknown): unknown[] | null {
   if (Array.isArray(value)) return value;
   if (value && typeof value === "object") {
-    const items = (value as Record<string, unknown>).items;
+    const record = value as Record<string, unknown>;
+    // Live backend emits {"_type":"set","values":[...]} (tracer.h __ser);
+    // older fixtures use `items`. Prefer `items` when both are present.
+    const items = record.items;
     if (Array.isArray(items)) return items;
+    const values = record.values;
+    if (Array.isArray(values)) return values;
   }
   return null;
 }

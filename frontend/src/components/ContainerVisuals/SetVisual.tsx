@@ -2,7 +2,8 @@
  * components/ContainerVisuals/SetVisual.tsx — Set/multiset visualization.
  *
  * Renders a set as member chips. Accepts a plain array or the backend
- * `{ _type: "set", items: [...] }` envelope. Insert/remove flash comes
+ * `{ _type: "set", values: [...] }` envelope (`items` also accepted).
+ * Insert/remove flash comes
  * from the shared flash.ts primitive (todo 25).
  */
 
@@ -16,11 +17,16 @@ interface Props {
   changedMembers?: unknown[];
 }
 
-function asItems(value: unknown): unknown[] | null {
+export function asItems(value: unknown): unknown[] | null {
   if (Array.isArray(value)) return value;
   if (value && typeof value === "object" && !Array.isArray(value)) {
-    const items = (value as Record<string, unknown>).items;
+    const record = value as Record<string, unknown>;
+    // Live backend emits {"_type":"set","values":[...]} (tracer.h __ser);
+    // older fixtures use `items`. Prefer `items` when both are present.
+    const items = record.items;
     if (Array.isArray(items)) return items;
+    const values = record.values;
+    if (Array.isArray(values)) return values;
   }
   return null;
 }

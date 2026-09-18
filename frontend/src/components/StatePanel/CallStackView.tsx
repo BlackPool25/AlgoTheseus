@@ -11,19 +11,38 @@
 
 import { useMemo } from "react";
 import { useTraceStore } from "../../store/traceStore";
-import { buildFramesWithVars } from "./frameVars";
+import { renderCellValue } from "../../utils/format";
+import { buildFramesWithVars, type StackFrameInfo } from "./frameVars";
+import type { TraceEvent } from "../../types/trace";
 
 export function CallStackView() {
   const callStack = useTraceStore((s) => s.callStack);
   const trace = useTraceStore((s) => s.trace);
   const currentStep = useTraceStore((s) => s.currentStep);
 
+  return (
+    <CallStackFrames trace={trace} currentStep={currentStep} callStack={callStack} />
+  );
+}
+
+export function CallStackFrames({
+  trace,
+  currentStep,
+  callStack,
+}: {
+  trace: TraceEvent[];
+  currentStep: number;
+  callStack: StackFrameInfo[];
+}) {
   // callStack is stored in chronological order (deepest call last).
   // Reverse for display so the most recent call is at the top.
   const frames = useMemo(
     () => buildFramesWithVars(trace, currentStep, callStack).reverse(),
     [trace, currentStep, callStack],
   );
+  // Live position of the current step — the top (most recent) frame executes
+  // here, so its line tracks the scrubber; caller frames keep enter-time.
+  const liveLine = trace[currentStep]?.line ?? null;
 
   if (frames.length === 0) return null;
 
@@ -58,17 +77,18 @@ export function CallStackView() {
                 {frame.func}()
               </span>
               <span className="text-[10px] text-viz-ink/60 ml-auto shrink-0">
-                :{frame.line}
+                :{i === 0 && liveLine !== null ? liveLine : frame.line}
               </span>
             </div>
             {Object.keys(frame.vars).length > 0 && (
               <div className="flex flex-wrap gap-1 mt-0.5 ml-6">
-                {Object.keys(frame.vars).map((name) => (
+                {Object.entries(frame.vars).map(([name, value]) => (
                   <span
                     key={name}
+                    title={fullValue(value)}
                     className="text-[10px] font-mono text-viz-ink/60 bg-viz-panel/60 rounded px-1"
                   >
-                    {name}
+                    {name}={renderCellValue(value)}
                   </span>
                 ))}
               </div>
@@ -78,4 +98,14 @@ export function CallStackView() {
       </div>
     </div>
   );
+}
+
+/** Untruncated hover text for a chip (renderCellValue truncates the label). */
+function fullValue(value: unknown): string {
+  if (typeof value === "string") return value;
+  try {
+    return JSON.stringify(value) ?? String(value);
+  } catch {
+    return String(value);
+  }
 }

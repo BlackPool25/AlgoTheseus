@@ -80,13 +80,15 @@ class TestDiskLRUCache:
         assert c.get("k1") == {"a": 1}
 
     def test_flags_vary_key(self, tmp_path):
-        """Different toolchain flags must NEVER share one cache key."""
+        """Different toolchain flags must NEVER share one cache key; the
+        ``compressed`` parse mode must NEVER fork one (mode-independent entry)."""
         from app.core.executor.cache import result_key
 
-        k1 = result_key("instr", "stdin", {"compressed": False, "toolchain": "g++17"})
-        k2 = result_key("instr", "stdin", {"compressed": True, "toolchain": "g++17"})
-        k3 = result_key("instr", "stdin", {"compressed": False, "toolchain": "g++20"})
-        assert len({k1, k2, k3}) == 3
+        k_plain = result_key("instr", "stdin", {"compressed": False, "toolchain": "g++17"})
+        k_zip = result_key("instr", "stdin", {"compressed": True, "toolchain": "g++17"})
+        k_cxx20 = result_key("instr", "stdin", {"compressed": False, "toolchain": "g++20"})
+        assert k_plain == k_zip  # parse mode is a projection, not a run property
+        assert k_cxx20 not in {k_plain, k_zip}  # toolchain still forks
 
     def test_source_and_binary_keys_differ(self, tmp_path):
         """Instrumented-source and compiled-binary entries live under namespaces."""
@@ -186,26 +188,30 @@ class TestXCacheHeader:
     @patch("app.api.routes.execute.run_in_sandbox")
     @patch("app.api.routes.execute.instrument")
     @patch("app.api.routes.execute.parse_stdin")
-    async def test_different_flags_miss(
+    async def test_different_stdin_miss(
         self,
         mock_parse_stdin,
         mock_instrument,
         mock_run,
         isolated_cache,
     ):
-        """Same code but different flags → MISS, never a cross-flag HIT."""
-        mock_parse_stdin.return_value = ("7\n", "no changes")
+        """Same code but different stdin → MISS, never a cross-input HIT."""
         mock_instrument.return_value = '#include "tracer.h"\nint main() {}'
         mock_run.return_value = _ok_result()
 
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-            r1 = await ac.post("/execute", json={"code": CODE, "raw_stdin": "7\n"})
-            assert r1.headers.get("x-cache") == "MISS"
-            # Streaming path parses with compressed=True → different flags → MISS.
-            r2 = await ac.post(
-                "/execute", json={"code": CODE, "raw_stdin": "7\n", "compressed": True}
-            )
-            assert r2.headers.get("x-cache") == "MISS", r2.headers
+        async def stdin_for(code, raw):
+            mock_parse_stdin.return_value = (raw, "no changes")
+            async with AsyncClient(
+                transport=ASGITransport(app=app), base_url="http://test"
+            ) as ac:
+                return await ac.post("/execute", json={"code": code, "raw_stdin": raw})
+
+        r1 = await stdin_for(CODE, "7\n")
+        assert r1.headers.get("x-cache") == "MISS"
+        # Different stdin is a different program run → MISS (mode no longer forks;
+        # see test_exec_cache_dualmode for the shared-entry proof).
+        r2 = await stdin_for(CODE, "8\n")
+        assert r2.headers.get("x-cache") == "MISS", r2.headers
 
     @patch("app.api.routes.execute.run_in_sandbox")
     @patch("app.api.routes.execute.instrument")

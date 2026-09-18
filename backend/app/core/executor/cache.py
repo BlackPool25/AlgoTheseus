@@ -7,9 +7,11 @@ What it caches (two namespaces, never one key):
     payload (stdout, trace lines, exit code, …) — the "compiled binary" entry:
     what the sandbox produced for that exact instrumented input.
 
-Keys are SHA-256 over content + flags. Different toolchain flags (compiler
-flags, ``compressed`` parse mode, MAX_TRACE_LINES, endpoint kind) ALWAYS hash
-to different keys — entries are NEVER shared across flag sets.
+Keys are SHA-256 over content + flags. Different toolchain flags
+(MAX_TRACE_LINES, endpoint kind, instrumenter version) ALWAYS hash to
+different keys — entries are NEVER shared across flag sets. The ``compressed``
+parse mode is DELIBERATELY normalized out (see ``_norm_flags``): it is a
+read-time projection over the stored ``trace_raw``, not a run-time property.
 
 Warm-instance-only SLO:
   The cache lives under ``/tmp/algo-theseus-cache`` (or ``$CACHE_DIR``). The compose
@@ -74,6 +76,11 @@ def _flags_json(flags: dict) -> str:
     return json.dumps(flags, sort_keys=True, separators=(",", ":"))
 
 
+def _norm_flags(flags: dict) -> dict:
+    """Drop the ``compressed`` parse mode: one entry serves both projections."""
+    return {k: v for k, v in flags.items() if k != "compressed"}
+
+
 def source_key(code: str, flags: dict) -> str:
     """Key for the instrumented-source entry: SHA-256(source + flags + instrumenter)."""
     h = hashlib.sha256()
@@ -82,7 +89,7 @@ def source_key(code: str, flags: dict) -> str:
     h.update(b"\x00")
     h.update(code.encode("utf-8"))
     h.update(b"\x00")
-    h.update(_flags_json(flags).encode("utf-8"))
+    h.update(_flags_json(_norm_flags(flags)).encode("utf-8"))
     return h.hexdigest()
 
 
@@ -90,7 +97,8 @@ def result_key(instrumented: str, stdin_data: str, flags: dict) -> str:
     """Key for the compiled-binary (execution result) entry.
 
     SHA-256(instrumented + stdin + flags). A different stdin or a different
-    flag set is a different program run — never the same key.
+    flag set is a different program run — never the same key. ``compressed``
+    is normalized out: both parse modes share this entry.
     """
     h = hashlib.sha256()
     h.update(b"bin/v1\x00")
@@ -98,7 +106,7 @@ def result_key(instrumented: str, stdin_data: str, flags: dict) -> str:
     h.update(b"\x00")
     h.update(stdin_data.encode("utf-8"))
     h.update(b"\x00")
-    h.update(_flags_json(flags).encode("utf-8"))
+    h.update(_flags_json(_norm_flags(flags)).encode("utf-8"))
     return h.hexdigest()
 
 

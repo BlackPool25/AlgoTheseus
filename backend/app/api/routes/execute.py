@@ -551,17 +551,20 @@ async def _sandbox_with_stampede_lock(
             await asyncio.to_thread(_stampede_release, cache, rkey, token)
 
 
-def _flags_for(kind: str, compressed: bool) -> dict:
+def _flags_for(kind: str) -> dict:
     """Flag set baked into every cache key.
 
-    ``kind`` separates single vs batch entries; ``compressed`` separates the
-    streaming parse mode from the JSON one; toolchain + MAX_TRACE_LINES pin
+    ``kind`` separates single vs batch entries; toolchain + MAX_TRACE_LINES pin
     the sandbox behaviour. A different flag set is ALWAYS a different key —
     entries are never shared across flags.
+
+    ``compressed`` is DELIBERATELY absent: it is a read-time projection
+    (``parse(raw, compressed=...)`` over the stored ``trace_raw``), not a
+    run-time property, so both modes share one result entry and the parse
+    runs per request.
     """
     return {
         "kind": kind,
-        "compressed": compressed,
         "toolchain": TOOLCHAIN_FLAGS,
         "max_trace_lines": MAX_TRACE_LINES,
         "instrumenter": instrumenter_version(),
@@ -633,7 +636,7 @@ async def _resolve(req: ExecuteRequest, kind: str) -> _Resolved:
     await — saturated → SandboxSaturatedError (429) in microseconds.
     """
     _probe_pool_or_raise()
-    flags = _flags_for(kind, req.compressed)
+    flags = _flags_for(kind)
     cache = get_cache()
 
     # ── Step 1: Parse stdin ───────────────────────────────────────────────
@@ -669,6 +672,9 @@ async def _resolve(req: ExecuteRequest, kind: str) -> _Resolved:
     # ── Step 3: Execution result — singleflight around cache + sandbox ──────
     # The leader double-checks the cache inside the flight (a finished flight
     # may have stored while we queued); waiters share the leader's outcome.
+    # Mode-independent: flags carry no ``compressed``, so this rkey (cache key
+    # AND singleflight key) is shared by both parse modes — one cold pipeline
+    # serves JSON and NDJSON clients; parse(raw, compressed=...) runs per request.
     rkey = result_key(instrumented, cleaned_stdin, flags)
 
     async def _load() -> tuple[RunResult, bool]:
@@ -1036,7 +1042,7 @@ async def execute_batch(
     # ── Fan-out cap: at most N sandboxes concurrently, remainder queue ───────
     semaphore = asyncio.Semaphore(_batch_fanout_limit())
     cache = get_cache()
-    flags = _flags_for("batch", False)
+    flags = _flags_for("batch")
 
     # ── Per-test-case runner ──────────────────────────────────────────────────
     async def _run_one(test_id: str, stdin_data: str) -> ExecuteBatchResponseItem:

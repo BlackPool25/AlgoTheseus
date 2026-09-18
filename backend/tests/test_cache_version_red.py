@@ -6,7 +6,7 @@ component in the key) — a post-deploy instrumenter change would keep serving
 stale probes until TTL/eviction. GREEN after: the key carries an
 injector-version input (hash of injector.py + tracer.h bytes), so a version
 bump invalidates while same-version entries still hit (no cold-start
-regression). Compressed/uncompressed entries stay distinct via _flags_for.
+regression). Compressed/uncompressed modes share one entry (projection).
 """
 
 from __future__ import annotations
@@ -58,12 +58,14 @@ def test_version_bump_does_not_serve_stale_entry(tmp_path):
     assert old_key in {p.stem for p in (tmp_path / "c").glob("*.json")}  # ages out via TTL
 
 
-def test_compressed_uncompressed_stay_distinct():
-    """_flags_for keeps compressed/uncompressed entries on separate keys."""
-    f_plain = execute_mod._flags_for("single", False)
-    f_zip = execute_mod._flags_for("single", True)
-    assert f_plain != f_zip
-    assert source_key(CODE, f_plain) != source_key(CODE, f_zip)
+def test_compressed_uncompressed_share_entry():
+    """_flags_for carries no parse mode: both modes share one entry, and legacy
+    flags dicts still carrying ``compressed`` converge via key normalization."""
+    f_plain = execute_mod._flags_for("single")
+    assert "compressed" not in f_plain
+    assert source_key(CODE, {**f_plain, "compressed": False}) == source_key(
+        CODE, {**f_plain, "compressed": True}
+    )
 
 
 def test_version_matches_injector_bytes():

@@ -587,21 +587,57 @@ def _loop_body_stmt_end(start_line: int, lines: list[str]) -> int | None:
     return scan(start_line, 100)
 
 
-def _wrap_loop_governed_if(point: InjectionPoint, lines: list[str]) -> bool:
+def _wrap_loop_governed_if(
+    point: InjectionPoint, lines: list[str], temp: str | None = None
+) -> tuple[bool, bool]:
     """Brace-wrap a loop-governed braceless if with the BRANCH probe inside.
 
     Turns `for (...) if (c) body;` into `for (...) { PROBE; if (c) body; }`
     (same-line), or appends `{` to a bare loop header, prepends the probe to
     the if line, and closes after the if/else chain (split-line). Line count
-    never changes, so other line-keyed insertions stay valid. Legacy
-    duplicate-evaluation on purpose: a hoisted temp decl before the loop
-    header would escape the scope just the same. True when wrapped (caller
-    emits nothing further), False to keep the legacy path.
+    never changes, so other line-keyed insertions stay valid. Placement is
+    exactly the 3bf52f7 wrap; only the condition handling differs: a
+    side-effecting condition is hoisted into the introduced braces
+    (`bool temp = ((c) ? true : false);` evaluated once, shared by the probe
+    and the `if`), while pure conditions keep the legacy duplicate-evaluation
+    shape byte-identical. `temp` is the caller's reserved hoist name (None
+    forces the legacy shape). Returns (wrapped, temp_used) — the caller
+    consumes a sequence number only when the temp was actually emitted.
     """
     span = _loop_governed_if(point.line, lines)
     if span is None:
-        return False
-    probe = _trace_branch(point)
+        return (False, False)
+
+    def cond_span(code: str, scan: str, frm: int) -> tuple[int, int, str] | None:
+        """(open, close, text) of the first `if (...)` cond at/after frm.
+
+        Indices are computed on the column-preserving sanitized twin (so a
+        paren inside a literal can't win) and used to splice the original.
+        None when the cond leaves the line (multi-line cond keeps legacy).
+        """
+        m = re.search(r"\bif\s*\(", scan[frm:])
+        if m is None:
+            return None
+        opi = frm + m.end() - 1
+        if opi >= len(code):
+            return None
+        cpi = _match_paren(scan, opi)
+        if cpi < 0 or cpi >= len(scan) or opi >= len(code):
+            return None
+        return (opi, cpi, code[opi + 1 : cpi])
+
+    def hoist_decl(pre: str, found: tuple[int, int, str] | None) -> str | None:
+        """Hoist decl for a side-effecting cond, else None for legacy."""
+        if temp is None or found is None:
+            return None
+        norm = " ".join(found[2].split())
+        if not norm or not _may_have_side_effects(norm):
+            return None
+        blank = _SQ_STRING_RE.sub("''", _DQ_STRING_RE.sub('""', norm))
+        if ";" in blank or re.search(r"\bconstexpr\b", pre) is not None:
+            return None
+        return f"bool {temp} = (({found[2]}) ? true : false);"
+
     kind, idx, close = span
     if kind == "same":
         line = lines[idx]
@@ -612,14 +648,34 @@ def _wrap_loop_governed_if(point: InjectionPoint, lines: list[str]) -> bool:
         if cpos >= 0:
             comment, body = body[cpos:], body[:cpos]
         code = body.rstrip()
+        scan = _sanitize_for_scan(code)
+        found = cond_span(code, scan, close + 1)
+        decl = hoist_decl(code[: found[0]] if found else "", found)
+        if decl is None:
+            probe = _trace_branch(point)
+            lines[idx] = (
+                f"{code[: close + 1]} {{ {probe} {code[close + 1 :].lstrip()} }}"
+                f"{comment}{nl}"
+            )
+            return (True, False)
+        probe = _trace_branch(point, f"({temp})")
+        opi, cpi, _ = found
+        tail = code[cpi:]
         lines[idx] = (
-            f"{code[: close + 1]} {{ {probe} {code[close + 1 :].lstrip()} }}"
+            f"{code[: close + 1]} {{ {decl} {probe} if ({temp}{tail} }}"
             f"{comment}{nl}"
         )
-        return True
+        return (True, True)
     end = _loop_body_stmt_end(point.line, lines)
     if end is None:
-        return False
+        return (False, False)
+    pl = lines[point.line - 1]
+    pnl = "\n" if pl.endswith("\n") else ""
+    pbody = pl[:-1] if pnl else pl
+    indent = pbody[: len(pbody) - len(pbody.lstrip())]
+    pscan = _sanitize_for_scan(pbody)
+    found = cond_span(pbody, pscan, 0)
+    decl = hoist_decl(pbody[: found[0]] if found else "", found)
     hdr = lines[idx]
     hnl = "\n" if hdr.endswith("\n") else ""
     hbody = hdr[:-1] if hnl else hdr
@@ -628,11 +684,14 @@ def _wrap_loop_governed_if(point: InjectionPoint, lines: list[str]) -> bool:
         lines[idx] = hbody[:cpos].rstrip() + " {" + " " + hbody[cpos:] + hnl
     else:
         lines[idx] = hbody.rstrip() + " {" + hnl
-    pl = lines[point.line - 1]
-    pnl = "\n" if pl.endswith("\n") else ""
-    pbody = pl[:-1] if pnl else pl
-    indent = pbody[: len(pbody) - len(pbody.lstrip())]
-    lines[point.line - 1] = f"{indent}{probe} {pbody.lstrip()}{pnl}"
+    if decl is None:
+        probe = _trace_branch(point)
+        lines[point.line - 1] = f"{indent}{probe} {pbody.lstrip()}{pnl}"
+    else:
+        probe = _trace_branch(point, f"({temp})")
+        opi, cpi, _ = found
+        new_if = pbody[: opi + 1] + temp + pbody[cpi:]
+        lines[point.line - 1] = f"{indent}{decl} {probe} {new_if.lstrip()}{pnl}"
     el = lines[end - 1]
     enl = "\n" if el.endswith("\n") else ""
     ebody = el[:-1] if enl else el
@@ -641,7 +700,7 @@ def _wrap_loop_governed_if(point: InjectionPoint, lines: list[str]) -> bool:
         lines[end - 1] = ebody[:epos].rstrip() + " }" + " " + ebody[epos:] + enl
     else:
         lines[end - 1] = ebody.rstrip() + " }" + enl
-    return True
+    return (True, decl is not None)
 
 
 def _is_braceless_do_body(point_line: int, lines: list[str]) -> bool:
@@ -1218,7 +1277,14 @@ def instrument(
         elif point.kind == InjectKind.BRANCH:
             # Loop-governed braceless if (Bug-C): before-placement lands
             # outside the loop scope, so brace-wrap with the probe inside.
-            if _wrap_loop_governed_if(point, lines):
+            # The temp name is offered for a single-eval hoist; the wrap
+            # consumes a sequence number only when it actually emits it
+            # (pure governed conds keep the legacy shape, numbering dense).
+            gov_temp = f"__algotrace_c_{cond_temp_seq}"
+            wrapped, gov_used = _wrap_loop_governed_if(point, lines, gov_temp)
+            if wrapped:
+                if gov_used:
+                    cond_temp_seq += 1
                 continue
             # Single-evaluation hoist: `auto` copy-init would drop explicit
             # bool conversions, so the ternary replays the if's own

@@ -345,7 +345,31 @@ def _is_braceless_then_body(point_line: int, lines: list[str]) -> bool:
     if j < 0:
         return False
     prev = lines[j].strip()
-    return "{" not in prev and _IF_HEADER_RE.match(prev) is not None
+    if "{" not in prev and _IF_HEADER_RE.match(prev) is not None:
+        return True
+    # Multi-line `if (a &&\n b)` condition: the body follows the
+    # condition's last line, which alone never matches the header regex.
+    # Join upward (string-aware blanking, so `//` or parens inside
+    # literals can't truncate the scan) and test the whole header.
+    parts: list[str] = []
+    k = j
+    steps = 0
+    while k >= 0 and steps < 10:
+        if not lines[k].strip():
+            k -= 1
+            steps += 1
+            continue
+        parts.append(_blank_return_scan(lines[k]))
+        joined = " ".join(reversed(parts))
+        if (
+            "{" not in joined
+            and re.match(r"\s*(else\s+)?if\s*\(.*\)\s*$", joined, re.DOTALL)
+            and joined.count("(") == joined.count(")")
+        ):
+            return True
+        k -= 1
+        steps += 1
+    return False
 
 
 _LOOP_KW_RE = re.compile(r"\b(for|while)\s*\(")
@@ -432,6 +456,25 @@ def _loop_governed_if(point_line: int, lines: list[str]) -> tuple[str, int, int]
             best = ("same", point_line - 1, close)
     if best is not None:
         return best
+    # Multi-line for-header with the `if` on its last line
+    # (`for (int i = 0;\n i < n; ++i) if (...)`): the `for` keyword sits
+    # on an earlier line, so re-run the same-line scan on the joined
+    # buffer. Only a close paren landing on the current line counts —
+    # earlier closes are the split shape handled below.
+    buf_lines: list[str] = []
+    kk = point_line
+    while kk >= 1 and len(buf_lines) < 10:
+        buf_lines.append(_sanitize_for_scan(lines[kk - 1]))
+        kk -= 1
+    buf_lines.reverse()
+    buf = "\n".join(buf_lines)
+    prefix = len(buf) - len(here)
+    for m in _LOOP_KW_RE.finditer(buf):
+        close = _match_paren(buf, m.end() - 1)
+        if close < prefix:
+            continue
+        if re.match(r"\s*if\s*\(", buf[close + 1 :]):
+            return ("same", point_line - 1, close - prefix)
     j = point_line - 2
     while j >= 0 and not lines[j].strip():
         j -= 1
@@ -441,7 +484,27 @@ def _loop_governed_if(point_line: int, lines: list[str]) -> tuple[str, int, int]
     if "{" in prev:
         return None
     if re.match(r"\s*(for|while)\s*\(.*\)\s*$", prev) is None:
-        return None
+        # Multi-line loop header above a split-line `if`: join upward to
+        # the `for(`/`while(` opener and test the whole header. The wrap
+        # still appends `{` to the header's last line (j), so columns
+        # need no mapping back.
+        found = False
+        up: list[str] = []
+        u = j
+        while u >= 0 and len(up) < 10:
+            if lines[u].strip():
+                up.append(_sanitize_for_scan(lines[u]))
+                joined = " ".join(reversed(up))
+                if (
+                    "{" not in joined
+                    and re.match(r"\s*(for|while)\s*\(.*\)\s*$", joined, re.DOTALL)
+                    and joined.count("(") == joined.count(")")
+                ):
+                    found = True
+                    break
+            u -= 1
+        if not found:
+            return None
     if _IF_HEADER_RE.match(lines[point_line - 1].strip()) is None:
         return None
     return ("split", j, -1)

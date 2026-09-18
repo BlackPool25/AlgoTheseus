@@ -554,9 +554,10 @@ def _compress_state_events(events: list[Any]) -> list[Any]:
     """Collapse consecutive STATE events with identical vars AND output/heap.
 
     Only STATE events are compressed — FUNC_ENTER, FUNC_EXIT, BRANCH, and
-    LOOP_ITER events are never grouped. A group continues only while vars,
-    cumulative stdout, and heap all match; a differing stdout or heap breaks
-    the group (vars-equality alone would hide growing output). Absent
+    LOOP_ITER events are never grouped. A group continues only while line,
+    func, vars, cumulative stdout, and heap all match; a differing line,
+    func, stdout, or heap breaks the group (vars-equality alone would hide
+    execution on another line). Absent
     stdout/heap (None) matches only absent, so v1 traces group as before.
 
     Each group is replaced by its *first* event carrying extra attributes
@@ -586,6 +587,8 @@ def _compress_state_events(events: list[Any]) -> list[Any]:
         j = i + 1
         while j < n and events[j].type == EventType.STATE:
             _serialise_vars(events[j])
+            if events[j].line != event.line or events[j].func != event.func:
+                break
             if events[j]._vars_cache != event._vars_cache:
                 break
             if events[j].stdout != event.stdout:

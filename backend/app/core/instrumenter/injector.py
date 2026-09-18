@@ -376,10 +376,14 @@ _LOOP_KW_RE = re.compile(r"\b(for|while)\s*\(")
 
 
 def _sanitize_for_scan(line: str) -> str:
-    """Strip // comments and blank out string/char literals, columns intact."""
-    code = line.split("//")[0]
-    code = _DQ_STRING_RE.sub(lambda m: " " * len(m.group(0)), code)
-    return _SQ_STRING_RE.sub(lambda m: " " * len(m.group(0)), code)
+    """Strip // comments and blank out string/char literals, columns intact.
+
+    Literals are blanked FIRST so a `//` inside a string (e.g. `"http://x"`)
+    never truncates the scan line — same idiom as `_blank_return_scan`.
+    """
+    code = _DQ_STRING_RE.sub(lambda m: " " * len(m.group(0)), line)
+    code = _SQ_STRING_RE.sub(lambda m: " " * len(m.group(0)), code)
+    return code.split("//")[0]
 
 
 _RETURN_WORD_RE = re.compile(r"\breturn\b")
@@ -1084,17 +1088,24 @@ def instrument(
                     add_after(point.line, "}")
                     wrapped_if_lines.add(prev_idx)
                 if ret_expr:
+                    # Preserve tokens trailing the return's `;` (e.g. the `}`
+                    # closing the function in minified `return x;}`) that the
+                    # rewrite below would otherwise drop. The `;` is located
+                    # on the string-blanked scan (column-preserving) so a `;`
+                    # inside a literal can't win.
+                    semi = _blank_return_scan(line_text).find(";")
+                    trailing = line_text[semi + 1 :].removesuffix("\n") if semi >= 0 else ""
                     # For simple, side-effect-free expressions, skip the temp
                     # variable to avoid "crosses initialization" errors in
                     # switch case bodies (C++ forbids jumping past a var decl).
                     if _is_safe_return_expr(ret_expr):
                         add_before(point.line, _trace_exit(point))
-                        lines[point.line - 1] = f"{indent}return {ret_expr};\n"
+                        lines[point.line - 1] = f"{indent}return {ret_expr};{trailing}\n"
                     else:
                         ret_var = make_ret_temp()
                         add_before(point.line, f"auto {ret_var} = ({ret_expr});")
                         add_before(point.line, trace_exit_with(ret_var))
-                        lines[point.line - 1] = f"{indent}return {ret_var};\n"
+                        lines[point.line - 1] = f"{indent}return {ret_var};{trailing}\n"
                 else:
                     add_before(point.line, _trace_exit(point))
             elif (

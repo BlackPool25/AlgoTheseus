@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { formatAddr } from "../../utils/format";
 
 export interface HeapEntry {
   type?: string;
@@ -177,7 +178,9 @@ export function HeapPanel({ heap, heapDiff, vars }: Props) {
                       <span className="text-viz-ink/60">{entry.type}</span>
                     )}
                     {typeof entry.addr === "string" && (
-                      <span className="text-viz-ink/60 text-[10px]">{entry.addr}</span>
+                      <span className="text-viz-ink/60 text-[10px]" title={entry.addr}>
+                        {formatAddr(entry.addr)}
+                      </span>
                     )}
                     {cycle && (
                       <span className="text-[10px] px-1 rounded bg-red-500/20 text-red-400">$cycle</span>

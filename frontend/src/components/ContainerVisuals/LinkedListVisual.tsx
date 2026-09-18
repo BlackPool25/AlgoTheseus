@@ -12,6 +12,7 @@
  */
 
 import { useMemo, useEffect, useState } from "react";
+import { formatAddr } from "../../utils/format";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -110,7 +111,7 @@ function linearise(
     flat.push({
       id: addr ?? `node-${idx}`,
       label: rawLabel === "?" && obj.$addr
-        ? (obj.$addr as string).slice(-4)
+        ? formatAddr(obj.$addr)
         : rawLabel,
       addr,
       isCycleSentinel: false,
@@ -444,9 +445,8 @@ export function LinkedListVisual({ value, name, currentAddr }: Props) {
                     className="fill-zinc-600 text-[8px]"
                     fontFamily="monospace"
                   >
-                    {node.addr.length > 10
-                      ? node.addr.slice(0, 10)
-                      : node.addr}
+                    <title>{node.addr}</title>
+                    {formatAddr(node.addr)}
                   </text>
                 )}
               </g>

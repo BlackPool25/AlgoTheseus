@@ -42,3 +42,18 @@ export function renderCompactCellValue(v: unknown): string {
   if (typeof v === "object") return "{…}";
   return String(v);
 }
+
+/**
+ * Unified heap-address display policy (display-only — payloads keep the
+ * full `$addr`; `$id`-keyed diff/flash is unaffected).
+ *
+ * Truncates to the first 10 chars, adopting LinkedListVisual's pre-existing
+ * `slice(0, 10)` convention (no ellipsis) so heap cards and list nodes show
+ * the same short form. Callers render the result as text and put the full
+ * value in `title` (HTML) or a `<title>` child (SVG) for hover.
+ * Non-string/missing addrs yield "" so renderers never crash.
+ */
+export function formatAddr(addr: unknown): string {
+  if (typeof addr !== "string") return "";
+  return addr.length > 10 ? addr.slice(0, 10) : addr;
+}

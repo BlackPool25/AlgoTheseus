@@ -587,10 +587,12 @@ def _state_insert_line(point_line: int, lines: list[str]) -> int:
     """
     n = len(lines)
     code0 = re.sub(r'"(?:\\.|[^"\\])*"', '""', lines[point_line - 1].split("//")[0])
-    if re.search(r"\[[^\]]*\]\s*\(.*\)\s*\{\s*$", code0):
-        # Lambda-initializer DECL (`auto f = [...]{`): the statement only
-        # completes at the closing `};` — placing after the header lands
-        # inside the lambda body (self-reference before `auto` deduction).
+    if re.search(r"\[[^\]]*\]\s*(\(.*\))?\s*\{\s*$", code0):
+        # Lambda-initializer DECL (`auto f = [...](...){`, `auto g = [...]{`):
+        # the statement only completes at the closing `};` — placing after
+        # the header lands inside the lambda body (self-reference before
+        # `auto` deduction). The paren group is optional: parens-less
+        # lambdas (`auto g = []{`, `[&]{`) need the same deferral.
         k = point_line + 1
         bdepth = 1  # header opened one brace; body `;` lines must not stop the scan
         while k <= n and k - point_line <= 100:
@@ -605,6 +607,30 @@ def _state_insert_line(point_line: int, lines: list[str]) -> int:
         # completes at the closing `};` — placing after the header lands
         # inside the initializer list (g++: expected primary-expression
         # before 'do' via __TRACE_STATE). Same brace-balance scan as lambda.
+        k = point_line + 1
+        bdepth = code0.count("{") - code0.count("}")
+        while k <= n and k - point_line <= 100:
+            codek = re.sub(r'"(?:\\.|[^"\\])*"', '""', lines[k - 1].split("//")[0])
+            bdepth += codek.count("{") - codek.count("}")
+            if bdepth <= 0 and codek.strip().endswith(";"):
+                return k
+            k += 1
+        return point_line
+    if (
+        code0.strip().endswith("{")
+        and "=" not in code0
+        and "(" not in code0
+        and re.search(r"[A-Za-z_][A-Za-z0-9_]*\s*(\[[^\]]*\])?\s*\{\s*$", code0)
+        and not re.match(
+            r"\s*(if|for|while|switch|catch|class|struct|enum|namespace|union|do|try|else)\b",
+            code0,
+        )
+    ):
+        # Direct-list-init DECL (`std::vector<int> v{`): same shape as the
+        # `= {` initializer above minus the `=` — the statement only
+        # completes at the closing `};`. Guards keep control/compound
+        # headers (`if (`, `else {`, `struct S {`, ...) on the legacy path:
+        # no `=`/`(` plus a leading keyword means "not a declaration".
         k = point_line + 1
         bdepth = code0.count("{") - code0.count("}")
         while k <= n and k - point_line <= 100:

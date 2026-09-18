@@ -240,6 +240,136 @@ export function computeRowStates(
   return rows;
 }
 
+/**
+ * Globals forward-fill (todo 10) — same carried pattern as vars.
+ *
+ * Globals are captured on `state` steps only (v2 additive `globals` on
+ * StateEvent; absent/null on v1 traces), so `enter` / `iter` / `branch` /
+ * `exit` steps forward-fill the last-seen snapshot as carried (dimmed via
+ * the same RowStatus the vars path uses — VariableRow renders `carried`
+ * with no badge, name `text-viz-ink/40`, value `text-viz-ink/60`).
+ * Changed-ness is derived exactly like the vars path (JSON.stringify
+ * against the last LIVE base), so a changed global flashes `changed` /
+ * `added` instead of silently dimming.
+ */
+
+/** Last globals snapshot: payload plus the step it came from (caption). */
+export interface LastGlobals {
+  globals: Record<string, unknown>;
+  step: number;
+}
+
+export interface ResolvedGlobals {
+  /** Globals to render (live payload or forward-filled snapshot). */
+  entries: Array<[string, unknown]>;
+  /** True when entries are carried (stale) rather than live. */
+  carried: boolean;
+  /** Step the carried snapshot was taken from (null when live/empty). */
+  staleStep: number | null;
+}
+
+/** Live globals payload of an event, or null when it carries none. */
+function globalsOf(event: TraceEvent): Record<string, unknown> | null {
+  if (event.type !== "state") return null;
+  const g = event.globals;
+  return g != null && typeof g === "object"
+    ? (g as Record<string, unknown>)
+    : null;
+}
+
+/**
+ * Bounded scan-back: nearest `state` snapshot at or before `fromStep`
+ * (inclusive) carrying a globals object. Returns null when no globals
+ * were ever captured (safe fallback → empty display, as before).
+ */
+export function findLastGlobalsSnapshot(
+  trace: TraceEvent[],
+  fromStep: number,
+): LastGlobals | null {
+  const start = Math.min(fromStep, trace.length - 1);
+  for (let i = start; i >= 0; i--) {
+    const g = globalsOf(trace[i]);
+    if (g !== null) return { globals: g, step: i };
+  }
+  return null;
+}
+
+/**
+ * Globals display rule. `lastGlobals` is the nearest snapshot at or
+ * before the current step (ignored when the current step is itself live
+ * — the caller passes null there, mirroring resolveDisplayVars).
+ */
+export function resolveDisplayGlobals(
+  currentEvent: TraceEvent,
+  lastGlobals: LastGlobals | null,
+): ResolvedGlobals {
+  const live = globalsOf(currentEvent);
+  if (live !== null) {
+    return { entries: Object.entries(live), carried: false, staleStep: null };
+  }
+  if (lastGlobals === null) {
+    return { entries: [], carried: false, staleStep: null };
+  }
+  return {
+    entries: Object.entries(lastGlobals.globals),
+    carried: true,
+    staleStep: lastGlobals.step,
+  };
+}
+
+/**
+ * Row treatments for the globals section. `display` is the resolved
+ * (possibly carried) display; `prevGlobals` is the last LIVE snapshot
+ * strictly before the current step (null when none exists yet or when
+ * the current step is itself carried); `isLiveStep` is false for
+ * carried steps.
+ *
+ * - carried step → every row `carried` (dimmed, no badges).
+ * - live step → changed (≠ last-live) / added (absent from last-live) /
+ *   removed ghost / normal — mirroring computeRowStates.
+ * - live step with no last-live base yet (first globals capture) → all
+ *   normal (nothing spuriously flagged `added`).
+ */
+export function computeGlobalRowStates(
+  display: ResolvedGlobals,
+  prevGlobals: Record<string, unknown> | null,
+  isLiveStep: boolean,
+): DisplayRow[] {
+  const rows: DisplayRow[] = [];
+
+  if (!isLiveStep) {
+    for (const [name, value] of display.entries) {
+      rows.push({ name, value, status: "carried" });
+    }
+    return rows;
+  }
+
+  const current = Object.fromEntries(display.entries);
+  for (const [name, value] of display.entries) {
+    if (prevGlobals === null || !(name in prevGlobals)) {
+      rows.push({
+        name,
+        value,
+        status: prevGlobals === null ? "normal" : "added",
+      });
+    } else if (!sameJson(prevGlobals[name], value)) {
+      rows.push({ name, value, status: "changed" });
+    } else {
+      rows.push({ name, value, status: "normal" });
+    }
+  }
+
+  if (prevGlobals !== null) {
+    for (const [name, value] of Object.entries(prevGlobals)) {
+      if (!(name in current)) {
+        rows.push({ name, value, status: "removed" });
+      }
+    }
+  }
+
+  return rows;
+}
+
 const INDEX_PREFERENCE: readonly string[] = [
   "mid",
   "lo",

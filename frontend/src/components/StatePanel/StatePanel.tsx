@@ -15,10 +15,13 @@ import { CallStackView } from "./CallStackView";
 import { VariableRow } from "./VariableRow";
 import {
   buildHighlightMap,
+  computeGlobalRowStates,
   computeRowStates,
+  findLastGlobalsSnapshot,
   findLastLiveSnapshot,
   frameKey,
   liveVarsOf,
+  resolveDisplayGlobals,
   resolveDisplayVars,
 } from "../../utils/scopeDisplay";
 import { HeapPanel } from "../ContainerVisuals/HeapPanel";
@@ -146,13 +149,27 @@ export function StatePanel() {
       ? currentEvent.step_desc
       : null;
 
-  // v2 additive-only: globals captured at this step; absent/null on v1 traces
-  const globalEntries =
+  // v2 additive-only: globals arrive on state steps; enter/iter/branch/
+  // exit steps forward-fill the last-seen snapshot as carried (dimmed),
+  // so loop-control and call boundaries don't flicker the section.
+  // Diff base is last LIVE globals strictly before this step, so a
+  // changed global flashes once on its mutating step, never on carries.
+  const liveGlobals =
     currentEvent.type === "state" &&
     currentEvent.globals != null &&
     typeof currentEvent.globals === "object"
-      ? Object.entries(currentEvent.globals)
-      : [];
+      ? (currentEvent.globals as Record<string, unknown>)
+      : null;
+  const prevGlobals = findLastGlobalsSnapshot(trace, currentStep - 1);
+  const globalsDisplay = resolveDisplayGlobals(
+    currentEvent,
+    liveGlobals !== null ? null : prevGlobals,
+  );
+  const globalRows = computeGlobalRowStates(
+    globalsDisplay,
+    liveGlobals !== null ? (prevGlobals?.globals ?? null) : null,
+    liveGlobals !== null,
+  );
 
   // T12 HeapPanel: per-step heap table + per-$id diff. Tolerates the
   // non-streaming alias keys ("h"/"hd") — the NDJSON stream carries the
@@ -216,7 +233,7 @@ export function StatePanel() {
           scroll together; header/badge/footer/CallStack stay fixed. */}
       <div data-testid="state-scroll" className="flex-1 min-h-0 overflow-y-auto">
       {/* Globals section (v2 only — collapsible, above frame vars) */}
-      {globalEntries.length > 0 && (
+      {globalRows.length > 0 && (
         <div data-testid="globals-section" className="border-b border-viz-line">
           <button
             onClick={() => setGlobalsOpen((v) => !v)}
@@ -225,16 +242,21 @@ export function StatePanel() {
           >
             <span className="font-mono">{globalsOpen ? "▾" : "▸"}</span>
             <span className="font-medium uppercase tracking-wide">Globals</span>
-            <span className="font-mono text-viz-ink/60">({globalEntries.length})</span>
+            <span className="font-mono text-viz-ink/60">({globalRows.length})</span>
+            {globalsDisplay.carried && globalsDisplay.staleStep !== null && (
+              <span className="font-mono text-[10px] text-viz-ink/40 ml-1">
+                carried · step {globalsDisplay.staleStep + 1}
+              </span>
+            )}
           </button>
           {globalsOpen && (
             <div data-testid="frame-table" data-frame="globals">
-              {globalEntries.map(([name, value]) => (
+              {globalRows.map((row) => (
                 <VariableRow
-                  key={`global:${name}`}
-                  name={name}
-                  value={value}
-                  status="normal"
+                  key={`global:${row.name}`}
+                  name={row.name}
+                  value={row.value}
+                  status={row.status}
                 />
               ))}
             </div>

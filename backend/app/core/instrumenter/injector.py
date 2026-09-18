@@ -1102,10 +1102,16 @@ def instrument(
                         add_before(point.line, _trace_exit(point))
                         lines[point.line - 1] = f"{indent}return {ret_expr};{trailing}\n"
                     else:
+                        # P0-07/P0-08: temp scoped in its own brace block so
+                        # case/goto jumps never cross its init (jumping over
+                        # a whole block is legal; every path here returns).
+                        # Names/binding stay: todos 8-9 own rename/`auto&&`.
                         ret_var = make_ret_temp()
-                        add_before(point.line, f"auto {ret_var} = ({ret_expr});")
-                        add_before(point.line, trace_exit_with(ret_var))
-                        lines[point.line - 1] = f"{indent}return {ret_var};{trailing}\n"
+                        lines[point.line - 1] = (
+                            f"{indent}{{ auto {ret_var} = ({ret_expr}); "
+                            f"{trace_exit_with(ret_var)} "
+                            f"return {ret_var}; }}{trailing}\n"
+                        )
                 else:
                     add_before(point.line, _trace_exit(point))
             elif (
@@ -1245,9 +1251,14 @@ def instrument(
                     add_before(i + 1, f'__TRACE_FUNC_EXIT_VOID({i + 1}, "{fn}", 0);')
                     break
                 ret_var = f"__trace_ret_fallback_{fn}"
-                add_before(i + 1, f"auto {ret_var} = ({expr});")
-                add_before(i + 1, f'__TRACE_FUNC_EXIT({i + 1}, "{fn}", 0, ({ret_var}));')
-                lines[i] = " " * (len(line) - len(line.lstrip())) + f"return {ret_var};\n"
+                # P0-07/P0-08: same brace-block scoping as the main temp
+                # path — the temp never leaks to case/goto-crossed scope.
+                indent_fb = " " * (len(line) - len(line.lstrip()))
+                exit_fb = f'__TRACE_FUNC_EXIT({i + 1}, "{fn}", 0, ({ret_var}));'
+                lines[i] = (
+                    f"{indent_fb}{{ auto {ret_var} = ({expr}); "
+                    f"{exit_fb} return {ret_var}; }}\n"
+                )
                 break
 
             if brace_depth <= 0:

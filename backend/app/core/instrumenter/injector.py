@@ -172,6 +172,8 @@ def _byte_to_line_col(raw: bytes, starts: list[int], off: int) -> tuple[int, int
 
 
 _CALL_LIKE_RE = re.compile(r"(?<![A-Za-z0-9_:])[A-Za-z_][A-Za-z0-9_]*\s*\(")
+_TEMPLATE_CALL_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_:]*\s*<[^;()]*>\s*\(")
+_DETACHED_CALL_RE = re.compile(r"\)\s*\(")
 _KEYWORD_CALLS = frozenset(
     ["if", "while", "for", "switch", "catch", "sizeof", "alignof", "decltype", "noexcept", "return"]
 )
@@ -186,8 +188,8 @@ def _may_have_side_effects(norm: str) -> bool:
 
     Pure conditions keep the legacy duplicate-evaluation trace (byte-identical
     goldens); only maybe-impure ones pay for hoisting. Conservative in the
-    hoist direction — exotic misses (template calls, operator() overloads)
-    merely keep the status quo, never corrupt.
+    hoist direction — an uncertain condition is hoisted (single-eval,
+    correct) rather than left on duplicate-eval legacy.
     """
     text = _DQ_STRING_RE.sub('""', norm)
     text = _SQ_STRING_RE.sub("''", text)
@@ -202,7 +204,9 @@ def _may_have_side_effects(norm: str) -> bool:
     for m in _CALL_LIKE_RE.finditer(text):
         if m.group(0).split("(")[0].strip() not in _KEYWORD_CALLS:
             return True
-    return False
+    if _TEMPLATE_CALL_RE.search(text):
+        return True
+    return bool(_DETACHED_CALL_RE.search(text))
 
 
 def _branch_cond_source(point: InjectionPoint, raw: bytes) -> str | None:
@@ -249,6 +253,7 @@ def _branch_header_simple(raw: bytes, starts: list[int], from_line: int, ce: int
     if paren < 0:
         return False
     depth = 0
+    brace = 0
     in_str: str | None = None
     for ch in region[paren:]:
         if in_str:
@@ -257,13 +262,18 @@ def _branch_header_simple(raw: bytes, starts: list[int], from_line: int, ce: int
             continue
         if ch in ("'", '"'):
             in_str = ch
+            continue
         elif ch == "(":
             depth += 1
         elif ch == ")":
             depth -= 1
             if depth <= 0:
                 return True
-        elif ch == ";" and depth >= 1:
+        elif ch == "{":
+            brace += 1
+        elif ch == "}":
+            brace -= 1
+        elif ch == ";" and depth >= 1 and brace <= 0:
             return False
     return True
 

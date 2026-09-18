@@ -23,7 +23,30 @@ import {
 } from "../../utils/scopeDisplay";
 import { HeapPanel } from "../ContainerVisuals/HeapPanel";
 import type { HeapDiffShape } from "../ContainerVisuals/HeapPanel";
+import { flashRowStyle } from "../ContainerVisuals/flash";
+import { isHeapFlash } from "../../utils/heapFlash";
 import { buildFramesWithVars } from "./frameVars";
+
+export function SameObjectRef({
+  name,
+  ownerFunc,
+  flashing,
+}: {
+  name: string;
+  ownerFunc: string;
+  flashing: boolean;
+}) {
+  return (
+    <div
+      data-testid="same-object-ref"
+      data-flash={flashing ? "true" : undefined}
+      className="px-3 py-1 text-[11px] font-mono text-viz-ink/50 truncate"
+      style={flashing ? flashRowStyle(true) : undefined}
+    >
+      {name}: same object as {ownerFunc}()
+    </div>
+  );
+}
 
 /**
  * $id/$ref identity tags inside a frame var value (backend T11b heap
@@ -298,13 +321,12 @@ export function StatePanel() {
                         : undefined;
                     if (owner) {
                       return (
-                        <div
+                        <SameObjectRef
                           key={`${frame.func}:${name}`}
-                          data-testid="same-object-ref"
-                          className="px-3 py-1 text-[11px] font-mono text-viz-ink/50 truncate"
-                        >
-                          {name}: same object as {owner.func}()
-                        </div>
+                          name={name}
+                          ownerFunc={owner.func}
+                          flashing={isHeapFlash(ids, heapDiff?.mutated)}
+                        />
                       );
                     }
                     return (
@@ -313,6 +335,10 @@ export function StatePanel() {
                         name={name}
                         value={value}
                         status="normal"
+                        highlightIndex={highlightMap[name]}
+                        heap={heap}
+                        heapDiff={heapDiff}
+                        prevValue={prevLive?.vars[name]}
                       />
                     );
                   })

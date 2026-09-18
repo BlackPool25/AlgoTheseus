@@ -36,8 +36,15 @@ export function buildFramesWithVars(
     if (e.type === "enter") {
       latest.set(key(e.func, e.depth), { ...e.params });
     } else if (e.type === "state") {
-      const k = key(e.func, e.depth);
-      latest.set(k, { ...latest.get(k), ...e.vars });
+      // Replace, don't merge: a non-empty STATE names the full in-scope
+      // set (backend filters dead loop vars via loop_var_ranges; parser
+      // frames_at_step does `stack[-1].vars = dict(event.vars)`), so names
+      // absent from it are out of scope and dropped. A var-less probe
+      // (vars={}, e.g. the `try {` line) carries no scope info: keep.
+      if (e.vars && Object.keys(e.vars).length > 0) {
+        const k = key(e.func, e.depth);
+        latest.set(k, { ...e.vars });
+      }
     }
   }
   return callStack.map((f) => ({

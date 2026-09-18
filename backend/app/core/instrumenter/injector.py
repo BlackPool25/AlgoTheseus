@@ -358,6 +358,45 @@ def _sanitize_for_scan(line: str) -> str:
     return _SQ_STRING_RE.sub(lambda m: " " * len(m.group(0)), code)
 
 
+_RETURN_WORD_RE = re.compile(r"\breturn\b")
+_RETURN_LEAD_RE = re.compile(r"\s*return\b")
+
+
+def _blank_return_scan(line: str) -> str:
+    """Column-preserving blank for return-keyword scans.
+
+    Strips string/char literals FIRST, then the `//` comment tail, so a
+    `//` inside a string (e.g. `"http://x"`) never truncates the line and
+    a `return` inside a string/comment never matches. Deliberately
+    independent of `_sanitize_for_scan` (which splits `//` first).
+    """
+    code = _DQ_STRING_RE.sub(lambda m: " " * len(m.group(0)), line)
+    code = _SQ_STRING_RE.sub(lambda m: " " * len(m.group(0)), code)
+    return code.split("//")[0]
+
+
+def _has_return_word(line: str) -> bool:
+    """True when `line` holds the `return` keyword (word-boundary)."""
+    return _RETURN_WORD_RE.search(_blank_return_scan(line)) is not None
+
+
+def _starts_with_return_word(line: str) -> bool:
+    """True when `line` is a return statement (keyword in lead position)."""
+    return _RETURN_LEAD_RE.match(_blank_return_scan(line)) is not None
+
+
+def _split_return_word(line: str) -> tuple[str, str] | None:
+    """Split `line` around the `return` keyword; None when absent.
+
+    Splits at the keyword span found on the blanked scan, so identifiers
+    like `returned` (or `"return"` in a string) never win the split.
+    """
+    m = _RETURN_WORD_RE.search(_blank_return_scan(line))
+    if m is None:
+        return None
+    return line[: m.start()], line[m.end():]
+
+
 def _match_paren(s: str, open_idx: int) -> int:
     """Index of the paren closing s[open_idx] == '('; -1 when unbalanced."""
     depth = 0
@@ -915,7 +954,7 @@ def instrument(
                 return f'__TRACE_FUNC_EXIT({_point.line}, "{_point.func_name}", {_point.depth}, ({var_name}));'
 
             # Only inject when the line starts with 'return' to avoid breaking inline returns.
-            if line_text.lstrip().startswith("return"):
+            if _starts_with_return_word(line_text):
                 # If the previous non-empty line is an if without braces, skip to avoid changing flow.
                 prev_idx = point.line - 2
                 while prev_idx >= 0 and not lines[prev_idx].strip():
@@ -945,13 +984,14 @@ def instrument(
                 else:
                     add_before(point.line, _trace_exit(point))
             elif (
-                "return" in line_text
+                _has_return_word(line_text)
                 and "if" in line_text
                 and "{" not in line_text
                 and ")" in line_text
             ):
                 # Inline if-return on the same line: wrap in braces and inject trace inline.
-                before, after = line_text.split("return", 1)
+                split_ret = _split_return_word(line_text)
+                before, after = split_ret if split_ret is not None else (line_text, "")
                 ret_expr_inline = after.strip().rstrip(";")
                 if ret_expr_inline:
                     ret_var = make_ret_temp()
@@ -968,7 +1008,7 @@ def instrument(
                 continue
             insert_line = _state_insert_line(point.line, lines)
             line_text = lines[insert_line - 1] if insert_line <= len(lines) else ""
-            if "return" in line_text:
+            if _has_return_word(line_text):
                 # R4 (M5): never leave a return-line step snapshot-less. STATE
                 # after a return is unreachable, so snapshot BEFORE it. Reading
                 # vars needs no return-expr evaluation, so no temp var is
@@ -1056,7 +1096,7 @@ def instrument(
 
             brace_depth += line.count("{") - line.count("}")
 
-            if line.strip().startswith("return"):
+            if _starts_with_return_word(line):
                 expr = line.strip()[len("return") :].strip().rstrip(";")
                 if not expr:
                     add_before(i + 1, f'__TRACE_FUNC_EXIT_VOID({i + 1}, "{fn}", 0);')

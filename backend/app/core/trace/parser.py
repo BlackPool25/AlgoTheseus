@@ -617,19 +617,53 @@ def _compress_state_events(events: list[Any]) -> list[Any]:
     return result
 
 
+def _strip_addrs_for_compare(value: Any) -> Any:
+    """Deep copy of vars/heap with addresses removed for the compare key.
+
+    Compare-key only — payloads keep ``$addr``/``addr`` for HeapPanel
+    display. ``$id``, ``$ref``, ``$cycle``, ``type``, ``fields``, and
+    ``refs`` are preserved, so states differing in identity or references
+    still split. ``$addr`` is serializer-reserved (C++ identifiers cannot
+    contain ``$``); the bare ``addr`` key is stripped only in heap-entry
+    shaped dicts (``type`` + ``fields``/``refs``, as built by
+    ``_build_heap_entry``), never in user data.
+
+    Known ceiling (out of scope): heap ``$id`` reuse-after-free can still
+    over-merge — a freed id recycled for a different object is
+    indistinguishable in the compare key.
+    """
+    if isinstance(value, list):
+        return [_strip_addrs_for_compare(v) for v in value]
+    if isinstance(value, dict):
+        entry = "type" in value and ("fields" in value or "refs" in value)
+        return {
+            k: _strip_addrs_for_compare(v)
+            for k, v in value.items()
+            if k != "$addr" and not (entry and k == "addr")
+        }
+    return value
+
+
 def _serialise_heap(event: Any) -> str | None:
-    """Stable JSON string of ``event.heap`` for group comparison (None when absent)."""
+    """Stable JSON string of ``event.heap`` for group comparison (None when absent).
+
+    Address-blind: ``$addr``/``addr`` are normalized out of the compare key
+    (ASLR changes them every run); ``$id``+``type``+``refs`` are preserved.
+    """
     heap = event.heap
     if heap is None:
         return None
-    return json.dumps(heap, sort_keys=True, default=str)
+    return json.dumps(_strip_addrs_for_compare(heap), sort_keys=True, default=str)
 
 
 def _serialise_vars(event: Any) -> None:
     """Compute a stable JSON string of ``event.vars`` for comparison.
 
     Uses ``sort_keys`` so dict-key order differences don't break the
-    comparison.  The result is cached on ``_vars_cache`` to avoid
+    comparison.  Address-blind (see ``_strip_addrs_for_compare``).
+    The result is cached on ``_vars_cache`` to avoid
     re-serialising the same event multiple times.
     """
-    event._vars_cache = json.dumps(event.vars, sort_keys=True, default=str)
+    event._vars_cache = json.dumps(
+        _strip_addrs_for_compare(event.vars), sort_keys=True, default=str
+    )

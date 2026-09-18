@@ -7,6 +7,7 @@
  *     {"_type":"deque","items":[...]} envelope (tracer.h __ser(deque))
  *     so front/back semantics survive the wire
  *   - set: { _type: "set", values: [...] } (items accepted for old fixtures)
+ *   - string: JSON string renders as indexed char boxes (StringVisual)
  *   - stack: { top: ..., items: [...] }
  *   - queue: { front: ..., items: [...] }
  *   - priority_queue: { top: ..., items: [...] } (same as stack — disambiguate by context)
@@ -17,6 +18,7 @@
 export type ContainerKind =
   | "vector"
   | "deque"
+  | "string"
   | "grid"
   | "graph"
   | "dp_table"
@@ -112,6 +114,9 @@ function hasScalarLabel(obj: Record<string, unknown>): boolean {
 }
 
 export function useContainerType(value: unknown): ContainerKind {  if (value === null || value === undefined) return "primitive";
+  // JSON strings (palindrome/LCS/...) render as indexed char boxes;
+  // numbers/booleans stay primitive.
+  if (typeof value === "string") return "string";
   if (typeof value !== "object") return "primitive";
 
   if (Array.isArray(value)) {

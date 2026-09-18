@@ -14,6 +14,7 @@
 import type { ComponentType } from "react";
 import { VectorVisual } from "./VectorVisual";
 import { DequeVisual } from "./DequeVisual";
+import { StringVisual } from "./StringVisual";
 import { StackVisual } from "./StackVisual";
 import { QueueVisual } from "./QueueVisual";
 import { MapVisual } from "./MapVisual";
@@ -48,6 +49,7 @@ export const VISUAL_REGISTRY: Record<
 > = {
   vector: VectorVisual,
   deque: DequeVisual,
+  string: StringVisual,
   stack: StackVisual,
   queue: QueueVisual,
   map: MapVisual,

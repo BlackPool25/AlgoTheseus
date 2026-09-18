@@ -26,9 +26,11 @@ interface UIStore {
   batchTestIds: string[];
   selectedBatchIds: string[];
   batchLabels: Record<string, string>;
+  formatOnRun: boolean;
 
   setCode: (code: string) => void;
   setRawInput: (input: string) => void;
+  setFormatOnRun: (on: boolean) => void;
   setExecuteResult: (
     stdout: string,
     compileError: string | null,
@@ -72,6 +74,16 @@ int main() {
 }
 `;
 
+const FORMAT_ON_RUN_KEY = "algo-theseus-format-on-run";
+
+function readFormatOnRun(): boolean {
+  try {
+    return localStorage.getItem(FORMAT_ON_RUN_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
 export const useUIStore = create<UIStore>((set) => ({
   code: DEFAULT_CODE,
   rawInput: "",
@@ -85,9 +97,18 @@ export const useUIStore = create<UIStore>((set) => ({
   batchTestIds: [],
   selectedBatchIds: [],
   batchLabels: {},
+  formatOnRun: readFormatOnRun(),
 
   setCode: (code) => set({ code }),
   setRawInput: (rawInput) => set({ rawInput }),
+  setFormatOnRun: (formatOnRun) => {
+    try {
+      localStorage.setItem(FORMAT_ON_RUN_KEY, formatOnRun ? "1" : "0");
+    } catch {
+      // Private-mode storage denial must never break the toggle.
+    }
+    set({ formatOnRun });
+  },
 
   setExecuteResult: (stdout, compileError, runtimeError, truncated = false, warnings = []) =>
     set({

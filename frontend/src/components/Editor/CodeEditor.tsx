@@ -95,6 +95,20 @@ export function CodeEditor() {
   const [monacoTheme, setMonacoTheme] = useState(() =>
     monacoThemeFor(currentTheme()),
   );
+
+  // Narrow-viewport detection (same 768px breakpoint as App mobile tabs).
+  // On touch screens Monaco's custom context menu + suggestion/hover widgets
+  // swallow long-press, so they are disabled there for native select/copy.
+  const [isTouchEditor, setIsTouchEditor] = useState<boolean>(() =>
+    typeof window !== "undefined" &&
+    window.matchMedia("(max-width: 767px)").matches,
+  );
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 767px)");
+    const onChange = (e: MediaQueryListEvent) => setIsTouchEditor(e.matches);
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
   useEffect(() => {
     const observer = new MutationObserver(() =>
       setMonacoTheme(monacoThemeFor(currentTheme())),
@@ -213,7 +227,7 @@ export function CodeEditor() {
   }
 
   return (
-    <div className="relative h-full">
+    <div className="relative h-full select-text">
       <Editor
         height="100%"
         language="cpp"
@@ -223,7 +237,8 @@ export function CodeEditor() {
         onMount={handleMount}
         options={{
           automaticLayout: true,
-          fontSize: 13,
+          fontSize: isTouchEditor ? 14 : 13,
+          lineHeight: isTouchEditor ? 22 : 0,
           minimap: { enabled: false },
           scrollBeyondLastLine: true,
           glyphMargin: true,
@@ -231,6 +246,12 @@ export function CodeEditor() {
           wordWrap: "on",
           wrappingIndent: "deepIndent",
           wrappingStrategy: "advanced",
+          contextmenu: !isTouchEditor,
+          quickSuggestions: !isTouchEditor,
+          suggestOnTriggerCharacters: !isTouchEditor,
+          parameterHints: { enabled: !isTouchEditor },
+          hover: { enabled: !isTouchEditor },
+          codeLens: !isTouchEditor,
           scrollbar: {
             horizontal: "visible",
             vertical: "visible",

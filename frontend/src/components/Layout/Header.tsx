@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Play, ChevronDown, BookOpen, Github, Sparkles, MoreVertical, Settings } from "lucide-react";
+import { Play, ChevronDown, BookOpen, Github, Sparkles, MoreVertical, Settings, WandSparkles } from "lucide-react";
 import { BrandLogo } from "./BrandLogo";
 import { THEMES, THEME_CATALOG, type ThemeName } from "../../theme";
 import { CODE_PRESETS, type CodePreset } from "../../content/presets";
@@ -13,6 +13,7 @@ interface HeaderProps {
   theme: ThemeName;
   onThemeChange: (theme: ThemeName) => void;
   onExecute: () => void;
+  onFormat: () => void;
   isLoading: boolean;
   engineSel: EngineSelection;
 }
@@ -21,10 +22,11 @@ export function Header({
   theme,
   onThemeChange,
   onExecute,
+  onFormat,
   isLoading,
   engineSel,
 }: HeaderProps) {
-  const { setCode, setRawInput, reset: resetUI, status } = useUIStore();
+  const { setCode, setRawInput, reset: resetUI, status, formatOnRun, setFormatOnRun } = useUIStore();
   const [presetsOpen, setPresetsOpen] = useState(false);
   const [kebabOpen, setKebabOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -73,17 +75,28 @@ export function Header({
           </div>
         </Link>
 
-        {/* Mobile-only Run — thumb-sized, always reachable in row 1 */}
-        <button
-          onClick={onExecute}
-          disabled={isLoading}
-          aria-label={isLoading ? "Running…" : "Run"}
-          className="md:hidden flex items-center justify-center gap-1.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 disabled:opacity-50 text-slate-950 font-semibold text-sm rounded px-4 h-11 min-w-[64px] whitespace-nowrap shadow-sm transition-all duration-150 active:scale-98 cursor-pointer shrink-0"
-          title="Execute C++ code and trace step-by-step"
-        >
-          <Play className={`w-3.5 h-3.5 fill-current ${isLoading ? "animate-spin" : ""}`} />
-          <span>{isLoading ? "Running…" : "Run"}</span>
-        </button>
+        {/* Mobile-only Run cluster — thumb-sized, always reachable in row 1 */}
+        <div className="md:hidden flex items-center gap-2 shrink-0">
+          <button
+            onClick={onFormat}
+            aria-label="Format code"
+            className="flex items-center justify-center gap-1.5 bg-viz-panel/80 hover:bg-viz-panel border border-viz-line text-viz-ink font-semibold text-sm rounded px-3 h-11 min-w-[44px] whitespace-nowrap transition-all duration-150 active:scale-98 cursor-pointer"
+            title="Reformat C++ code (indent + brace style)"
+          >
+            <WandSparkles className="w-3.5 h-3.5 text-amber-400" />
+            <span>Format</span>
+          </button>
+          <button
+            onClick={onExecute}
+            disabled={isLoading}
+            aria-label={isLoading ? "Running…" : "Run"}
+            className="flex items-center justify-center gap-1.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 disabled:opacity-50 text-slate-950 font-semibold text-sm rounded px-4 h-11 min-w-[64px] whitespace-nowrap shadow-sm transition-all duration-150 active:scale-98 cursor-pointer shrink-0"
+            title="Execute C++ code and trace step-by-step"
+          >
+            <Play className={`w-3.5 h-3.5 fill-current ${isLoading ? "animate-spin" : ""}`} />
+            <span>{isLoading ? "Running…" : "Run"}</span>
+          </button>
+        </div>
       </div>
 
       {/* Row 2 (mobile): horizontally-scrollable controls */}
@@ -197,6 +210,16 @@ export function Header({
                   <BookOpen className="w-3.5 h-3.5 shrink-0" />
                   <span>Algorithms guide</span>
                 </Link>
+                <label className="flex items-center gap-2 w-full text-left px-3 min-h-[44px] hover:bg-amber-500/10 hover:text-amber-400 transition-colors cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={formatOnRun}
+                    onChange={(e) => setFormatOnRun(e.target.checked)}
+                    aria-label="Format code on Run"
+                    className="w-4 h-4 accent-amber-500 cursor-pointer"
+                  />
+                  <span>Format on Run</span>
+                </label>
                 <div className="px-3 py-2 flex flex-wrap items-center gap-1.5 border-t border-viz-line/50">
                   <span className="text-[11px] bg-viz-body border border-viz-line text-viz-ink/70 px-2 py-0.5 rounded font-mono">
                     C++20 · clang
@@ -349,6 +372,18 @@ export function Header({
                 </div>
               </div>
             )}
+            {/* Format-on-run: default OFF so Run never surprises. Persisted
+                to localStorage via the store (theme.ts convention). */}
+            <label className="flex items-center gap-2 px-3 py-2 border-t border-viz-line/50 text-xs text-viz-ink/70 cursor-pointer hover:text-viz-ink transition-colors">
+              <input
+                type="checkbox"
+                checked={formatOnRun}
+                onChange={(e) => setFormatOnRun(e.target.checked)}
+                aria-label="Format code on Run"
+                className="w-4 h-4 accent-amber-500 cursor-pointer"
+              />
+              <span>Format on Run</span>
+            </label>
             {/* Toolchain status: read-only (spans, no click handlers) so it
                 reads as plain status text — no pill, no chevron. */}
             <div className="px-3 py-2 border-t border-viz-line/50 font-mono text-[11px] text-viz-ink/50">
@@ -388,8 +423,18 @@ export function Header({
 
         {/* Desktop Run/Reset: one fixed-width slot — Reset swaps with Run in
             place so the toolbar never grows or reflows between states.
-            (Mobile uses the row-1 thumb-sized Run; untouched.) */}
-        <div className="hidden md:flex items-center justify-center shrink-0 w-24">
+            Format sits alongside (fixed slot, never reflows).
+            (Mobile uses the row-1 thumb-sized cluster; untouched.) */}
+        <div className="hidden md:flex items-center justify-center gap-2 shrink-0 w-44">
+          <button
+            onClick={onFormat}
+            aria-label="Format code"
+            className="flex items-center justify-center gap-1.5 text-viz-ink/70 hover:text-viz-ink font-semibold text-sm rounded px-3 py-1.5 bg-viz-panel border border-viz-line hover:bg-viz-panel/70 shadow-sm transition-all duration-150 active:scale-98 cursor-pointer"
+            title="Reformat C++ code (indent + brace style)"
+          >
+            <WandSparkles className="w-3.5 h-3.5 text-amber-400" />
+            <span>Format</span>
+          </button>
           {status === "done" ? (
             <button
               onClick={handleReset}

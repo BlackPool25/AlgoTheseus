@@ -18,6 +18,7 @@ import { useUIStore } from "./store/uiStore";
 import { applyTheme, currentTheme, type ThemeName } from "./theme";
 import { streamExecute } from "./utils/api";
 import type { StreamCallbacks } from "./utils/api";
+import { formatCpp } from "./utils/formatCpp";
 import { loadWasmToolchain, selectEngine } from "./utils/executionEngine";
 import { WorkbenchTray } from "./components/Editor/WorkbenchTray";
 import { TraceScrubber } from "./components/Scrubber/TraceScrubber";
@@ -115,6 +116,14 @@ export default function App() {
     const traceStore = useTraceStore.getState();
     const cfgStore = useCFGStore.getState();
 
+    // Format-on-run is opt-in (default OFF): normalize the buffer first so
+    // what runs is exactly what the user sees post-format.
+    let execCode = code;
+    if (uiStore.formatOnRun) {
+      execCode = formatCpp(uiStore.code);
+      if (execCode !== uiStore.code) uiStore.setCode(execCode);
+    }
+
     uiStore.setStatus("executing");
     traceStore.reset();
     cfgStore.reset();
@@ -168,7 +177,12 @@ export default function App() {
       },
     };
 
-    streamExecute({ code, raw_stdin: rawInput }, callbacks);
+    streamExecute({ code: execCode, raw_stdin: rawInput }, callbacks);
+  }
+
+  function handleFormat() {
+    const uiStore = useUIStore.getState();
+    uiStore.setCode(formatCpp(uiStore.code));
   }
 
   const isLoading = status === "executing";
@@ -253,6 +267,7 @@ export default function App() {
         theme={theme}
         onThemeChange={(t) => setTheme(applyTheme(t))}
         onExecute={handleExecute}
+        onFormat={handleFormat}
         isLoading={isLoading}
         engineSel={engineSel}
       />

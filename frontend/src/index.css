@@ -467,6 +467,22 @@ body {
   padding-bottom: calc(0.5rem + env(safe-area-inset-bottom, 0px));
 }
 
+/* Mobile long-press selection: the app root is select-none (scrubber-safe),
+   so the editor opts back into native selection. Monaco's custom context
+   menu is disabled on narrow viewports (see CodeEditor) letting the OS
+   copy/paste menu appear on long-press. */
+.monaco-editor,
+.monaco-editor * {
+  user-select: text !important;
+  -webkit-user-select: text !important;
+}
+
+@media (pointer: coarse) {
+  .monaco-editor {
+    touch-action: manipulation;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .at-skeleton-line,
   .at-skeleton-block,

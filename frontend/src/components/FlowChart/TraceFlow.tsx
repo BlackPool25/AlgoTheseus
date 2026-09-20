@@ -240,9 +240,17 @@ function FlowViewController({
     <div className="absolute top-2.5 left-2.5 z-20 flex items-center gap-1 bg-viz-panel/90 backdrop-blur-xs border border-viz-line rounded-lg p-1 shadow-md text-xs select-none">
       <button
         onClick={onToggleAutoFollow}
+        style={
+          autoFollow
+            ? {
+                backgroundColor: "color-mix(in srgb, var(--viz-accent) 20%, transparent)",
+                color: "var(--viz-accent)",
+              }
+            : undefined
+        }
         className={`flex items-center gap-1 px-2 py-1 rounded transition-colors ${
           autoFollow
-            ? "bg-amber-500/20 text-amber-400 font-medium"
+            ? "font-medium"
             : "text-viz-ink/60 hover:text-viz-ink"
         }`}
         title={

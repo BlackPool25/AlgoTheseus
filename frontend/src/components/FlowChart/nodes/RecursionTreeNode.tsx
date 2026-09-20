@@ -15,20 +15,42 @@ interface RecursionNodeData {
 export function RecursionTreeNode({ data }: NodeProps) {
   const d = data as unknown as RecursionNodeData;
 
+  const containerStyle = d.isActive
+    ? {
+        backgroundColor: "var(--flow-active-bg)",
+        borderColor: "var(--flow-active-border)",
+        color: "var(--flow-active-text)",
+        boxShadow: "0 0 12px var(--flow-active-shadow)",
+      }
+    : {
+        backgroundColor: "var(--flow-call-bg)",
+        borderColor: "var(--flow-call-border)",
+        color: "var(--flow-call-code)",
+      };
+
   return (
     <div
-      className={`px-3 py-2 rounded border text-xs font-mono min-w-[140px] text-center transition-colors ${
-        d.isActive
-          ? "border-amber-400 bg-amber-400/10 text-amber-300 shadow-[0_0_8px_rgba(245,158,11,0.3)]"
-          : "border-purple-800 bg-purple-900/20 text-purple-400"
+      style={containerStyle}
+      className={`px-3 py-2 rounded-lg border text-xs font-mono min-w-[140px] text-center transition-colors ${
+        d.isActive ? "ring-1 ring-[var(--flow-active-ring)]" : ""
       }`}
     >
-      <Handle type="target" position={Position.Top} className="!bg-purple-600" />
+      <Handle
+        type="target"
+        position={Position.Top}
+        style={{ backgroundColor: d.isActive ? "var(--flow-active-border)" : "var(--flow-call-handle)" }}
+        className="!w-2.5 !h-2.5"
+      />
       <div className="flex items-center justify-center gap-1">
-        <span className="text-purple-500">↻</span>
-        <span className="truncate">{d.label}</span>
+        <span style={{ color: d.isActive ? "var(--flow-active-border)" : "var(--flow-call-title)" }}>↻</span>
+        <span className="truncate font-medium">{d.label}</span>
       </div>
-      <Handle type="source" position={Position.Bottom} className="!bg-purple-600" />
+      <Handle
+        type="source"
+        position={Position.Bottom}
+        style={{ backgroundColor: d.isActive ? "var(--flow-active-border)" : "var(--flow-call-handle)" }}
+        className="!w-2.5 !h-2.5"
+      />
     </div>
   );
 }

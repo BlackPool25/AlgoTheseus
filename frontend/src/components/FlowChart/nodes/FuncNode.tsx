@@ -13,32 +13,76 @@ export function FuncStartNode({ data }: NodeProps) {
   const lineLabel =
     d.lines && d.lines.length > 0 ? `L${d.lines[0]}` : "";
 
+  const containerStyle = d.isActive
+    ? {
+        backgroundColor: "var(--flow-active-bg)",
+        borderColor: "var(--flow-active-border)",
+        color: "var(--flow-active-text)",
+        boxShadow: "0 0 12px var(--flow-active-shadow)",
+      }
+    : d.isUntaken
+    ? {
+        backgroundColor: "var(--flow-untaken-bg)",
+        borderColor: "var(--flow-untaken-border)",
+        color: "var(--flow-untaken-text)",
+      }
+    : {
+        backgroundColor: "var(--flow-func-bg)",
+        borderColor: "var(--flow-func-border)",
+        color: "var(--flow-func-code)",
+      };
+
   return (
     <div
       title={d.label}
-      className={`relative px-3 py-2 rounded-lg border text-left shadow-sm transition-all select-none overflow-hidden ${
-        d.isActive
-          ? "border-amber-400 bg-amber-950/30 text-amber-200 shadow-[0_0_12px_rgba(245,158,11,0.35)] ring-1 ring-amber-400"
-          : d.isUntaken
-          ? "border-sky-950/40 bg-card/40 text-muted-foreground/60 opacity-60"
-          : "border-sky-500/60 bg-sky-950/25 text-sky-100 hover:border-sky-400"
-      }`}
-      style={{ width: "260px", height: "68px" }}
+      className={`relative px-3 py-2 rounded-lg border text-left shadow-xs transition-all select-none overflow-hidden ${
+        d.isActive ? "ring-1 ring-[var(--flow-active-ring)]" : ""
+      } ${d.isUntaken && !d.isActive ? "opacity-60 border-dashed" : ""}`}
+      style={{ width: "260px", height: "68px", ...containerStyle }}
     >
       {/* Header bar: Entry badge and line number */}
       <div className="flex items-center justify-between text-[10px] uppercase font-bold tracking-wider mb-1">
-        <span className="bg-sky-500/25 text-sky-300 px-1.5 py-0.5 rounded font-semibold">
+        <span
+          style={{
+            backgroundColor: "var(--flow-func-badge-bg)",
+            color: d.isActive
+              ? "var(--flow-active-text)"
+              : d.isUntaken
+              ? "var(--flow-untaken-text)"
+              : "var(--flow-func-title)",
+          }}
+          className="px-1.5 py-0.5 rounded font-semibold"
+        >
           Function
         </span>
         {lineLabel && (
-          <span className="font-mono text-[9px] bg-muted/60 px-1 py-0.5 rounded text-foreground/70">
+          <span
+            style={{
+              backgroundColor: "var(--flow-func-badge-bg)",
+              color: d.isActive
+                ? "var(--flow-active-text)"
+                : d.isUntaken
+                ? "var(--flow-untaken-text)"
+                : "var(--flow-func-title)",
+            }}
+            className="font-mono text-[9px] px-1 py-0.5 rounded"
+          >
             {lineLabel}
           </span>
         )}
       </div>
 
       {/* Function name */}
-      <div className="text-xs font-mono font-bold text-sky-200 truncate mt-1">
+      <div
+        style={{
+          color: d.isActive
+            ? "var(--flow-active-text)"
+            : d.isUntaken
+            ? "var(--flow-untaken-text)"
+            : "var(--flow-func-code)",
+        }}
+        className="text-xs font-mono font-bold truncate mt-1"
+      >
         {d.label}
       </div>
 
@@ -46,7 +90,8 @@ export function FuncStartNode({ data }: NodeProps) {
       <Handle
         type="source"
         position={Position.Bottom}
-        className="!bg-sky-400 !w-2.5 !h-2.5 hover:scale-125 transition-transform"
+        style={{ backgroundColor: "var(--flow-func-handle)" }}
+        className="!w-2.5 !h-2.5 hover:scale-125 transition-transform"
       />
     </div>
   );
@@ -57,37 +102,66 @@ export function FuncEndNode({ data }: NodeProps) {
   const lineLabel =
     d.lines && d.lines.length > 0 ? `L${d.lines[0]}` : "";
 
+  const containerStyle = d.isActive
+    ? {
+        backgroundColor: "var(--flow-active-bg)",
+        borderColor: "var(--flow-active-border)",
+        color: "var(--flow-active-text)",
+        boxShadow: "0 0 12px var(--flow-active-shadow)",
+      }
+    : {
+        backgroundColor: "var(--flow-func-end-bg)",
+        borderColor: "var(--flow-func-end-border)",
+        color: "var(--flow-func-end-code)",
+      };
+
   return (
     <div
       title={d.label}
-      className={`relative px-3 py-2 rounded-lg border text-left shadow-sm transition-all select-none overflow-hidden ${
-        d.isActive
-          ? "border-amber-400 bg-amber-950/30 text-amber-200 shadow-[0_0_12px_rgba(245,158,11,0.35)] ring-1 ring-amber-400"
-          : "border-zinc-700/60 bg-zinc-900/40 text-zinc-300"
+      className={`relative px-3 py-2 rounded-lg border text-left shadow-xs transition-all select-none overflow-hidden ${
+        d.isActive ? "ring-1 ring-[var(--flow-active-ring)]" : ""
       }`}
-      style={{ width: "260px", height: "68px" }}
+      style={{ width: "260px", height: "68px", ...containerStyle }}
     >
       {/* Entry handle at top */}
       <Handle
         type="target"
         position={Position.Top}
-        className="!bg-zinc-500 !w-2.5 !h-2.5 hover:scale-125 transition-transform"
+        style={{ backgroundColor: "var(--flow-func-end-handle)" }}
+        className="!w-2.5 !h-2.5 hover:scale-125 transition-transform"
       />
 
       {/* Header bar: Exit badge and line number */}
       <div className="flex items-center justify-between text-[10px] uppercase font-bold tracking-wider mb-1">
-        <span className="bg-zinc-800 text-zinc-400 px-1.5 py-0.5 rounded font-semibold">
+        <span
+          style={{
+            backgroundColor: "var(--flow-func-end-badge-bg)",
+            color: d.isActive ? "var(--flow-active-text)" : "var(--flow-func-end-title)",
+          }}
+          className="px-1.5 py-0.5 rounded font-semibold"
+        >
           Exit
         </span>
         {lineLabel && (
-          <span className="font-mono text-[9px] bg-muted/60 px-1 py-0.5 rounded text-foreground/70">
+          <span
+            style={{
+              backgroundColor: "var(--flow-func-end-badge-bg)",
+              color: d.isActive ? "var(--flow-active-text)" : "var(--flow-func-end-title)",
+            }}
+            className="font-mono text-[9px] px-1 py-0.5 rounded"
+          >
             {lineLabel}
           </span>
         )}
       </div>
 
       {/* Exit label */}
-      <div className="text-xs font-mono text-zinc-400 truncate mt-1">
+      <div
+        style={{
+          color: d.isActive ? "var(--flow-active-text)" : "var(--flow-func-end-code)",
+        }}
+        className="text-xs font-mono truncate mt-1"
+      >
         {d.label}
       </div>
     </div>

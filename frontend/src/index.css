@@ -34,6 +34,53 @@
   /* Per-object mutation flash + alias connectors. */
   --viz-flash: #f59e0b;
   --viz-alias-edge: #a1a1aa;
+
+  /* FlowChart Semantic Tokens — Zinc Dark default */
+  --flow-loop-bg: rgba(2, 44, 34, 0.35);
+  --flow-loop-border: rgba(4, 120, 87, 0.7);
+  --flow-loop-title: #34d399;
+  --flow-loop-code: #ecfdf5;
+  --flow-loop-badge-bg: rgba(5, 150, 105, 0.2);
+  --flow-branch-bg: rgba(23, 37, 84, 0.35);
+  --flow-branch-border: rgba(29, 78, 216, 0.7);
+  --flow-branch-title: #60a5fa;
+  --flow-branch-code: #eff6ff;
+  --flow-branch-badge-bg: rgba(37, 99, 235, 0.2);
+  --flow-func-bg: rgba(8, 47, 73, 0.3);
+  --flow-func-border: rgba(14, 165, 233, 0.6);
+  --flow-func-title: #38bdf8;
+  --flow-func-code: #e0f2fe;
+  --flow-func-badge-bg: rgba(14, 165, 233, 0.2);
+  --flow-func-handle: #38bdf8;
+  --flow-func-end-bg: rgba(39, 39, 42, 0.4);
+  --flow-func-end-border: rgba(82, 82, 91, 0.6);
+  --flow-func-end-title: #a1a1aa;
+  --flow-func-end-code: #d4d4d8;
+  --flow-func-end-badge-bg: rgba(63, 63, 70, 0.4);
+  --flow-func-end-handle: #71717a;
+  --flow-call-bg: rgba(30, 27, 75, 0.25);
+  --flow-call-border: rgba(99, 102, 241, 0.6);
+  --flow-call-title: #818cf8;
+  --flow-call-code: #e0e7ff;
+  --flow-call-badge-bg: rgba(99, 102, 241, 0.2);
+  --flow-call-handle: #818cf8;
+  --flow-active-bg: rgba(120, 53, 15, 0.4);
+  --flow-active-border: #f59e0b;
+  --flow-active-text: #fef3c7;
+  --flow-active-shadow: rgba(245, 158, 11, 0.35);
+  --flow-active-ring: #f59e0b;
+  --flow-untaken-bg: rgba(24, 24, 27, 0.3);
+  --flow-untaken-border: rgba(63, 63, 70, 0.45);
+  --flow-untaken-text: rgba(161, 161, 170, 0.6);
+  --flow-true-handle: #10b981;
+  --flow-false-handle: #f43f5e;
+  --flow-true-badge-bg: rgba(2, 44, 34, 0.9);
+  --flow-true-badge-border: rgba(16, 185, 129, 0.5);
+  --flow-true-badge-text: #6ee7b7;
+  --flow-false-badge-bg: rgba(76, 5, 25, 0.9);
+  --flow-false-badge-border: rgba(244, 63, 94, 0.5);
+  --flow-false-badge-text: #fda4af;
+  --flow-edge-stroke: #3f3f46;
 }
 
 [data-theme="high-contrast"] {
@@ -47,6 +94,53 @@
   --viz-exception: #ff0000;
   --viz-flash: #ffff00;
   --viz-alias-edge: #00ffff;
+
+  /* FlowChart Semantic Tokens — High Contrast */
+  --flow-loop-bg: #000000;
+  --flow-loop-border: #ffffff;
+  --flow-loop-title: #00ff66;
+  --flow-loop-code: #ffffff;
+  --flow-loop-badge-bg: #000000;
+  --flow-branch-bg: #000000;
+  --flow-branch-border: #ffffff;
+  --flow-branch-title: #33ccff;
+  --flow-branch-code: #ffffff;
+  --flow-branch-badge-bg: #000000;
+  --flow-func-bg: #000000;
+  --flow-func-border: #ffffff;
+  --flow-func-title: #00ffff;
+  --flow-func-code: #ffffff;
+  --flow-func-badge-bg: #000000;
+  --flow-func-handle: #00ffff;
+  --flow-func-end-bg: #000000;
+  --flow-func-end-border: #ffffff;
+  --flow-func-end-title: #ffffff;
+  --flow-func-end-code: #ffffff;
+  --flow-func-end-badge-bg: #000000;
+  --flow-func-end-handle: #ffffff;
+  --flow-call-bg: #000000;
+  --flow-call-border: #ffffff;
+  --flow-call-title: #ff99ff;
+  --flow-call-code: #ffffff;
+  --flow-call-badge-bg: #000000;
+  --flow-call-handle: #ff99ff;
+  --flow-active-bg: #000000;
+  --flow-active-border: #ffff00;
+  --flow-active-text: #ffff00;
+  --flow-active-shadow: rgba(255, 255, 0, 0.5);
+  --flow-active-ring: #ffff00;
+  --flow-untaken-bg: #000000;
+  --flow-untaken-border: #ffffff;
+  --flow-untaken-text: #a3a3a3;
+  --flow-true-handle: #00ff66;
+  --flow-false-handle: #ff3366;
+  --flow-true-badge-bg: #000000;
+  --flow-true-badge-border: #ffffff;
+  --flow-true-badge-text: #00ff66;
+  --flow-false-badge-bg: #000000;
+  --flow-false-badge-border: #ffffff;
+  --flow-false-badge-text: #ff3366;
+  --flow-edge-stroke: #ffffff;
 }
 
 [data-theme="colorblind-safe"] {
@@ -62,6 +156,53 @@
      labels, "N changed") and #E69F00 on white is ~2:1. #8a5a00 ≈ 5.2:1. */
   --viz-flash: #8a5a00;
   --viz-alias-edge: #0072B2;
+
+  /* FlowChart Semantic Tokens — Colorblind Safe (Okabe-Ito Universal) */
+  --flow-loop-bg: rgba(0, 158, 115, 0.08);
+  --flow-loop-border: #007a5a;
+  --flow-loop-title: #005a42;
+  --flow-loop-code: #004d38;
+  --flow-loop-badge-bg: rgba(0, 158, 115, 0.16);
+  --flow-branch-bg: rgba(0, 114, 178, 0.08);
+  --flow-branch-border: #0072b2;
+  --flow-branch-title: #00507d;
+  --flow-branch-code: #003b60;
+  --flow-branch-badge-bg: rgba(0, 114, 178, 0.16);
+  --flow-func-bg: rgba(3, 105, 161, 0.08);
+  --flow-func-border: #0369a1;
+  --flow-func-title: #075985;
+  --flow-func-code: #0c4a6e;
+  --flow-func-badge-bg: rgba(3, 105, 161, 0.16);
+  --flow-func-handle: #0369a1;
+  --flow-func-end-bg: rgba(0, 0, 0, 0.04);
+  --flow-func-end-border: #767676;
+  --flow-func-end-title: #424242;
+  --flow-func-end-code: #111111;
+  --flow-func-end-badge-bg: rgba(0, 0, 0, 0.08);
+  --flow-func-end-handle: #767676;
+  --flow-call-bg: rgba(106, 61, 154, 0.08);
+  --flow-call-border: #6a3d9a;
+  --flow-call-title: #532d7e;
+  --flow-call-code: #3f1d6b;
+  --flow-call-badge-bg: rgba(106, 61, 154, 0.16);
+  --flow-call-handle: #6a3d9a;
+  --flow-active-bg: rgba(138, 90, 0, 0.10);
+  --flow-active-border: #8a5a00;
+  --flow-active-text: #4d3200;
+  --flow-active-shadow: rgba(138, 90, 0, 0.3);
+  --flow-active-ring: #8a5a00;
+  --flow-untaken-bg: rgba(0, 0, 0, 0.03);
+  --flow-untaken-border: rgba(118, 118, 118, 0.4);
+  --flow-untaken-text: #767676;
+  --flow-true-handle: #007a5a;
+  --flow-false-handle: #d55e00;
+  --flow-true-badge-bg: #e6f4fa;
+  --flow-true-badge-border: #0072b2;
+  --flow-true-badge-text: #004d73;
+  --flow-false-badge-bg: #fbeee6;
+  --flow-false-badge-border: #d55e00;
+  --flow-false-badge-text: #7a2e00;
+  --flow-edge-stroke: #767676;
 }
 
 [data-theme="papyrus"] {
@@ -77,6 +218,53 @@
      labels, "N changed") and #d4a017 on beige is ~2:1. #8a5a00 ≈ 5.3:1. */
   --viz-flash: #8a5a00;
   --viz-alias-edge: #5f5340;
+
+  /* FlowChart Semantic Tokens — Papyrus Warm */
+  --flow-loop-bg: rgba(45, 106, 79, 0.08);
+  --flow-loop-border: #2d6a4f;
+  --flow-loop-title: #1b4332;
+  --flow-loop-code: #143628;
+  --flow-loop-badge-bg: rgba(45, 106, 79, 0.14);
+  --flow-branch-bg: rgba(30, 64, 175, 0.08);
+  --flow-branch-border: #1e40af;
+  --flow-branch-title: #1e3a8a;
+  --flow-branch-code: #172554;
+  --flow-branch-badge-bg: rgba(30, 64, 175, 0.14);
+  --flow-func-bg: rgba(3, 105, 161, 0.08);
+  --flow-func-border: #0369a1;
+  --flow-func-title: #075985;
+  --flow-func-code: #082f49;
+  --flow-func-badge-bg: rgba(3, 105, 161, 0.14);
+  --flow-func-handle: #0369a1;
+  --flow-func-end-bg: rgba(120, 113, 108, 0.08);
+  --flow-func-end-border: #78716c;
+  --flow-func-end-title: #44403c;
+  --flow-func-end-code: #292524;
+  --flow-func-end-badge-bg: rgba(120, 113, 108, 0.14);
+  --flow-func-end-handle: #78716c;
+  --flow-call-bg: rgba(109, 40, 217, 0.08);
+  --flow-call-border: #6d28d9;
+  --flow-call-title: #5b21b6;
+  --flow-call-code: #3b0764;
+  --flow-call-badge-bg: rgba(109, 40, 217, 0.14);
+  --flow-call-handle: #6d28d9;
+  --flow-active-bg: rgba(138, 90, 0, 0.14);
+  --flow-active-border: #8a5a00;
+  --flow-active-text: #543800;
+  --flow-active-shadow: rgba(138, 90, 0, 0.3);
+  --flow-active-ring: #8a5a00;
+  --flow-untaken-bg: rgba(184, 166, 122, 0.15);
+  --flow-untaken-border: rgba(138, 120, 85, 0.4);
+  --flow-untaken-text: #8c7b55;
+  --flow-true-handle: #2d6a4f;
+  --flow-false-handle: #b91c1c;
+  --flow-true-badge-bg: #e2eed8;
+  --flow-true-badge-border: #2d6a4f;
+  --flow-true-badge-text: #143628;
+  --flow-false-badge-bg: #fbe5e4;
+  --flow-false-badge-border: #b91c1c;
+  --flow-false-badge-text: #7f1d1d;
+  --flow-edge-stroke: #8c7b55;
 }
 
 /* Papyrus sidebar contrast: translucent dark-brown ink + bright dark-theme
@@ -316,6 +504,53 @@
   --viz-exception: #f38ba8;
   --viz-flash: #f9e2af;
   --viz-alias-edge: #89b4fa;
+
+  /* FlowChart Semantic Tokens — Catppuccin Mocha */
+  --flow-loop-bg: rgba(166, 227, 161, 0.12);
+  --flow-loop-border: rgba(166, 227, 161, 0.6);
+  --flow-loop-title: #a6e3a1;
+  --flow-loop-code: #d8f5d5;
+  --flow-loop-badge-bg: rgba(166, 227, 161, 0.2);
+  --flow-branch-bg: rgba(137, 180, 250, 0.12);
+  --flow-branch-border: rgba(137, 180, 250, 0.6);
+  --flow-branch-title: #89b4fa;
+  --flow-branch-code: #c9dcfe;
+  --flow-branch-badge-bg: rgba(137, 180, 250, 0.2);
+  --flow-func-bg: rgba(116, 199, 236, 0.12);
+  --flow-func-border: rgba(116, 199, 236, 0.6);
+  --flow-func-title: #74c7ec;
+  --flow-func-code: #c5e9f9;
+  --flow-func-badge-bg: rgba(116, 199, 236, 0.2);
+  --flow-func-handle: #74c7ec;
+  --flow-func-end-bg: rgba(49, 50, 68, 0.5);
+  --flow-func-end-border: rgba(88, 91, 112, 0.6);
+  --flow-func-end-title: #a6adc8;
+  --flow-func-end-code: #cdd6f4;
+  --flow-func-end-badge-bg: rgba(69, 71, 90, 0.5);
+  --flow-func-end-handle: #a6adc8;
+  --flow-call-bg: rgba(203, 166, 247, 0.12);
+  --flow-call-border: rgba(203, 166, 247, 0.6);
+  --flow-call-title: #cba6f7;
+  --flow-call-code: #e8d7fb;
+  --flow-call-badge-bg: rgba(203, 166, 247, 0.2);
+  --flow-call-handle: #cba6f7;
+  --flow-active-bg: rgba(250, 179, 135, 0.22);
+  --flow-active-border: #fab387;
+  --flow-active-text: #fde6d8;
+  --flow-active-shadow: rgba(250, 179, 135, 0.35);
+  --flow-active-ring: #fab387;
+  --flow-untaken-bg: rgba(30, 30, 46, 0.4);
+  --flow-untaken-border: rgba(88, 91, 112, 0.4);
+  --flow-untaken-text: rgba(108, 112, 134, 0.7);
+  --flow-true-handle: #a6e3a1;
+  --flow-false-handle: #f38ba8;
+  --flow-true-badge-bg: rgba(24, 38, 30, 0.9);
+  --flow-true-badge-border: rgba(166, 227, 161, 0.5);
+  --flow-true-badge-text: #a6e3a1;
+  --flow-false-badge-bg: rgba(45, 20, 30, 0.9);
+  --flow-false-badge-border: rgba(243, 139, 168, 0.5);
+  --flow-false-badge-text: #f38ba8;
+  --flow-edge-stroke: #585b70;
 }
 
 [data-theme="gruvbox-dark"] {
@@ -329,6 +564,53 @@
   --viz-exception: #fb4934;
   --viz-flash: #fabd2f;
   --viz-alias-edge: #93b8ab;
+
+  /* FlowChart Semantic Tokens — Gruvbox Dark */
+  --flow-loop-bg: rgba(184, 187, 38, 0.12);
+  --flow-loop-border: rgba(184, 187, 38, 0.6);
+  --flow-loop-title: #b8bb26;
+  --flow-loop-code: #e1e389;
+  --flow-loop-badge-bg: rgba(184, 187, 38, 0.2);
+  --flow-branch-bg: rgba(142, 192, 124, 0.12);
+  --flow-branch-border: rgba(142, 192, 124, 0.6);
+  --flow-branch-title: #8ec07c;
+  --flow-branch-code: #c8e4be;
+  --flow-branch-badge-bg: rgba(142, 192, 124, 0.2);
+  --flow-func-bg: rgba(131, 165, 152, 0.12);
+  --flow-func-border: rgba(131, 165, 152, 0.6);
+  --flow-func-title: #83a598;
+  --flow-func-code: #c3d5ce;
+  --flow-func-badge-bg: rgba(131, 165, 152, 0.2);
+  --flow-func-handle: #83a598;
+  --flow-func-end-bg: rgba(60, 56, 54, 0.5);
+  --flow-func-end-border: rgba(102, 92, 84, 0.6);
+  --flow-func-end-title: #a89984;
+  --flow-func-end-code: #ebdbb2;
+  --flow-func-end-badge-bg: rgba(80, 73, 69, 0.5);
+  --flow-func-end-handle: #a89984;
+  --flow-call-bg: rgba(211, 134, 155, 0.12);
+  --flow-call-border: rgba(211, 134, 155, 0.6);
+  --flow-call-title: #d3869b;
+  --flow-call-code: #eec2cd;
+  --flow-call-badge-bg: rgba(211, 134, 155, 0.2);
+  --flow-call-handle: #d3869b;
+  --flow-active-bg: rgba(254, 128, 25, 0.25);
+  --flow-active-border: #fe8019;
+  --flow-active-text: #fdd8b8;
+  --flow-active-shadow: rgba(254, 128, 25, 0.35);
+  --flow-active-ring: #fe8019;
+  --flow-untaken-bg: rgba(40, 40, 40, 0.4);
+  --flow-untaken-border: rgba(102, 92, 84, 0.4);
+  --flow-untaken-text: rgba(146, 131, 116, 0.7);
+  --flow-true-handle: #b8bb26;
+  --flow-false-handle: #fb4934;
+  --flow-true-badge-bg: rgba(30, 35, 20, 0.9);
+  --flow-true-badge-border: rgba(184, 187, 38, 0.5);
+  --flow-true-badge-text: #b8bb26;
+  --flow-false-badge-bg: rgba(45, 20, 20, 0.9);
+  --flow-false-badge-border: rgba(251, 73, 52, 0.5);
+  --flow-false-badge-text: #fb4934;
+  --flow-edge-stroke: #504945;
 }
 
 body {

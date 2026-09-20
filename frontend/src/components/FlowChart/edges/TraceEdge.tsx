@@ -192,7 +192,7 @@ export function TraceEdge({
         style={{
           stroke: isActive
             ? "var(--viz-accent)"
-            : "var(--viz-panel-border)",
+            : "var(--flow-edge-stroke, var(--viz-panel-border))",
           strokeWidth: isActive ? 2.5 : 1.5,
           strokeDasharray: isUntaken && !isActive ? "4 4" : undefined,
           opacity: isUntaken && !isActive ? 0.35 : 1,
@@ -209,14 +209,27 @@ export function TraceEdge({
               position: "absolute",
               transform: `translate(-50%, -50%) translate(${badgeX}px,${badgeY}px)`,
               pointerEvents: "all",
-            }}
-            className={`text-[9px] font-mono px-1.5 py-0.5 rounded border shadow-xs transition-opacity ${
-              label === "true"
-                ? "bg-emerald-950/90 text-emerald-300 border-emerald-500/50 font-semibold"
+              ...(label === "true"
+                ? {
+                    backgroundColor: "var(--flow-true-badge-bg)",
+                    borderColor: "var(--flow-true-badge-border)",
+                    color: "var(--flow-true-badge-text)",
+                  }
                 : label === "false"
-                ? "bg-rose-950/90 text-rose-300 border-rose-500/50 font-semibold"
-                : "bg-viz-body text-viz-ink/60 border-viz-line"
-            } ${isUntaken && !isActive ? "opacity-40" : "opacity-100"}`}
+                ? {
+                    backgroundColor: "var(--flow-false-badge-bg)",
+                    borderColor: "var(--flow-false-badge-border)",
+                    color: "var(--flow-false-badge-text)",
+                  }
+                : {
+                    backgroundColor: "var(--viz-body-bg)",
+                    borderColor: "var(--viz-panel-border)",
+                    color: "var(--viz-body-text)",
+                  }),
+            }}
+            className={`text-[9px] font-mono px-1.5 py-0.5 rounded border shadow-xs transition-opacity font-semibold ${
+              isUntaken && !isActive ? "opacity-40" : "opacity-100"
+            }`}
           >
             {String(label)}
           </div>

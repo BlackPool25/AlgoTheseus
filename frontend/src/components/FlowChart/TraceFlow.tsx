@@ -24,6 +24,12 @@ import { useTraceStore } from "../../store/traceStore";
 import type { CFGNode } from "../../types/cfg";
 import type { TraceEvent } from "../../types/trace";
 import { layoutCFG } from "../../utils/cfgLayout";
+import {
+  FLOW_FIT_PADDING,
+  FLOW_REFIT_DEBOUNCE_MS,
+  shouldAutoRefit,
+  visibleFitKey,
+} from "../../utils/flowViewport";
 import { TraceEdge } from "./edges/TraceEdge";
 import { BranchNode } from "./nodes/BranchNode";
 import { LineNode } from "./nodes/LineNode";
@@ -137,6 +143,8 @@ function FlowViewController({
   flowNodes,
   autoFollow,
   onToggleAutoFollow,
+  userMovedRef,
+  expandedCount,
 }: {
   containerRef: { readonly current: HTMLDivElement | null };
   cfgNodes: CFGNode[];
@@ -145,17 +153,95 @@ function FlowViewController({
   flowNodes: Node[];
   autoFollow: boolean;
   onToggleAutoFollow: () => void;
+  /** Set by <ReactFlow onMoveStart> on user pan/zoom; suppresses auto re-fit. */
+  userMovedRef: { current: boolean };
+  /** expandedNodeIds.size — part of the re-fit key so expand/collapse re-fits. */
+  expandedCount: number;
 }) {
   const { fitView, setCenter, getViewport } = useReactFlow();
   const initialFitDone = useRef(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sizeRef = useRef<{ width: number; height: number } | null>(null);
 
-  // FitView once when cfgNodes first loads
+  // Fresh CFG load (new nodes array identity): forget the user's old viewport
+  // gesture so the new graph fits. Declared before the fit effect so it runs
+  // first on the same commit.
+  useEffect(() => {
+    userMovedRef.current = false;
+    if (debounceRef.current !== null) {
+      clearTimeout(debounceRef.current);
+      debounceRef.current = null;
+    }
+    sizeRef.current = null;
+    initialFitDone.current = false;
+  }, [cfgNodes, userMovedRef]);
+
+  // Initial fit on CFG load + re-fit when expand/collapse reveals nodes
+  // (flowNodes.length tracks VISIBLE nodes; store cfgNodes.length does not).
+  // Never steals the camera after the user manually positioned the view.
+  const fitKey = visibleFitKey(flowNodes.length, expandedCount);
   useEffect(() => {
     if (cfgNodes.length > 0 && !initialFitDone.current) {
-      fitView({ padding: 0.2, duration: 250 });
+      fitView({ padding: FLOW_FIT_PADDING, duration: 250 });
       initialFitDone.current = true;
+    } else if (
+      cfgNodes.length > 0 &&
+      initialFitDone.current &&
+      !userMovedRef.current
+    ) {
+      fitView({ padding: FLOW_FIT_PADDING });
     }
-  }, [cfgNodes.length, fitView]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fitKey is the
+    // derived dep; userMovedRef is a stable ref whose .current is read.
+  }, [cfgNodes.length, fitKey, fitView]);
+
+  // Re-fit when the flow container's pixel size changes (resizable columns,
+  // window resize) unless the user manually positioned the view. Debounced so
+  // panel-drag resizing doesn't refit 60x/sec. Refs only — no setState.
+  useEffect(() => {
+    const el = containerRef.current;
+    if (el === null || typeof ResizeObserver === "undefined") return;
+    // Baseline without fitting: avoids an immediate refit on mount (the fit
+    // effect above owns the initial fit) and on every fresh observer attach.
+    sizeRef.current = { width: el.clientWidth, height: el.clientHeight };
+    const ro = new ResizeObserver(() => {
+      const width = el.clientWidth;
+      const height = el.clientHeight;
+      const prev = sizeRef.current;
+      const decision = shouldAutoRefit({
+        userMoved: userMovedRef.current,
+        width,
+        height,
+        prevWidth: prev?.width ?? width,
+        prevHeight: prev?.height ?? height,
+      });
+      sizeRef.current = { width, height };
+      if (!decision) return;
+      if (debounceRef.current !== null) {
+        clearTimeout(debounceRef.current);
+      }
+      debounceRef.current = setTimeout(() => {
+        debounceRef.current = null;
+        // Re-check at fire time: the user may have grabbed the view or the
+        // panel may have been hidden mid-drag.
+        if (
+          !userMovedRef.current &&
+          el.clientWidth > 0 &&
+          el.clientHeight > 0
+        ) {
+          fitView({ padding: FLOW_FIT_PADDING });
+        }
+      }, FLOW_REFIT_DEBOUNCE_MS);
+    });
+    ro.observe(el);
+    return () => {
+      ro.disconnect();
+      if (debounceRef.current !== null) {
+        clearTimeout(debounceRef.current);
+        debounceRef.current = null;
+      }
+    };
+  }, [containerRef, fitView, userMovedRef]);
 
   const centerOnNode = useCallback(
     (nodeId: string, duration = 350) => {
@@ -252,6 +338,11 @@ export function TraceFlow() {
   const currentStep = useTraceStore((s) => s.currentStep);
   const trace = useTraceStore((s) => s.trace);
   const containerRef = useRef<HTMLDivElement>(null);
+  // True once the user manually pans/zooms (onMoveStart). Resets on CFG load.
+  const userMovedRef = useRef(false);
+  const handleMoveStart = useCallback(() => {
+    userMovedRef.current = true;
+  }, []);
 
   // Derive active node from current step
   const activeId = useMemo(() => {
@@ -423,6 +514,7 @@ export function TraceFlow() {
       proOptions={{ hideAttribution: true }}
       nodesFocusable={true}
       edgesFocusable={true}
+      onMoveStart={handleMoveStart}
     >
       <FlowViewController
         containerRef={containerRef}
@@ -432,6 +524,8 @@ export function TraceFlow() {
         flowNodes={flowNodes}
         autoFollow={autoFollow}
         onToggleAutoFollow={() => setAutoFollow((v) => !v)}
+        userMovedRef={userMovedRef}
+        expandedCount={expandedNodeIds.size}
       />
       <Background color="var(--viz-panel-bg)" gap={16} />
       {/* MiniMap legibility: node fills use the body-bg/body-text contrast

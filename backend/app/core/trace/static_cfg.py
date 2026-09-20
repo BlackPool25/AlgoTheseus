@@ -100,6 +100,7 @@ class _EdgePending:
     source: str
     label: str = ""
     source_handle: str | None = None
+    target_handle: str | None = None
 
 
 class StaticCFGBuilder:
@@ -109,32 +110,46 @@ class StaticCFGBuilder:
         self.nodes: list[CFGNode] = []
         self.edges: list[CFGEdge] = []
         self._counter: int = 0
-        self._seen_edges: set[tuple[str, str, str, str | None]] = set()
+        self._seen_edges: set[tuple[str, str, str, str | None, str | None]] = set()
+        self._current_func: str = ""
 
     def new_id(self, prefix: str = "n") -> str:
         self._counter += 1
         return f"{prefix}_{self._counter}"
 
     def add_node(self, node: CFGNode) -> CFGNode:
+        if not node.func and self._current_func:
+            node.func = self._current_func
         self.nodes.append(node)
         return node
 
     def add_edge(
-        self, source: str, target: str, label: str = "", source_handle: str | None = None
+        self,
+        source: str,
+        target: str,
+        label: str = "",
+        source_handle: str | None = None,
+        target_handle: str | None = None,
     ) -> None:
         if source == target:
             return
-        key = (source, target, label, source_handle)
+        key = (source, target, label, source_handle, target_handle)
         if key in self._seen_edges:
             return
         self._seen_edges.add(key)
         self.edges.append(
-            CFGEdge(source=source, target=target, label=label, source_handle=source_handle)
+            CFGEdge(
+                source=source,
+                target=target,
+                label=label,
+                source_handle=source_handle,
+                target_handle=target_handle,
+            )
         )
 
     def connect_pending(self, pending: list[_EdgePending], target_id: str) -> None:
         for p in pending:
-            self.add_edge(p.source, target_id, p.label, p.source_handle)
+            self.add_edge(p.source, target_id, p.label, p.source_handle, p.target_handle)
 
     def build(self) -> tuple[list[CFGNode], list[CFGEdge]]:
         with tempfile.NamedTemporaryFile(suffix=".cpp", mode="w", delete=False, encoding="utf-8") as f:
@@ -192,6 +207,7 @@ class StaticCFGBuilder:
 
     def _build_function(self, fn_cursor: clang.Cursor) -> None:
         fn_name = fn_cursor.spelling
+        self._current_func = fn_name
         fn_line = fn_cursor.location.line
         body = next(
             (c for c in fn_cursor.get_children() if c.kind == clang.CursorKind.COMPOUND_STMT),
@@ -421,7 +437,7 @@ class StaticCFGBuilder:
 
             # Back-edges to loop condition
             for p in body_out + cont_edges:
-                self.add_edge(p.source, loop_id, p.label, p.source_handle)
+                self.add_edge(p.source, loop_id, p.label, p.source_handle, target_handle="loop-back")
 
             # Loop exit [false] + break exits
             return [_EdgePending(source=loop_id, label="false", source_handle="false")] + break_edges
@@ -460,7 +476,7 @@ class StaticCFGBuilder:
 
             # True back to body start (we connect to the first node in body or condition)
             first_body_node = body_out[0].source if body_out else cond_id
-            self.add_edge(cond_id, first_body_node, label="true", source_handle="true")
+            self.add_edge(cond_id, first_body_node, label="true", source_handle="true", target_handle="loop-back")
 
             return [_EdgePending(source=cond_id, label="false", source_handle="false")] + break_edges
 

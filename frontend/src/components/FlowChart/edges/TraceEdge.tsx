@@ -10,6 +10,8 @@ import {
   BaseEdge,
   EdgeLabelRenderer,
   getBezierPath,
+  getSmoothStepPath,
+  Position,
   type EdgeProps,
 } from "@xyflow/react";
 
@@ -29,14 +31,31 @@ export function TraceEdge({
   const isActive = edgeData?.isActive ?? false;
   const isUntaken = edgeData?.isUntaken ?? false;
 
-  const [edgePath, labelX, labelY] = getBezierPath({
-    sourceX,
-    sourceY,
-    sourcePosition,
-    targetX,
-    targetY,
-    targetPosition,
-  });
+  // Upward back-edges or edges entering side ports use smoothstep with generous radius
+  const isBackEdge =
+    targetY <= sourceY ||
+    targetPosition === Position.Left ||
+    sourcePosition === Position.Left;
+
+  const [edgePath, labelX, labelY] = isBackEdge
+    ? getSmoothStepPath({
+        sourceX,
+        sourceY,
+        sourcePosition,
+        targetX,
+        targetY,
+        targetPosition,
+        borderRadius: 14,
+        offset: 28,
+      })
+    : getBezierPath({
+        sourceX,
+        sourceY,
+        sourcePosition,
+        targetX,
+        targetY,
+        targetPosition,
+      });
 
   return (
     <>

@@ -24,9 +24,10 @@ import dagre from "@dagrejs/dagre";
 import type { Edge, Node } from "@xyflow/react";
 import type { CFGEdge, CFGNode } from "../types/cfg";
 
-const NODE_WIDTH = 180;
-const NODE_HEIGHT = 50;
-const BRANCH_WIDTH = 220;
+const NODE_WIDTH = 220;
+const NODE_HEIGHT = 60;
+const BRANCH_WIDTH = 240;
+const FUNCTION_GAP = 140;
 
 /**
  * Module-level layout cache.
@@ -53,38 +54,124 @@ function buildCacheKey(cfgNodes: CFGNode[], cfgEdges: CFGEdge[]): string {
 }
 
 /**
- * Run Dagre layout and return center-position results for each node.
- * Extracted so it can be skipped entirely on cache hit.
+ * Partition nodes and edges into weakly connected components (e.g. distinct functions).
+ */
+function partitionComponents(
+  nodes: CFGNode[],
+  edges: CFGEdge[],
+): { nodes: CFGNode[]; edges: CFGEdge[] }[] {
+  const nodeMap = new Map(nodes.map((n) => [n.id, n]));
+  const adj = new Map<string, string[]>();
+  for (const n of nodes) adj.set(n.id, []);
+  for (const e of edges) {
+    if (adj.has(e.source) && adj.has(e.target)) {
+      adj.get(e.source)!.push(e.target);
+      adj.get(e.target)!.push(e.source);
+    }
+  }
+
+  const visited = new Set<string>();
+  const components: { nodes: CFGNode[]; edges: CFGEdge[] }[] = [];
+
+  for (const n of nodes) {
+    if (visited.has(n.id)) continue;
+    const compNodes: CFGNode[] = [];
+    const queue: string[] = [n.id];
+    visited.add(n.id);
+
+    while (queue.length > 0) {
+      const cur = queue.shift()!;
+      const nodeObj = nodeMap.get(cur);
+      if (nodeObj) compNodes.push(nodeObj);
+      for (const neighbor of adj.get(cur) ?? []) {
+        if (!visited.has(neighbor)) {
+          visited.add(neighbor);
+          queue.push(neighbor);
+        }
+      }
+    }
+
+    const compNodeIds = new Set(compNodes.map((cn) => cn.id));
+    const compEdges = edges.filter(
+      (e) => compNodeIds.has(e.source) && compNodeIds.has(e.target),
+    );
+    components.push({ nodes: compNodes, edges: compEdges });
+  }
+
+  return components;
+}
+
+/**
+ * Run Dagre layout across connected components (swimlanes) so independent
+ * functions (like `prim()` and `main()`) never overlap or collide horizontally.
  */
 function runDagre(
   cfgNodes: CFGNode[],
   cfgEdges: CFGEdge[],
 ): Map<string, { x: number; y: number }> {
-  const g = new dagre.graphlib.Graph();
-  g.setDefaultEdgeLabel(() => ({}));
-  g.setGraph({
-    rankdir: "TB", // top-to-bottom
-    nodesep: 40, // horizontal gap between nodes at same rank
-    ranksep: 60, // vertical gap between ranks
-    edgesep: 20,
-  });
-
-  for (const n of cfgNodes) {
-    const w = n.type === "branch" ? BRANCH_WIDTH : NODE_WIDTH;
-    g.setNode(n.id, { width: w, height: NODE_HEIGHT });
-  }
-
-  for (const e of cfgEdges) {
-    g.setEdge(e.source, e.target);
-  }
-
-  dagre.layout(g);
-  console.count("dagre layout");
-
+  const components = partitionComponents(cfgNodes, cfgEdges);
   const positions = new Map<string, { x: number; y: number }>();
-  for (const n of cfgNodes) {
-    positions.set(n.id, g.node(n.id));
+  let currentXOffset = 0;
+
+  for (const comp of components) {
+    const g = new dagre.graphlib.Graph();
+    g.setDefaultEdgeLabel(() => ({}));
+    g.setGraph({
+      rankdir: "TB",
+      nodesep: 50,
+      ranksep: 70,
+      edgesep: 25,
+    });
+
+    for (const n of comp.nodes) {
+      const w = n.type === "branch" ? BRANCH_WIDTH : NODE_WIDTH;
+      g.setNode(n.id, { width: w, height: NODE_HEIGHT });
+    }
+
+    for (const e of comp.edges) {
+      g.setEdge(e.source, e.target);
+    }
+
+    dagre.layout(g);
+
+    // Compute bounding box of this component
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let minY = Infinity;
+
+    for (const n of comp.nodes) {
+      const nodeLayout = g.node(n.id);
+      if (nodeLayout) {
+        const w = n.type === "branch" ? BRANCH_WIDTH : NODE_WIDTH;
+        minX = Math.min(minX, nodeLayout.x - w / 2);
+        maxX = Math.max(maxX, nodeLayout.x + w / 2);
+        minY = Math.min(minY, nodeLayout.y - NODE_HEIGHT / 2);
+      }
+    }
+
+    if (!Number.isFinite(minX)) {
+      minX = 0;
+      maxX = NODE_WIDTH;
+      minY = 0;
+    }
+
+    // Place each node in the component with the horizontal swimlane offset
+    for (const n of comp.nodes) {
+      const nodeLayout = g.node(n.id);
+      if (nodeLayout) {
+        const localX = nodeLayout.x - minX;
+        const localY = nodeLayout.y - minY;
+        positions.set(n.id, {
+          x: currentXOffset + localX,
+          y: localY,
+        });
+      }
+    }
+
+    const compWidth = Math.max(maxX - minX, NODE_WIDTH);
+    currentXOffset += compWidth + FUNCTION_GAP;
   }
+
   return positions;
 }
 
@@ -104,8 +191,6 @@ export function layoutCFG(
   }
 
   // Convert cached positions to React Flow nodes with current activeId.
-  // Node data (label, lines, etc.) is always fresh from cfgNodes — only the
-  // x/y positions are reused from cache.
   const nodes: Node[] = cfgNodes.map((n) => {
     const pos = positions!.get(n.id)!;
     const w = n.type === "branch" ? BRANCH_WIDTH : NODE_WIDTH;
@@ -114,9 +199,6 @@ export function layoutCFG(
       type: n.type,
       // Dagre gives center position; React Flow wants top-left
       position: { x: pos.x - w / 2, y: pos.y - NODE_HEIGHT / 2 },
-      // Seed the store with the dagre estimates React Flow needs for the
-      // MiniMap/edges until the ResizeObserver measures the real DOM nodes.
-      // Without these the MiniMap renders an empty (near-black) box.
       initialWidth: w,
       initialHeight: NODE_HEIGHT,
       data: {
@@ -126,6 +208,7 @@ export function layoutCFG(
         isActive: n.id === activeId,
         isUntaken: Boolean(n.is_untaken || (n.trace_indices && n.trace_indices.length === 0)),
         children: n.children,
+        func: n.func,
       },
     };
   });
@@ -140,6 +223,7 @@ export function layoutCFG(
       source: e.source,
       target: e.target,
       sourceHandle: handle,
+      targetHandle: e.target_handle ?? undefined,
       label: e.label || undefined,
       type: "trace", // our custom animated edge
       animated: false,

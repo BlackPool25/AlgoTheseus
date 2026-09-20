@@ -73,62 +73,10 @@ function filterForExpansion(
 }
 
 /**
- * First scalar (or first) `k = v` assignment from a vars record, compacted
- * for node width. Null when the record is empty.
+ * Return clean node label from AST CFG without inflating with full JSON state dumps.
  */
-function scalarAssignment(vars: Record<string, unknown>): string | null {
-  const entries = Object.entries(vars);
-  if (entries.length === 0) return null;
-  const scalar = entries.find(
-    ([, v]) => typeof v === "number" || typeof v === "string" || typeof v === "boolean",
-  );
-  const [k, v] = scalar ?? entries[0];
-  const vs = typeof v === "string" ? v : (JSON.stringify(v) ?? String(v));
-  const short = vs.length > 24 ? `${vs.slice(0, 24)}…` : vs;
-  return `${k} = ${short}`;
-}
-
-function shortValue(v: unknown): string {
-  const s = typeof v === "string" ? v : (JSON.stringify(v) ?? String(v));
-  return s.length > 24 ? `${s.slice(0, 24)}…` : s;
-}
-
-/**
- * Enrich a CFG node label with an explicit `variable = value` suffix drawn
- * from the trace payload at the node's first trace index (no backend
- * change). Labels that already carry `=` (e.g. `arr[mid] == target`) pass
- * through; bare labels (`body`, `found`, `→ 3`) gain a truthful suffix so
- * no node ever reads as a bare value.
- */
-function enrichNodeLabel(node: CFGNode, trace: TraceEvent[]): string {
-  const base = node.label;
-  if (base.includes("=")) return base;
-  const idx = node.trace_indices?.[0];
-  const rep = idx != null ? trace[idx] : undefined;
-  if (!rep) return base;
-  const desc =
-    typeof (rep as { step_desc?: unknown }).step_desc === "string"
-      ? (rep as { step_desc: string }).step_desc
-      : null;
-  if (desc && desc.includes("=")) return `${base} · ${desc}`;
-  switch (rep.type) {
-    case "state": {
-      const a = scalarAssignment(rep.vars);
-      return a ? `${base} · ${a}` : `${base} · step = ${idx + 1}`;
-    }
-    case "enter": {
-      const a = scalarAssignment(rep.params);
-      return a ? `${base} · ${a}` : `${base} · step = ${idx + 1}`;
-    }
-    case "exit":
-      return `${base} · return = ${shortValue(rep.return_val)}`;
-    case "branch":
-      return `${base} · taken = ${rep.taken ? "true" : "false"}`;
-    case "iter":
-      return `${base} · iter = ${rep.iteration}`;
-    default:
-      return base;
-  }
+function enrichNodeLabel(node: CFGNode, _trace: TraceEvent[]): string {
+  return node.label;
 }
 
 /**
@@ -429,18 +377,18 @@ export function TraceFlow() {
 
     const out: typeof cfgEdges = [];
     const seenEdge = new Set<string>();
-    const pushEdge = (source: string, target: string, label: string): void => {
-      if (source === target) return;
-      const key = `${source}|${target}`;
+    const pushEdge = (edge: (typeof cfgEdges)[number]): void => {
+      if (edge.source === edge.target) return;
+      const key = `${edge.source}|${edge.target}|${edge.label || ""}|${edge.source_handle || ""}|${edge.target_handle || ""}`;
       if (seenEdge.has(key)) return;
       seenEdge.add(key);
-      out.push({ source, target, label });
+      out.push(edge);
     };
 
     // Keep original visible-direct edges unchanged (they win dedupe).
     for (const e of cfgEdges) {
       if (visibleNodeIds.has(e.source) && visibleNodeIds.has(e.target)) {
-        pushEdge(e.source, e.target, e.label);
+        pushEdge(e);
       }
     }
 
@@ -448,11 +396,11 @@ export function TraceFlow() {
     for (const e of cfgEdges) {
       if (visibleNodeIds.has(e.source) && hiddenIds.has(e.target)) {
         for (const succ of forwardVisible(e.target)) {
-          pushEdge(e.source, succ, e.label);
+          pushEdge({ ...e, source: e.source, target: succ });
         }
       } else if (hiddenIds.has(e.source) && visibleNodeIds.has(e.target)) {
         for (const anc of backVisible(e.source)) {
-          pushEdge(anc, e.target, e.label);
+          pushEdge({ ...e, source: anc, target: e.target });
         }
       }
     }

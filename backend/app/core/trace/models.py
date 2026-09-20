@@ -127,6 +127,7 @@ class CFGNode(BaseModel):
     children: list[str] = []  # child node IDs (for expandable loop/recursion nodes)
     trace_indices: list[int]  # which trace steps map to this node
     is_untaken: bool = False  # True if this node was never executed in this run
+    func: str = ""  # enclosing function name for swimlane clustering
 
 
 class CFGEdge(BaseModel):
@@ -134,4 +135,5 @@ class CFGEdge(BaseModel):
     target: str
     label: str = ""
     source_handle: str | None = None
+    target_handle: str | None = None
     is_untaken: bool = False

@@ -18,6 +18,7 @@ export interface CFGNode {
   children: string[];
   trace_indices: number[];
   is_untaken?: boolean;
+  func?: string;
 }
 
 export interface CFGEdge {
@@ -25,5 +26,6 @@ export interface CFGEdge {
   target: string;
   label: string;
   source_handle?: string | null;
+  target_handle?: string | null;
   is_untaken?: boolean;
 }

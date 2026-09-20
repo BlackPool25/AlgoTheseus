@@ -6,7 +6,7 @@
 </p>
 
 <p align="center">
-  <strong>Live site:</strong> <a href="https://www.example.com">https://www.example.com</a> <!-- TODO(owner-url): placeholder stays per Key Decisions until the owner supplies the real deployment URL -->
+  <strong>Live site:</strong> <a href="https://algotheseus.shreyasjoshi.qzz.io">https://algotheseus.shreyasjoshi.qzz.io</a>
 </p>
 
 <p align="center">
@@ -107,7 +107,7 @@ Contributors (local Python/Node without Docker): `scripts/setup.sh` wires the sa
 | name | used-by | required | example | prod note |
 |---|---|---|---|---|
 | VITE_API_URL | frontend/src/utils/api.ts:28,30 | prod build: yes; local: no (same-origin fallback) | `https://<api>` | Cloudflare Pages dashboard env, baked at build time; async /jobs path rides on BASE_URL (see [frontend/README.md](frontend/README.md#production-api-cloud-run)) |
-| VITE_SITE_URL | frontend/src/routes/Visualize.tsx:13, Algorithms.tsx:13 | prod build: yes (SEO canonical/og) | `https://www.example.com` (placeholder) | Replace everywhere (sitemap, robots, _redirects) before launch |
+| VITE_SITE_URL | frontend/src/routes/Visualize.tsx:13, Algorithms.tsx:13 | prod build: yes (SEO canonical/og) | `https://algotheseus.shreyasjoshi.qzz.io` | Replace everywhere (sitemap, robots, _redirects) before launch |
 | SANDBOX_MODE | backend/app/core/executor/docker_runner.py:205; docker-compose.yml:31 | no (default `docker`) | TBD(owner) | Compose `${SANDBOX_MODE:-docker}`; Cloud Run: `subprocess` (see [docs/CLOUDRUN.md](docs/CLOUDRUN.md)) |
 | SANDBOX_MAX_CONCURRENT | backend/app/api/routes/execute.py:134,136 | no (default 6) | TBD(owner) | Live service-api.yaml: `"6"`; pool cap every batch nests inside |
 | MAX_BATCH_SANDBOXES | backend/app/api/routes/execute.py:943 | no (default 4) | TBD(owner) | CONFLICT: [docs/CLOUDRUN.md](docs/CLOUDRUN.md) §2 says `2`, live deploy/cloudrun/service-api.yaml says `"4"` (Wave8 bump) — value TBD(owner); fan-out cap per batch |

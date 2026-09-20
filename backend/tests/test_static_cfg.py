@@ -212,3 +212,70 @@ def test_cfg_builder_fallback_when_syntax_invalid():
     nodes, edges = build_cfg(events, code=bad_code)
     assert len(nodes) > 0
     assert len(edges) > 0
+
+
+def test_class_member_methods():
+    code = """
+    class Solution {
+    public:
+        int solve(int x) {
+            if (x > 0) return 1;
+            return 0;
+        }
+    };
+    """
+    nodes, edges = build_static_cfg(code, [])
+    assert nodes is not None
+    start_node = next(n for n in nodes if n.type == CFGNodeType.FUNC_START)
+    assert start_node.label == "Solution::solve()"
+
+
+def test_switch_statement_multiway_branch():
+    code = """
+    void test_sw(int x) {
+        switch (x) {
+            case 1:
+                int a = 1;
+                break;
+            case 2:
+                int b = 2;
+                break;
+            default:
+                int c = 3;
+                break;
+        }
+        int end = 0;
+    }
+    """
+    nodes, edges = build_static_cfg(code, [])
+    switch_node = next(n for n in nodes if "switch" in n.label)
+    end_node = next(n for n in nodes if 14 in n.lines)
+
+    case1_edge = next(e for e in edges if e.source == switch_node.id and e.label == "case 1")
+    case2_edge = next(e for e in edges if e.source == switch_node.id and e.label == "case 2")
+    default_edge = next(e for e in edges if e.source == switch_node.id and e.label == "default")
+
+    # All branches eventually converge to end_node
+    case1_out = [e for e in edges if e.source == case1_edge.target]
+    case2_out = [e for e in edges if e.source == case2_edge.target]
+    default_out = [e for e in edges if e.source == default_edge.target]
+
+    assert any(e.target == end_node.id for e in case1_out)
+    assert any(e.target == end_node.id for e in case2_out)
+    assert any(e.target == end_node.id for e in default_out)
+
+
+def test_try_catch_block():
+    code = """
+    void test_ex() {
+        try {
+            int a = 1;
+        } catch (int e) {
+            int b = 2;
+        }
+        int end = 0;
+    }
+    """
+    nodes, edges = build_static_cfg(code, [])
+    catch_edge = next(e for e in edges if e.label == "catch")
+    assert catch_edge is not None

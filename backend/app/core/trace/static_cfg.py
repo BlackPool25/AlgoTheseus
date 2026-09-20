@@ -146,14 +146,42 @@ class StaticCFGBuilder:
             tu = index.parse(path, args=_libclang_compat.default_extra_args())
             abs_path = os.path.abspath(path)
 
-            for cursor in tu.cursor.get_children():
-                if (
-                    cursor.location.file
-                    and os.path.abspath(cursor.location.file.name) == abs_path
-                    and cursor.kind in (clang.CursorKind.FUNCTION_DECL, clang.CursorKind.CXX_METHOD)
-                    and cursor.is_definition()
-                ):
-                    self._build_function(cursor)
+            def find_functions(c: clang.Cursor) -> list[clang.Cursor]:
+                res: list[clang.Cursor] = []
+                for child in c.get_children():
+                    if not child.location.file:
+                        continue
+                    try:
+                        child_path = os.path.abspath(child.location.file.name)
+                    except Exception:
+                        continue
+                    if child_path != abs_path:
+                        continue
+
+                    fn_kinds = {
+                        clang.CursorKind.FUNCTION_DECL,
+                        clang.CursorKind.CXX_METHOD,
+                        clang.CursorKind.CONSTRUCTOR,
+                        clang.CursorKind.DESTRUCTOR,
+                    }
+                    fn_tmpl = getattr(clang.CursorKind, "FUNCTION_TEMPLATE", None)
+                    if fn_tmpl:
+                        fn_kinds.add(fn_tmpl)
+
+                    if child.kind in fn_kinds and child.is_definition():
+                        res.append(child)
+                    elif child.kind in (
+                        clang.CursorKind.NAMESPACE,
+                        clang.CursorKind.CLASS_DECL,
+                        clang.CursorKind.STRUCT_DECL,
+                        clang.CursorKind.CLASS_TEMPLATE,
+                        clang.CursorKind.UNION_DECL,
+                    ):
+                        res.extend(find_functions(child))
+                return res
+
+            for cursor in find_functions(tu.cursor):
+                self._build_function(cursor)
 
             return self.nodes, self.edges
         finally:
@@ -172,13 +200,23 @@ class StaticCFGBuilder:
         if not body:
             return
 
+        parent = fn_cursor.semantic_parent
+        if parent and parent.spelling and parent.kind in (
+            clang.CursorKind.CLASS_DECL,
+            clang.CursorKind.STRUCT_DECL,
+            clang.CursorKind.NAMESPACE,
+        ):
+            display_name = f"{parent.spelling}::{fn_name}()"
+        else:
+            display_name = f"{fn_name}()"
+
         start_id = self.new_id("func_start")
         self.add_node(
             CFGNode(
                 id=start_id,
                 type=CFGNodeType.FUNC_START,
                 lines=[fn_line],
-                label=f"{fn_name}()",
+                label=display_name,
                 trace_indices=[],
             )
         )
@@ -453,6 +491,85 @@ class StaticCFGBuilder:
             if loop_ctx is not None:
                 loop_ctx["continues"].extend(in_edges)
             return []
+
+        # ── Switch Statement ──────────────────────────────────────────────────
+        if kind == clang.CursorKind.SWITCH_STMT:
+            children = list(cursor.get_children())
+            if not children:
+                return in_edges
+
+            cond = children[0]
+            cond_text = _get_cond_text(cond, self.source_lines)
+            switch_id = self.new_id("branch")
+            self.add_node(
+                CFGNode(
+                    id=switch_id,
+                    type=CFGNodeType.BRANCH,
+                    lines=[line],
+                    label=f"switch ({cond_text})",
+                    trace_indices=[],
+                )
+            )
+            self.connect_pending(in_edges, switch_id)
+
+            body = children[1] if len(children) > 1 else None
+            if not body:
+                return [_EdgePending(source=switch_id)]
+
+            break_edges: list[_EdgePending] = []
+            switch_ctx = {
+                "breaks": break_edges,
+                "continues": loop_ctx["continues"] if loop_ctx else [],
+                "head": loop_ctx["head"] if loop_ctx else None,
+            }
+            cur_case_edges: list[_EdgePending] = []
+            has_default = False
+
+            for ch in body.get_children():
+                if ch.kind == clang.CursorKind.CASE_STMT:
+                    case_children = list(ch.get_children())
+                    val_text = _get_cond_text(case_children[0], self.source_lines) if case_children else "?"
+                    first_stmt = case_children[1] if len(case_children) > 1 else None
+                    in_case = [_EdgePending(source=switch_id, label=f"case {val_text}")] + cur_case_edges
+                    cur_case_edges = self._build_stmt(first_stmt, in_case, switch_ctx, end_id) if first_stmt else in_case
+                elif ch.kind == clang.CursorKind.DEFAULT_STMT:
+                    has_default = True
+                    case_children = list(ch.get_children())
+                    first_stmt = case_children[0] if case_children else None
+                    in_default = [_EdgePending(source=switch_id, label="default")] + cur_case_edges
+                    cur_case_edges = self._build_stmt(first_stmt, in_default, switch_ctx, end_id) if first_stmt else in_default
+                elif ch.kind == clang.CursorKind.BREAK_STMT:
+                    break_edges.extend(cur_case_edges)
+                    cur_case_edges = []
+                else:
+                    cur_case_edges = self._build_stmt(ch, cur_case_edges, switch_ctx, end_id)
+
+            exit_edges = break_edges + cur_case_edges
+            if not has_default:
+                exit_edges.append(_EdgePending(source=switch_id, label="default"))
+            return exit_edges
+
+        # ── Try / Catch Block ─────────────────────────────────────────────────
+        if kind == clang.CursorKind.CXX_TRY_STMT:
+            children = list(cursor.get_children())
+            if not children:
+                return in_edges
+
+            try_body = children[0]
+            catches = children[1:]
+
+            try_out = self._build_stmt(try_body, in_edges, loop_ctx, end_id)
+            catch_outs: list[_EdgePending] = []
+
+            for catch in catches:
+                catch_children = list(catch.get_children())
+                catch_body = catch_children[-1] if catch_children else None
+                if catch_body:
+                    catch_in = [_EdgePending(source=in_edges[0].source, label="catch")] if in_edges else []
+                    c_out = self._build_stmt(catch_body, catch_in, loop_ctx, end_id)
+                    catch_outs.extend(c_out)
+
+            return try_out + catch_outs
 
         # ── General Fallback Line Node ────────────────────────────────────────
         node_id = self.new_id("line")

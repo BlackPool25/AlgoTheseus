@@ -222,6 +222,8 @@ class InjectionPoint:
     cond_vars: list[str] = field(default_factory=list)
     # For LOOP_ITER / LOOP_COUNTER: unique counter variable name
     counter_var: str = ""
+    # Mapped original line number when source was expanded by _expand_single_line_bodies
+    orig_line: int | None = None
 
 
 @dataclass

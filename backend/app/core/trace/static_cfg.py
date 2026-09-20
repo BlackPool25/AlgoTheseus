@@ -341,28 +341,27 @@ class StaticCFGBuilder:
             kind = child.kind
             line = _get_stmt_line(child)
 
-            # Check if this statement calls a user-defined function (e.g. order = topoSort(g))
-            user_call = self._find_user_func_call(child)
-            if user_call:
-                call_id = self.new_id("call")
-                label = self._extract_cursor_text(child)
-                self.add_node(
-                    CFGNode(
-                        id=call_id,
-                        type=CFGNodeType.FUNC_CALL,
-                        lines=[line] if line > 0 else [],
-                        label=label,
-                        call_target=user_call,
-                        trace_indices=[],
-                    )
-                )
-                self.connect_pending(cur_edges, call_id)
-                cur_edges = [_EdgePending(source=call_id)]
-                i += 1
-                continue
-
-            # Coalesce consecutive simple statements into a single LINE node
+            # Coalesce consecutive simple statements into LINE nodes, or FUNC_CALL if calling a user function
             if self._is_simple_stmt(kind):
+                user_call = self._find_user_func_call(child)
+                if user_call:
+                    call_id = self.new_id("call")
+                    label = self._extract_cursor_text(child)
+                    self.add_node(
+                        CFGNode(
+                            id=call_id,
+                            type=CFGNodeType.FUNC_CALL,
+                            lines=[line] if line > 0 else [],
+                            label=label,
+                            call_target=user_call,
+                            trace_indices=[],
+                        )
+                    )
+                    self.connect_pending(cur_edges, call_id)
+                    cur_edges = [_EdgePending(source=call_id)]
+                    i += 1
+                    continue
+
                 group_stmts = [child]
                 while (
                     i + 1 < n
@@ -533,8 +532,13 @@ class StaticCFGBuilder:
             body_out = self._build_stmt(body, body_in, sub_ctx, end_id) if body else body_in
 
             # Back-edges to loop condition
-            for p in body_out + cont_edges:
-                self.add_edge(p.source, loop_id, p.label, p.source_handle, target_handle="loop-back")
+            for p in cont_edges:
+                self.add_edge(p.source, loop_id, label=p.label, source_handle=p.source_handle, target_handle="loop-back")
+            for p in body_out:
+                # If the body ended with an inner loop, its exit latch back to this loop header carries no label
+                source_node = next((n for n in self.nodes if n.id == p.source), None)
+                lbl = "" if (source_node and source_node.type == CFGNodeType.LOOP) else p.label
+                self.add_edge(p.source, loop_id, label=lbl, source_handle=p.source_handle, target_handle="loop-back")
 
             loop_node = next(n for n in self.nodes if n.id == loop_id)
             loop_node.children = [self.nodes[idx].id for idx in range(start_node_idx, len(self.nodes))]
@@ -735,10 +739,11 @@ def build_static_cfg(
                 continue
 
             candidates = line_to_nodes[evt_line]
-            matched = False
-
-            # Type-specific matching if possible
             evt_type = getattr(event, "type", None)
+            if hasattr(evt_type, "value"):
+                evt_type = evt_type.value
+
+            matched = False
             for cand in candidates:
                 if evt_type == "branch" and cand.type == CFGNodeType.BRANCH:
                     cand.trace_indices.append(idx)
@@ -751,23 +756,50 @@ def build_static_cfg(
                     cand.trace_indices.append(idx)
                     matched = True
                     break
+                elif evt_type in ("exit", "func_exit") and cand.type in (CFGNodeType.FUNC_END, CFGNodeType.LINE):
+                    cand.trace_indices.append(idx)
+                    matched = True
+                    break
 
             if not matched and candidates:
-                # Default to the first candidate covering this line
-                candidates[0].trace_indices.append(idx)
+                # For state events, prefer LINE nodes on this line (statement execution)
+                line_nodes = [c for c in candidates if c.type in (CFGNodeType.LINE, CFGNodeType.FUNC_CALL)]
+                if line_nodes:
+                    for ln in line_nodes:
+                        ln.trace_indices.append(idx)
+                else:
+                    for c in candidates:
+                        c.trace_indices.append(idx)
 
-        untaken_node_ids = {n.id for n in nodes if len(n.trace_indices) == 0}
+        # Branch evaluations determine edge untaken states
+        for e in edges:
+            if e.source in branch_evaluations:
+                if e.label == "true":
+                    e.is_untaken = (True not in branch_evaluations[e.source])
+                elif e.label == "false":
+                    e.is_untaken = (False not in branch_evaluations[e.source])
+
+        # Propagate taken targets from branches
+        taken_target_ids = {e.target for e in edges if not e.is_untaken and e.source in branch_evaluations}
+
+        # If exit node connected from a taken return, mark exit taken
+        for e in edges:
+            if any(n.type == CFGNodeType.FUNC_END for n in nodes if n.id == e.target):
+                src_node = next((n for n in nodes if n.id == e.source), None)
+                if src_node and len(src_node.trace_indices) > 0:
+                    taken_target_ids.add(e.target)
+
+        untaken_node_ids = {n.id for n in nodes if len(n.trace_indices) == 0 and n.id not in taken_target_ids}
         for n in nodes:
             n.is_untaken = n.id in untaken_node_ids
 
         for e in edges:
             if e.source in untaken_node_ids or e.target in untaken_node_ids:
                 e.is_untaken = True
-            elif e.label == "true" and e.source in branch_evaluations:
-                if True not in branch_evaluations[e.source]:
+            elif e.source in branch_evaluations:
+                if e.label == "true" and True not in branch_evaluations[e.source]:
                     e.is_untaken = True
-            elif e.label == "false" and e.source in branch_evaluations:
-                if False not in branch_evaluations[e.source]:
+                elif e.label == "false" and False not in branch_evaluations[e.source]:
                     e.is_untaken = True
 
         return nodes, edges

@@ -116,4 +116,75 @@ describe("cfgLayout — multi-function swimlanes and handles", () => {
       `exitNode y (${exitNode.position.y}) must be strictly greater than bodyNode y (${bodyNode.position.y})`,
     );
   });
+
+  it("defaults expandedNodeIds to include all loop nodes on loadCFG", async () => {
+    const { useCFGStore } = await import("../src/store/cfgStore");
+    const nodes: CFGNode[] = [
+      { id: "loop_1", type: "loop", lines: [8], label: "for (...)", children: ["body_1"], trace_indices: [0], is_untaken: false },
+      { id: "body_1", type: "line", lines: [9], label: "indeg[v]++", children: [], trace_indices: [1], is_untaken: false },
+      { id: "loop_2", type: "loop", lines: [15], label: "while (...)", children: [], trace_indices: [2], is_untaken: false },
+    ];
+    useCFGStore.getState().loadCFG(nodes, []);
+    const expanded = useCFGStore.getState().expandedNodeIds;
+    assert.equal(expanded.has("loop_1"), true, "loop_1 should be expanded by default");
+    assert.equal(expanded.has("loop_2"), true, "loop_2 should be expanded by default");
+    assert.equal(expanded.size, 2);
+  });
+
+  it("places true branch target to the left of false branch target (matching left/right handles)", () => {
+    invalidateLayoutCache();
+
+    const nodes: CFGNode[] = [
+      { id: "branch_1", type: "branch", lines: [5], label: "if (x > 0)", children: [], trace_indices: [0], is_untaken: false },
+      { id: "then_1", type: "line", lines: [6], label: "then_stmt()", children: [], trace_indices: [1], is_untaken: false },
+      { id: "else_1", type: "line", lines: [8], label: "else_stmt()", children: [], trace_indices: [2], is_untaken: false },
+      { id: "merge_1", type: "line", lines: [10], label: "merge_stmt()", children: [], trace_indices: [3], is_untaken: false },
+    ];
+
+    const edges: CFGEdge[] = [
+      { source: "branch_1", target: "then_1", label: "true", source_handle: "true", target_handle: null, is_untaken: false },
+      { source: "branch_1", target: "else_1", label: "false", source_handle: "false", target_handle: null, is_untaken: false },
+      { source: "then_1", target: "merge_1", label: "", source_handle: null, target_handle: null, is_untaken: false },
+      { source: "else_1", target: "merge_1", label: "", source_handle: null, target_handle: null, is_untaken: false },
+    ];
+
+    const { nodes: positioned } = layoutCFG(nodes, edges, null);
+
+    const thenNode = positioned.find((n) => n.id === "then_1")!;
+    const elseNode = positioned.find((n) => n.id === "else_1")!;
+
+    // thenNode (true target) MUST be to the left of elseNode (false target)
+    // because true handle is at 30% and false handle is at 70%
+    assert.ok(
+      thenNode.position.x < elseNode.position.x,
+      `Expected true target x (${thenNode.position.x}) < false target x (${elseNode.position.x}) to avoid crossed edges`,
+    );
+  });
+
+  it("computes obstacle-avoidance waypoints for multi-rank loop exit edges", () => {
+    invalidateLayoutCache();
+
+    // Loop with 2 sequential body statements and an exit statement below
+    const nodes: CFGNode[] = [
+      { id: "loop_1", type: "loop", lines: [10], label: "for (int i = 0; i < n; ++i)", children: [], trace_indices: [0], is_untaken: false },
+      { id: "body_1", type: "line", lines: [11], label: "step_one()", children: [], trace_indices: [1], is_untaken: false },
+      { id: "body_2", type: "line", lines: [12], label: "step_two()", children: [], trace_indices: [2], is_untaken: false },
+      { id: "exit_1", type: "line", lines: [14], label: "after_loop()", children: [], trace_indices: [3], is_untaken: false },
+    ];
+
+    const edges: CFGEdge[] = [
+      { source: "loop_1", target: "body_1", label: "true", source_handle: "true", target_handle: null, is_untaken: false },
+      { source: "body_1", target: "body_2", label: "", source_handle: null, target_handle: null, is_untaken: false },
+      { source: "body_2", target: "loop_1", label: "", source_handle: null, target_handle: "loop-back", is_untaken: false },
+      { source: "loop_1", target: "exit_1", label: "false", source_handle: "false", target_handle: null, is_untaken: false },
+    ];
+
+    const { edges: flowEdges } = layoutCFG(nodes, edges, null);
+
+    const exitEdge = flowEdges.find((e) => e.source === "loop_1" && e.target === "exit_1");
+    assert.ok(exitEdge, "Exit edge must exist");
+    const points = (exitEdge?.data as { points?: { x: number; y: number }[] })?.points;
+    assert.ok(points && points.length > 3, `Expected multi-rank exit edge to have >3 waypoints, got ${points?.length}`);
+  });
 });
+

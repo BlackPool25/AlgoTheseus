@@ -29,12 +29,22 @@ const NODE_HEIGHT = 68;
 const BRANCH_WIDTH = 270;
 const FUNCTION_GAP = 160;
 
+export interface EdgePoint {
+  x: number;
+  y: number;
+}
+
+export interface DagreLayoutResult {
+  positions: Map<string, { x: number; y: number }>;
+  edgePoints: Map<string, EdgePoint[]>;
+}
+
 /**
  * Module-level layout cache.
- * Key   = structural hash of node IDs + edge source→target pairs
- * Value = Map<nodeId, {x, y}> — Dagre-computed center positions
+ * Key   = structural hash of node IDs + edge connectivity
+ * Value = DagreLayoutResult — center positions and obstacle-avoidance edge points
  */
-const layoutCache = new Map<string, Map<string, { x: number; y: number }>>();
+const layoutCache = new Map<string, DagreLayoutResult>();
 
 /**
  * Build a cache key that captures the structural identity of the graph.
@@ -47,10 +57,14 @@ function buildCacheKey(cfgNodes: CFGNode[], cfgEdges: CFGEdge[]): string {
     .sort()
     .join(",");
   const edgeKeys = cfgEdges
-    .map((e) => `${e.source}→${e.target}`)
+    .map((e) => `${e.source}→${e.target}[${e.source_handle ?? ""}:${e.label ?? ""}]`)
     .sort()
     .join(",");
   return `${nodeIds}|${edgeKeys}`;
+}
+
+function getEdgeKey(e: CFGEdge): string {
+  return `${e.source}->${e.target}[${e.source_handle ?? ""}:${e.label ?? ""}]`;
 }
 
 /**
@@ -108,13 +122,14 @@ function partitionComponents(
 function runDagre(
   cfgNodes: CFGNode[],
   cfgEdges: CFGEdge[],
-): Map<string, { x: number; y: number }> {
+): DagreLayoutResult {
   const components = partitionComponents(cfgNodes, cfgEdges);
   const positions = new Map<string, { x: number; y: number }>();
+  const edgePoints = new Map<string, EdgePoint[]>();
   let currentXOffset = 0;
 
   for (const comp of components) {
-    const g = new dagre.graphlib.Graph();
+    const g = new dagre.graphlib.Graph({ multigraph: true });
     g.setDefaultEdgeLabel(() => ({}));
     g.setGraph({
       rankdir: "TB",
@@ -141,13 +156,22 @@ function runDagre(
     }
 
     // 2. Add forward edges to Dagre (EXCLUDE back-edges to keep the graph a strict DAG)
-    for (const e of comp.edges) {
-      if (e.target_handle === "loop-back") {
-        continue;
-      }
+    const forwardEdges = comp.edges.filter((e) => e.target_handle !== "loop-back");
+    // Sort forward edges: false edges come before true edges so Dagre orders true to the left and false to the right
+    forwardEdges.sort((a, b) => {
+      const getPriority = (e: CFGEdge) => {
+        if (e.source_handle === "false" || e.label === "false") return 0;
+        if (e.source_handle === "true" || e.label === "true") return 1;
+        return 2;
+      };
+      return getPriority(a) - getPriority(b);
+    });
+
+    for (const e of forwardEdges) {
       // Sequential unlabelled edges get higher weight to stay vertically straight
       const weight = e.label ? 1 : 2;
-      g.setEdge(e.source, e.target, { weight });
+      const edgeKey = getEdgeKey(e);
+      g.setEdge(e.source, e.target, { weight }, edgeKey);
     }
 
     // 3. For each loop, add virtual ordering constraint from loop body leaves to exit node
@@ -160,7 +184,7 @@ function runDagre(
         if (falseEdge && loopLeaves.length > 0) {
           for (const leafId of loopLeaves) {
             // Virtual ordering edge: ensures the exit node is placed BELOW all loop body leaves
-            g.setEdge(leafId, falseEdge.target, { minlen: 1, weight: 0 });
+            g.setEdge(leafId, falseEdge.target, { minlen: 1, weight: 0 }, `__virtual__${leafId}->${falseEdge.target}`);
           }
         }
       }
@@ -168,7 +192,7 @@ function runDagre(
 
     dagre.layout(g);
 
-    // Compute bounding box of this component
+    // Compute bounding box of this component including nodes and routing waypoints
     let minX = Infinity;
     let maxX = -Infinity;
     let minY = Infinity;
@@ -180,6 +204,17 @@ function runDagre(
         minX = Math.min(minX, nodeLayout.x - w / 2);
         maxX = Math.max(maxX, nodeLayout.x + w / 2);
         minY = Math.min(minY, nodeLayout.y - NODE_HEIGHT / 2);
+      }
+    }
+
+    for (const edgeObj of g.edges()) {
+      const edgeLayout = g.edge(edgeObj);
+      if (edgeLayout?.points) {
+        for (const pt of edgeLayout.points) {
+          minX = Math.min(minX, pt.x);
+          maxX = Math.max(maxX, pt.x);
+          minY = Math.min(minY, pt.y);
+        }
       }
     }
 
@@ -202,11 +237,24 @@ function runDagre(
       }
     }
 
+    // Collect edge points transformed to world space
+    for (const e of forwardEdges) {
+      const edgeKey = getEdgeKey(e);
+      const edgeLayout = g.edge(e.source, e.target, edgeKey);
+      if (edgeLayout?.points && edgeLayout.points.length > 0) {
+        const transformedPoints = edgeLayout.points.map((pt: { x: number; y: number }) => ({
+          x: currentXOffset + (pt.x - minX),
+          y: pt.y - minY,
+        }));
+        edgePoints.set(edgeKey, transformedPoints);
+      }
+    }
+
     const compWidth = Math.max(maxX - minX, NODE_WIDTH);
     currentXOffset += compWidth + FUNCTION_GAP;
   }
 
-  return positions;
+  return { positions, edgePoints };
 }
 
 export function layoutCFG(
@@ -216,17 +264,19 @@ export function layoutCFG(
 ): { nodes: Node[]; edges: Edge[] } {
   // Compute cache key (structural identity only — activeId NOT included)
   const cacheKey = buildCacheKey(cfgNodes, cfgEdges);
-  let positions = layoutCache.get(cacheKey);
+  let layoutResult = layoutCache.get(cacheKey);
 
-  if (!positions) {
+  if (!layoutResult) {
     // Cache miss — compute dagre layout and store for reuse
-    positions = runDagre(cfgNodes, cfgEdges);
-    layoutCache.set(cacheKey, positions);
+    layoutResult = runDagre(cfgNodes, cfgEdges);
+    layoutCache.set(cacheKey, layoutResult);
   }
+
+  const { positions, edgePoints } = layoutResult;
 
   // Convert cached positions to React Flow nodes with current activeId.
   const nodes: Node[] = cfgNodes.map((n) => {
-    const pos = positions!.get(n.id)!;
+    const pos = positions.get(n.id)!;
     const w = n.type === "branch" ? BRANCH_WIDTH : NODE_WIDTH;
     return {
       id: n.id,
@@ -253,6 +303,8 @@ export function layoutCFG(
     const handle =
       e.source_handle ??
       (e.label === "true" ? "true" : e.label === "false" ? "false" : undefined);
+    const edgeKey = getEdgeKey(e);
+    const points = edgePoints.get(edgeKey);
     return {
       id: `${e.source}-${e.target}-${e.label || ""}`,
       source: e.source,
@@ -267,6 +319,7 @@ export function layoutCFG(
       labelBgStyle: { fill: "var(--viz-body-bg)" },
       data: {
         isUntaken: Boolean(e.is_untaken),
+        points: points && points.length > 0 ? points : undefined,
       },
     };
   });

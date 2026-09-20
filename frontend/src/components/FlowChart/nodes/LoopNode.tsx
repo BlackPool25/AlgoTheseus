@@ -8,25 +8,22 @@
 import { Handle, Position, type NodeProps } from "@xyflow/react";
 import { useCFGStore } from "../../../store/cfgStore";
 
-interface LoopNodeData {
-  label: string;
-  isActive: boolean;
-  isUntaken?: boolean;
-  children?: string[];
-}
+import type { FlowNodeData } from "./LineNode";
 
 export function LoopNode({ id, data }: NodeProps) {
-  const d = data as unknown as LoopNodeData;
+  const d = data as unknown as FlowNodeData;
   const hasChildren = (d.children?.length ?? 0) > 0;
   const isExpanded = useCFGStore((s) => s.expandedNodeIds.has(id));
   const toggleExpand = useCFGStore((s) => s.toggleExpand);
+  const lineBadge =
+    d.lines && d.lines.length > 0 ? `L${d.lines[0]}` : "";
 
   return (
     <div
       title={d.label}
       onClick={hasChildren ? () => toggleExpand(id) : undefined}
-      style={{ width: 220, height: 60 }}
-      className={`relative px-2.5 py-1.5 rounded-lg border text-left flex flex-col justify-center transition-all shadow-xs select-none ${
+      style={{ width: 260, height: 68 }}
+      className={`relative px-3 py-2 rounded-lg border text-left flex flex-col justify-center transition-all shadow-xs select-none ${
         hasChildren ? "cursor-pointer" : ""
       } ${
         d.isActive
@@ -37,7 +34,7 @@ export function LoopNode({ id, data }: NodeProps) {
       }`}
     >
       {/* Top entry handle */}
-      <Handle type="target" position={Position.Top} className="!bg-emerald-500 !w-2 !h-2" />
+      <Handle type="target" position={Position.Top} className="!bg-emerald-500 !w-2.5 !h-2.5" />
 
       {/* Dedicated Left side handle for incoming loop back-edges */}
       <Handle
@@ -50,10 +47,17 @@ export function LoopNode({ id, data }: NodeProps) {
 
       {/* Header Row */}
       <div className="flex items-center justify-between gap-1 text-[10px] font-mono leading-none mb-1 opacity-75">
-        <span className="font-semibold uppercase tracking-wider text-[9px] text-emerald-400 flex items-center gap-1">
-          {hasChildren && <span>{isExpanded ? "▾" : "▸"}</span>}
-          Loop
-        </span>
+        <div className="flex items-center gap-1.5">
+          <span className="font-semibold uppercase tracking-wider text-[9px] text-emerald-400 flex items-center gap-1">
+            {hasChildren && <span>{isExpanded ? "▾" : "▸"}</span>}
+            Loop
+          </span>
+          {lineBadge && (
+            <span className="bg-muted/60 px-1 py-0.5 rounded text-[9px] text-foreground/70">
+              {lineBadge}
+            </span>
+          )}
+        </div>
         <div className="flex items-center gap-1.5 text-[8px]">
           <span className="text-emerald-400 font-bold">Body</span>
           <span className="text-rose-400 font-bold">Exit</span>
@@ -61,7 +65,7 @@ export function LoopNode({ id, data }: NodeProps) {
       </div>
 
       {/* Loop condition text */}
-      <div className="text-xs font-mono font-medium truncate leading-tight">
+      <div className="text-xs font-mono font-medium truncate leading-tight text-emerald-100">
         {d.label}
       </div>
 

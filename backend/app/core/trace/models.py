@@ -128,6 +128,7 @@ class CFGNode(BaseModel):
     trace_indices: list[int]  # which trace steps map to this node
     is_untaken: bool = False  # True if this node was never executed in this run
     func: str = ""  # enclosing function name for swimlane clustering
+    call_target: str | None = None  # target function name if this is a function call node
 
 
 class CFGEdge(BaseModel):

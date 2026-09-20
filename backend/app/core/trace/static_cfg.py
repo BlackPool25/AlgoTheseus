@@ -112,6 +112,72 @@ class StaticCFGBuilder:
         self._counter: int = 0
         self._seen_edges: set[tuple[str, str, str, str | None, str | None]] = set()
         self._current_func: str = ""
+        self.user_func_names: set[str] = set()
+
+    def _extract_source_lines(self, lines: list[int], max_statements: int = 3) -> str:
+        """Extract clean C++ code statements corresponding to line numbers."""
+        if not lines:
+            return ""
+        valid_lines = [ln for ln in lines if 1 <= ln <= len(self.source_lines)]
+        if not valid_lines:
+            return f"line {lines[0]}" if len(lines) == 1 else f"lines {lines[0]}–{lines[-1]}"
+
+        extracted: list[str] = []
+        for ln in valid_lines:
+            raw = self.source_lines[ln - 1].strip()
+            if raw and raw not in ("{", "}"):
+                extracted.append(raw)
+
+        if not extracted:
+            return f"line {lines[0]}" if len(lines) == 1 else f"lines {lines[0]}–{lines[-1]}"
+
+        if len(extracted) > max_statements:
+            return "\n".join(extracted[:max_statements]) + f"\n... (+{len(extracted) - max_statements} lines)"
+        return "\n".join(extracted)
+
+    def _extract_cursor_text(self, cursor: clang.Cursor) -> str:
+        """Extract clean text for a statement cursor from its extent."""
+        try:
+            s = cursor.extent.start
+            e = cursor.extent.end
+            if s.line and e.line and 1 <= s.line <= len(self.source_lines):
+                if s.line == e.line:
+                    txt = self.source_lines[s.line - 1][s.column - 1 : e.column - 1].strip()
+                    if txt:
+                        if not txt.endswith(";") and not txt.endswith("}"):
+                            txt += ";"
+                        return txt
+                elif s.line < e.line:
+                    first = self.source_lines[s.line - 1][s.column - 1 :].strip()
+                    last = (
+                        self.source_lines[e.line - 1][: e.column - 1].strip()
+                        if e.line <= len(self.source_lines)
+                        else ""
+                    )
+                    parts = [first]
+                    for ln in range(s.line + 1, min(e.line, len(self.source_lines))):
+                        m = self.source_lines[ln - 1].strip()
+                        if m:
+                            parts.append(m)
+                    if last:
+                        parts.append(last)
+                    return "\n".join(parts[:3])
+        except Exception:
+            pass
+        return self._extract_source_lines([_get_stmt_line(cursor)])
+
+    def _find_user_func_call(self, cursor: clang.Cursor) -> str | None:
+        """Detect if cursor or any sub-expression calls a user-defined function."""
+        if not self.user_func_names:
+            return None
+        try:
+            tokens = [t.spelling for t in cursor.get_tokens()]
+            for i, tok in enumerate(tokens):
+                if tok in self.user_func_names and i + 1 < len(tokens) and tokens[i + 1] == "(":
+                    return tok
+        except Exception:
+            pass
+        return None
 
     def new_id(self, prefix: str = "n") -> str:
         self._counter += 1
@@ -195,7 +261,10 @@ class StaticCFGBuilder:
                         res.extend(find_functions(child))
                 return res
 
-            for cursor in find_functions(tu.cursor):
+            funcs = find_functions(tu.cursor)
+            self.user_func_names = {c.spelling for c in funcs if c.spelling}
+
+            for cursor in funcs:
                 self._build_function(cursor)
 
             return self.nodes, self.edges
@@ -250,7 +319,7 @@ class StaticCFGBuilder:
                 id=end_id,
                 type=CFGNodeType.FUNC_END,
                 lines=[end_line],
-                label="return",
+                label=f"exit {display_name}",
                 trace_indices=[],
             )
         )
@@ -270,6 +339,27 @@ class StaticCFGBuilder:
         while i < n:
             child = children[i]
             kind = child.kind
+            line = _get_stmt_line(child)
+
+            # Check if this statement calls a user-defined function (e.g. order = topoSort(g))
+            user_call = self._find_user_func_call(child)
+            if user_call:
+                call_id = self.new_id("call")
+                label = self._extract_cursor_text(child)
+                self.add_node(
+                    CFGNode(
+                        id=call_id,
+                        type=CFGNodeType.FUNC_CALL,
+                        lines=[line] if line > 0 else [],
+                        label=label,
+                        call_target=user_call,
+                        trace_indices=[],
+                    )
+                )
+                self.connect_pending(cur_edges, call_id)
+                cur_edges = [_EdgePending(source=call_id)]
+                i += 1
+                continue
 
             # Coalesce consecutive simple statements into a single LINE node
             if self._is_simple_stmt(kind):
@@ -277,11 +367,13 @@ class StaticCFGBuilder:
                 while (
                     i + 1 < n
                     and self._is_simple_stmt(children[i + 1].kind)
+                    and not self._find_user_func_call(children[i + 1])
                     and abs(
                         _get_stmt_line(children[i + 1])
                         - _get_stmt_line(group_stmts[-1])
                     )
                     <= 3
+                    and len(group_stmts) < 3
                 ):
                     i += 1
                     group_stmts.append(children[i])
@@ -293,10 +385,14 @@ class StaticCFGBuilder:
                     continue
 
                 line_id = self.new_id("line")
-                if len(lines) == 1:
-                    label = f"line {lines[0]}"
-                else:
-                    label = f"lines {lines[0]}–{lines[-1]}"
+                lines_texts = [self._extract_cursor_text(s) for s in group_stmts]
+                seen_txt = set()
+                clean_texts = []
+                for t in lines_texts:
+                    if t and t not in seen_txt:
+                        seen_txt.add(t)
+                        clean_texts.append(t)
+                label = "\n".join(clean_texts) if clean_texts else self._extract_source_lines(lines)
 
                 self.add_node(
                     CFGNode(
@@ -432,12 +528,16 @@ class StaticCFGBuilder:
                 "head": loop_id,
             }
 
+            start_node_idx = len(self.nodes)
             body_in = [_EdgePending(source=loop_id, label="true", source_handle="true")]
             body_out = self._build_stmt(body, body_in, sub_ctx, end_id) if body else body_in
 
             # Back-edges to loop condition
             for p in body_out + cont_edges:
                 self.add_edge(p.source, loop_id, p.label, p.source_handle, target_handle="loop-back")
+
+            loop_node = next(n for n in self.nodes if n.id == loop_id)
+            loop_node.children = [self.nodes[idx].id for idx in range(start_node_idx, len(self.nodes))]
 
             # Loop exit [false] + break exits
             return [_EdgePending(source=loop_id, label="false", source_handle="false")] + break_edges
@@ -483,12 +583,15 @@ class StaticCFGBuilder:
         # ── Return Statement ──────────────────────────────────────────────────
         if kind == clang.CursorKind.RETURN_STMT:
             ret_id = self.new_id("ret")
+            label = self._extract_cursor_text(cursor)
+            if not label or not label.startswith("return"):
+                label = f"return"
             self.add_node(
                 CFGNode(
                     id=ret_id,
                     type=CFGNodeType.LINE,
                     lines=[line],
-                    label=f"return (line {line})",
+                    label=label,
                     trace_indices=[],
                 )
             )
@@ -589,12 +692,13 @@ class StaticCFGBuilder:
 
         # ── General Fallback Line Node ────────────────────────────────────────
         node_id = self.new_id("line")
+        label = self._extract_cursor_text(cursor)
         self.add_node(
             CFGNode(
                 id=node_id,
                 type=CFGNodeType.LINE,
                 lines=[line],
-                label=f"line {line}",
+                label=label,
                 trace_indices=[],
             )
         )

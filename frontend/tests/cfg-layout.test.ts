@@ -86,4 +86,34 @@ describe("cfgLayout — multi-function swimlanes and handles", () => {
     const branchFalse = flowEdges.find((e) => e.source === "branch_2" && e.target === "else_4");
     assert.equal(branchFalse?.sourceHandle, "false", "Branch false edge must carry sourceHandle='false'");
   });
+
+  it("ranks loop exit strictly below loop body leaves (no side-by-side ladder)", () => {
+    invalidateLayoutCache();
+
+    const nodes: CFGNode[] = [
+      { id: "loop_1", type: "loop", lines: [8], label: "for (int u = 0; u < n; ++u)", children: [], trace_indices: [0], is_untaken: false },
+      { id: "body_1", type: "line", lines: [9], label: "indeg[v]++", children: [], trace_indices: [1], is_untaken: false },
+      { id: "exit_1", type: "line", lines: [11], label: "queue<int> q", children: [], trace_indices: [2], is_untaken: false },
+    ];
+
+    const edges: CFGEdge[] = [
+      { source: "loop_1", target: "body_1", label: "true", source_handle: "true", target_handle: null, is_untaken: false },
+      { source: "body_1", target: "loop_1", label: "", source_handle: null, target_handle: "loop-back", is_untaken: false },
+      { source: "loop_1", target: "exit_1", label: "false", source_handle: "false", target_handle: null, is_untaken: false },
+    ];
+
+    const { nodes: positioned } = layoutCFG(nodes, edges, null);
+
+    const loopNode = positioned.find((n) => n.id === "loop_1")!;
+    const bodyNode = positioned.find((n) => n.id === "body_1")!;
+    const exitNode = positioned.find((n) => n.id === "exit_1")!;
+
+    // loopNode is at top
+    assert.ok(bodyNode.position.y > loopNode.position.y, "body must be below loop header");
+    // exitNode MUST be below bodyNode (not at the same rank side-by-side!)
+    assert.ok(
+      exitNode.position.y > bodyNode.position.y,
+      `exitNode y (${exitNode.position.y}) must be strictly greater than bodyNode y (${bodyNode.position.y})`,
+    );
+  });
 });

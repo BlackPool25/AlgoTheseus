@@ -34,15 +34,16 @@ import { TraceEdge } from "./edges/TraceEdge";
 import { BranchNode } from "./nodes/BranchNode";
 import { LineNode } from "./nodes/LineNode";
 import { LoopNode } from "./nodes/LoopNode";
-import { RecursionTreeNode } from "./nodes/RecursionTreeNode";
+import { CallNode } from "./nodes/CallNode";
+import { FuncStartNode, FuncEndNode } from "./nodes/FuncNode";
 
 const NODE_TYPES = {
   line:       LineNode,
   branch:     BranchNode,
   loop:       LoopNode,
-  func_start: LineNode,
-  func_end:   LineNode,
-  func_call:  RecursionTreeNode,
+  func_start: FuncStartNode,
+  func_end:   FuncEndNode,
+  func_call:  CallNode,
 };
 
 const EDGE_TYPES = {

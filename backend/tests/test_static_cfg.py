@@ -52,7 +52,7 @@ def test_if_else_diamond():
     assert true_edge.target != false_edge.target
 
     # Find merge node (line containing 'int c = 3')
-    merge_nodes = [n for n in nodes if any("lines 8" in n.label or "line 8" in n.label for _ in [1])]
+    merge_nodes = [n for n in nodes if 8 in n.lines or "int c = 3" in n.label]
     assert len(merge_nodes) >= 1
     merge_id = merge_nodes[0].id
 
@@ -279,3 +279,35 @@ def test_try_catch_block():
     nodes, edges = build_static_cfg(code, [])
     catch_edge = next(e for e in edges if e.label == "catch")
     assert catch_edge is not None
+
+
+def test_func_call_and_code_labels():
+    code = """
+    int helper(int a) {
+        return a + 1;
+    }
+    int main() {
+        int x = 10;
+        int y = helper(x);
+        return 0;
+    }
+    """
+    nodes, edges = build_static_cfg(code, [])
+    assert nodes is not None
+
+    # Verify helper() and main() nodes
+    helper_nodes = [n for n in nodes if n.func == "helper"]
+    main_nodes = [n for n in nodes if n.func == "main"]
+    assert len(helper_nodes) >= 3
+    assert len(main_nodes) >= 4
+
+    # Verify func_call node is detected for helper(x)
+    call_nodes = [n for n in nodes if n.type == CFGNodeType.FUNC_CALL]
+    assert len(call_nodes) == 1
+    assert call_nodes[0].call_target == "helper"
+    assert "helper(x)" in call_nodes[0].label
+
+    # Verify real source statements in labels
+    assert any("int x = 10;" in n.label for n in main_nodes)
+    assert any("return 0;" in n.label for n in main_nodes)
+    assert any("return a + 1;" in n.label for n in helper_nodes)

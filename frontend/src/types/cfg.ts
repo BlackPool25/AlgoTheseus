@@ -19,6 +19,7 @@ export interface CFGNode {
   trace_indices: number[];
   is_untaken?: boolean;
   func?: string;
+  call_target?: string | null;
 }
 
 export interface CFGEdge {

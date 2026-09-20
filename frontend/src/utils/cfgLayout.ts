@@ -24,10 +24,10 @@ import dagre from "@dagrejs/dagre";
 import type { Edge, Node } from "@xyflow/react";
 import type { CFGEdge, CFGNode } from "../types/cfg";
 
-const NODE_WIDTH = 220;
-const NODE_HEIGHT = 60;
-const BRANCH_WIDTH = 240;
-const FUNCTION_GAP = 140;
+const NODE_WIDTH = 260;
+const NODE_HEIGHT = 68;
+const BRANCH_WIDTH = 270;
+const FUNCTION_GAP = 160;
 
 /**
  * Module-level layout cache.
@@ -118,8 +118,8 @@ function runDagre(
     g.setDefaultEdgeLabel(() => ({}));
     g.setGraph({
       rankdir: "TB",
-      nodesep: 50,
-      ranksep: 70,
+      nodesep: 45,
+      ranksep: 65,
       edgesep: 25,
     });
 
@@ -128,8 +128,42 @@ function runDagre(
       g.setNode(n.id, { width: w, height: NODE_HEIGHT });
     }
 
+    // 1. Identify back-edges and loop leaves
+    const backEdges = comp.edges.filter(
+      (e) => e.target_handle === "loop-back",
+    );
+    const backEdgeSourcesByLoop = new Map<string, string[]>();
+    for (const be of backEdges) {
+      if (!backEdgeSourcesByLoop.has(be.target)) {
+        backEdgeSourcesByLoop.set(be.target, []);
+      }
+      backEdgeSourcesByLoop.get(be.target)!.push(be.source);
+    }
+
+    // 2. Add forward edges to Dagre (EXCLUDE back-edges to keep the graph a strict DAG)
     for (const e of comp.edges) {
-      g.setEdge(e.source, e.target);
+      if (e.target_handle === "loop-back") {
+        continue;
+      }
+      // Sequential unlabelled edges get higher weight to stay vertically straight
+      const weight = e.label ? 1 : 2;
+      g.setEdge(e.source, e.target, { weight });
+    }
+
+    // 3. For each loop, add virtual ordering constraint from loop body leaves to exit node
+    for (const n of comp.nodes) {
+      if (n.type === "loop") {
+        const falseEdge = comp.edges.find(
+          (e) => e.source === n.id && (e.source_handle === "false" || e.label === "false"),
+        );
+        const loopLeaves = backEdgeSourcesByLoop.get(n.id) || [];
+        if (falseEdge && loopLeaves.length > 0) {
+          for (const leafId of loopLeaves) {
+            // Virtual ordering edge: ensures the exit node is placed BELOW all loop body leaves
+            g.setEdge(leafId, falseEdge.target, { minlen: 1, weight: 0 });
+          }
+        }
+      }
     }
 
     dagre.layout(g);
@@ -209,6 +243,7 @@ export function layoutCFG(
         isUntaken: Boolean(n.is_untaken || (n.trace_indices && n.trace_indices.length === 0)),
         children: n.children,
         func: n.func,
+        call_target: n.call_target,
       },
     };
   });

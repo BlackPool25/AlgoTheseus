@@ -54,15 +54,23 @@ class _BuildState:
         self.edges.append(CFGEdge(source=source, target=target, label=label))
 
 
-def build(events: list[Any]) -> tuple[list[CFGNode], list[CFGEdge]]:
-    """Build a CFG from a flat list of trace events.
+def build(events: list[Any], code: str | None = None) -> tuple[list[CFGNode], list[CFGEdge]]:
+    """Build a CFG from static AST analysis (when code is available) or flat trace events.
 
     Args:
         events: List of TraceEvent objects from parser.parse().
+        code: Optional C++ source code. When provided, builds a full static
+              CFG tree with all branches and loops, and overlays runtime trace steps.
 
     Returns:
         Tuple of (nodes, edges) for the React Flow graph.
     """
+    if code and code.strip():
+        from .static_cfg import build_static_cfg
+
+        res = build_static_cfg(code, events)
+        if res is not None:
+            return res
     state = _BuildState()
 
     # Track the current "open" LINE node being accumulated

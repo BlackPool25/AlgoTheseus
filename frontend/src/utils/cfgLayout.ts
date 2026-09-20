@@ -124,23 +124,33 @@ export function layoutCFG(
         lines: n.lines,
         traceIndices: n.trace_indices,
         isActive: n.id === activeId,
+        isUntaken: Boolean(n.is_untaken || (n.trace_indices && n.trace_indices.length === 0)),
         children: n.children,
       },
     };
   });
 
   // Convert edges with animated style for active path
-  const edges: Edge[] = cfgEdges.map((e) => ({
-    id: `${e.source}-${e.target}`,
-    source: e.source,
-    target: e.target,
-    label: e.label || undefined,
-    type: "trace", // our custom animated edge
-    animated: false,
-    style: { stroke: "var(--viz-panel-border)", strokeWidth: 1.5 },
-    labelStyle: { fill: "var(--viz-alias-edge)", fontSize: 10 },
-    labelBgStyle: { fill: "var(--viz-body-bg)" },
-  }));
+  const edges: Edge[] = cfgEdges.map((e) => {
+    const handle =
+      e.source_handle ??
+      (e.label === "true" ? "true" : e.label === "false" ? "false" : undefined);
+    return {
+      id: `${e.source}-${e.target}-${e.label || ""}`,
+      source: e.source,
+      target: e.target,
+      sourceHandle: handle,
+      label: e.label || undefined,
+      type: "trace", // our custom animated edge
+      animated: false,
+      style: { stroke: "var(--viz-panel-border)", strokeWidth: 1.5 },
+      labelStyle: { fill: "var(--viz-alias-edge)", fontSize: 10 },
+      labelBgStyle: { fill: "var(--viz-body-bg)" },
+      data: {
+        isUntaken: Boolean(e.is_untaken),
+      },
+    };
+  });
 
   return { nodes, edges };
 }

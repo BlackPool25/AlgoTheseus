@@ -25,7 +25,9 @@ export function TraceEdge({
   data,
   markerEnd,
 }: EdgeProps) {
-  const isActive = (data as { isActive?: boolean } | undefined)?.isActive ?? false;
+  const edgeData = data as { isActive?: boolean; isUntaken?: boolean } | undefined;
+  const isActive = edgeData?.isActive ?? false;
+  const isUntaken = edgeData?.isUntaken ?? false;
 
   const [edgePath, labelX, labelY] = getBezierPath({
     sourceX,
@@ -43,10 +45,16 @@ export function TraceEdge({
         path={edgePath}
         markerEnd={markerEnd}
         style={{
-          stroke: isActive ? "var(--viz-accent)" : "var(--viz-panel-border)",
-          strokeWidth: isActive ? 2 : 1.5,
-          filter: isActive ? "drop-shadow(0 0 4px color-mix(in srgb, var(--viz-accent) 53%, transparent))" : undefined,
-          transition: "stroke 0.2s, stroke-width 0.2s",
+          stroke: isActive
+            ? "var(--viz-accent)"
+            : "var(--viz-panel-border)",
+          strokeWidth: isActive ? 2.5 : 1.5,
+          strokeDasharray: isUntaken && !isActive ? "4 4" : undefined,
+          opacity: isUntaken && !isActive ? 0.35 : 1,
+          filter: isActive
+            ? "drop-shadow(0 0 6px color-mix(in srgb, var(--viz-accent) 70%, transparent))"
+            : undefined,
+          transition: "stroke 0.2s, stroke-width 0.2s, opacity 0.2s",
         }}
       />
       {label && (
@@ -57,7 +65,13 @@ export function TraceEdge({
               transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
               pointerEvents: "all",
             }}
-            className="text-[10px] px-1 rounded bg-viz-body text-viz-ink/60 border border-viz-line"
+            className={`text-[9px] font-mono px-1.5 py-0.5 rounded border shadow-xs transition-opacity ${
+              label === "true"
+                ? "bg-emerald-950/90 text-emerald-300 border-emerald-500/50 font-semibold"
+                : label === "false"
+                ? "bg-rose-950/90 text-rose-300 border-rose-500/50 font-semibold"
+                : "bg-viz-body text-viz-ink/60 border-viz-line"
+            } ${isUntaken && !isActive ? "opacity-40" : "opacity-100"}`}
           >
             {String(label)}
           </div>

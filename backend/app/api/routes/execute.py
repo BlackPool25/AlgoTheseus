@@ -786,7 +786,7 @@ async def _stream_resolved(resolved: _Resolved) -> AsyncGenerator[bytes, None]:
         yield (payload + "\n").encode()
 
     # ── Build CFG ─────────────────────────────────────────────────────
-    cfg_nodes, cfg_edges = await asyncio.to_thread(build_cfg, events)
+    cfg_nodes, cfg_edges = await asyncio.to_thread(build_cfg, events, req.code)
 
     # Determine runtime error
     runtime_error: str | None = None
@@ -916,7 +916,7 @@ async def execute(
         logger.debug("Failed to write trace debug file", exc_info=True)
 
     # Build CFG
-    cfg_nodes, cfg_edges = await asyncio.to_thread(build_cfg, events)
+    cfg_nodes, cfg_edges = await asyncio.to_thread(build_cfg, events, req.code)
 
     # Determine runtime error
     runtime_error: str | None = None
@@ -1111,7 +1111,7 @@ async def execute_batch(
 
         # Parse trace and build CFG
         events = await asyncio.to_thread(parse_trace, run_result.trace_raw)
-        cfg_nodes, cfg_edges = await asyncio.to_thread(build_cfg, events)
+        cfg_nodes, cfg_edges = await asyncio.to_thread(build_cfg, events, req.code)
 
         # Determine runtime error
         runtime_error: str | None = None

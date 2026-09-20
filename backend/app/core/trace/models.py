@@ -126,9 +126,12 @@ class CFGNode(BaseModel):
     label: str  # display label shown in the flowchart
     children: list[str] = []  # child node IDs (for expandable loop/recursion nodes)
     trace_indices: list[int]  # which trace steps map to this node
+    is_untaken: bool = False  # True if this node was never executed in this run
 
 
 class CFGEdge(BaseModel):
     source: str
     target: str
     label: str = ""
+    source_handle: str | None = None
+    is_untaken: bool = False

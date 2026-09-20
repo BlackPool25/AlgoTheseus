@@ -485,14 +485,35 @@ export function TraceFlow() {
       },
     }));
 
-    // Mark active edges (edges leading to the active node)
-    const edgesWithActive = edges.map((e) => ({
-      ...e,
-      data: { isActive: e.target === activeId },
-    }));
+    // Determine previous active node to illuminate the exact traversed edge
+    const prevNode =
+      currentStep > 0
+        ? visibleNodes.find((n) => (n.trace_indices ?? []).includes(currentStep - 1))
+        : null;
+    const prevActiveId = prevNode?.id ?? null;
+
+    const hasDirectActiveEdge = Boolean(
+      prevActiveId &&
+        prevActiveId !== activeId &&
+        edges.some((e) => e.source === prevActiveId && e.target === activeId)
+    );
+
+    // Mark active edges
+    const edgesWithActive = edges.map((e) => {
+      const isTransition = hasDirectActiveEdge
+        ? e.source === prevActiveId && e.target === activeId
+        : e.target === activeId && !(e.data as { isUntaken?: boolean } | undefined)?.isUntaken;
+      return {
+        ...e,
+        data: {
+          ...e.data,
+          isActive: isTransition,
+        },
+      };
+    });
 
     return { nodes: nodesWithActive, edges: edgesWithActive };
-  }, [visibleNodes, visibleEdges, activeId, trace]);
+  }, [visibleNodes, visibleEdges, activeId, currentStep, trace]);
 
   if (cfgNodes.length === 0) {
     return (

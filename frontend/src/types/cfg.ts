@@ -17,10 +17,13 @@ export interface CFGNode {
   label: string;
   children: string[];
   trace_indices: number[];
+  is_untaken?: boolean;
 }
 
 export interface CFGEdge {
   source: string;
   target: string;
   label: string;
+  source_handle?: string | null;
+  is_untaken?: boolean;
 }

@@ -41,3 +41,7 @@ frontend/debug-*.png
 frontend/bench/*.json
 coverage/
 *.log
+
+# Local launch drafts (never publish)
+linkedin-post.txt
+linkedin-post-comments.txt

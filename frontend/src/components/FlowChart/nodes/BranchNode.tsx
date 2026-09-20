@@ -10,40 +10,88 @@ export function BranchNode({ data }: NodeProps) {
   const lineBadge =
     d.lines && d.lines.length > 0 ? `L${d.lines[0]}` : "";
 
+  const containerStyle = d.isActive
+    ? {
+        backgroundColor: "var(--flow-active-bg)",
+        borderColor: "var(--flow-active-border)",
+        color: "var(--flow-active-text)",
+        boxShadow: "0 0 14px var(--flow-active-shadow)",
+      }
+    : d.isUntaken
+    ? {
+        backgroundColor: "var(--flow-untaken-bg)",
+        borderColor: "var(--flow-untaken-border)",
+        color: "var(--flow-untaken-text)",
+      }
+    : {
+        backgroundColor: "var(--flow-branch-bg)",
+        borderColor: "var(--flow-branch-border)",
+        color: "var(--flow-branch-code)",
+      };
+
   return (
     <div
       title={d.label}
-      style={{ width: 270, height: 68 }}
+      style={{ width: 270, height: 68, ...containerStyle }}
       className={`relative px-3 py-2 rounded-lg border text-left flex flex-col justify-center transition-all shadow-xs select-none ${
-        d.isActive
-          ? "border-amber-400 bg-amber-950/40 text-amber-200 shadow-[0_0_14px_rgba(251,191,36,0.35)]"
-          : d.isUntaken
-          ? "border-dashed border-zinc-700/50 bg-zinc-900/30 text-zinc-500/70 opacity-45"
-          : "border-blue-700/70 bg-blue-950/30 text-blue-200 hover:border-blue-600"
+        d.isUntaken && !d.isActive ? "border-dashed opacity-45" : ""
       }`}
     >
-      <Handle type="target" position={Position.Top} className="!bg-blue-500 !w-2.5 !h-2.5" />
+      <Handle
+        type="target"
+        position={Position.Top}
+        style={{ backgroundColor: "var(--flow-branch-border)" }}
+        className="!w-2.5 !h-2.5"
+      />
 
       {/* Header Row */}
-      <div className="flex items-center justify-between gap-1 text-[10px] font-mono leading-none mb-1 opacity-75">
+      <div className="flex items-center justify-between gap-1 text-[10px] font-mono leading-none mb-1 opacity-90">
         <div className="flex items-center gap-1.5">
-          <span className="font-semibold uppercase tracking-wider text-[9px] text-blue-400">
+          <span
+            style={{
+              color: d.isActive
+                ? "var(--flow-active-border)"
+                : d.isUntaken
+                ? "var(--flow-untaken-text)"
+                : "var(--flow-branch-title)",
+            }}
+            className="font-semibold uppercase tracking-wider text-[9px]"
+          >
             Branch
           </span>
           {lineBadge && (
-            <span className="bg-muted/60 px-1 py-0.5 rounded text-[9px] text-foreground/70">
+            <span
+              style={{
+                backgroundColor: "var(--flow-branch-badge-bg)",
+                color: d.isActive
+                  ? "var(--flow-active-text)"
+                  : d.isUntaken
+                  ? "var(--flow-untaken-text)"
+                  : "var(--flow-branch-title)",
+              }}
+              className="px-1 py-0.5 rounded text-[9px]"
+            >
               {lineBadge}
             </span>
           )}
         </div>
         <div className="flex items-center gap-1.5 text-[8px]">
-          <span className="text-emerald-400 font-bold">T: Left</span>
-          <span className="text-rose-400 font-bold">F: Right</span>
+          <span style={{ color: "var(--flow-true-handle)" }} className="font-bold">T: Left</span>
+          <span style={{ color: "var(--flow-false-handle)" }} className="font-bold">F: Right</span>
         </div>
       </div>
 
       {/* Condition Text */}
-      <div className="text-xs font-mono font-medium truncate leading-tight text-blue-100">
+      <div
+        style={{
+          color: d.isActive
+            ? "var(--flow-active-text)"
+            : d.isUntaken
+            ? "var(--flow-untaken-text)"
+            : "var(--flow-branch-code)",
+        }}
+        className="text-xs font-mono font-medium truncate leading-tight"
+      >
         {d.label}
       </div>
 
@@ -52,15 +100,15 @@ export function BranchNode({ data }: NodeProps) {
         type="source"
         position={Position.Bottom}
         id="true"
-        style={{ left: "30%" }}
-        className="!bg-emerald-500 !w-2.5 !h-2.5 hover:scale-125 transition-transform"
+        style={{ left: "30%", backgroundColor: "var(--flow-true-handle)" }}
+        className="!w-2.5 !h-2.5 hover:scale-125 transition-transform"
       />
       <Handle
         type="source"
         position={Position.Bottom}
         id="false"
-        style={{ left: "70%" }}
-        className="!bg-rose-500 !w-2.5 !h-2.5 hover:scale-125 transition-transform"
+        style={{ left: "70%", backgroundColor: "var(--flow-false-handle)" }}
+        className="!w-2.5 !h-2.5 hover:scale-125 transition-transform"
       />
     </div>
   );

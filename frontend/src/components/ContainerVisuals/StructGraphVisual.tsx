@@ -12,6 +12,7 @@
  */
 
 import { useMemo } from "react";
+import { buildTreeLayout, type TreePos } from "../../utils/treeLayout";
 
 export type RenderAs = "tree" | "linked_list" | "graph";
 
@@ -28,36 +29,7 @@ interface Props {
   nextField?: string;    // for linked lists: next pointer field name
 }
 
-// ── Tree layout ───────────────────────────────────────────────────────────────
-
-interface TreePos {
-  x: number;
-  y: number;
-  label: string;
-  cycle?: boolean;
-  left?: TreePos;
-  right?: TreePos;
-}
-
-function buildTreeLayout(
-  node: StructNode | null,
-  labelField: string,
-  leftField: string,
-  rightField: string,
-  depth = 0,
-  offset = 0
-): TreePos | undefined {
-  if (!node || (node as { $depth_limit?: boolean }).$depth_limit) {
-    return undefined;
-  }
-  if ((node as { $cycle?: boolean }).$cycle) {
-    return { x: offset * 50, y: depth * 60, label: "↩", cycle: true };
-  }
-  const label = String(node[labelField] ?? "?");
-  const left = buildTreeLayout(node[leftField] as StructNode | null, labelField, leftField, rightField, depth + 1, offset - 1);
-  const right = buildTreeLayout(node[rightField] as StructNode | null, labelField, leftField, rightField, depth + 1, offset + 1);
-  return { x: offset * 50, y: depth * 60, label, left, right };
-}
+// ── Tree layout (inorder-index; see utils/treeLayout.ts) ───────────────────────
 
 function TreeSVG({ root }: { root: TreePos }) {
   const nodes: { x: number; y: number; label: string; cycle: boolean }[] = [];

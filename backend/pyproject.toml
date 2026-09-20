@@ -13,7 +13,7 @@ dependencies = [
     # wheel exists; it also collides with libclang on the `clang/` package dir).
     # _find_libclang must resolve the bundled native lib, never system libclang.
     "libclang==18.1.1",
-    "docker==7.1.0",
+    "docker==7.2.0",
     "httpx==0.28.1",
     "slowapi==0.1.10",
     "orjson>=3",

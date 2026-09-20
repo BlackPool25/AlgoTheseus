@@ -622,6 +622,7 @@ class _Resolved:
     input_error: str | None = None
     instrumentation_error: str | None = None
     sandbox_error: str | None = None
+    code: str = ""
 
 
 async def _resolve(req: ExecuteRequest, kind: str) -> _Resolved:
@@ -646,7 +647,7 @@ async def _resolve(req: ExecuteRequest, kind: str) -> _Resolved:
     # program loops on garbage until the sandbox kills it (seconds wasted,
     # cryptic timeout). Never burn a sandbox slot on this shape.
     if not cleaned_stdin.strip() and await asyncio.to_thread(_reads_stdin, req.code):
-        return _Resolved(cleaned_stdin=cleaned_stdin, input_error=INPUT_REQUIRED_DETAIL)
+        return _Resolved(cleaned_stdin=cleaned_stdin, input_error=INPUT_REQUIRED_DETAIL, code=req.code)
 
     # ── Step 2: Instrument (or reuse the cached instrumented source) ──────
     skey = source_key(req.code, flags)
@@ -660,7 +661,7 @@ async def _resolve(req: ExecuteRequest, kind: str) -> _Resolved:
         try:
             instrumented = await asyncio.to_thread(instrument, req.code, None, warnings)
         except (RuntimeError, ValueError, OSError) as e:
-            return _Resolved(cleaned_stdin=cleaned_stdin, instrumentation_error=str(e))
+            return _Resolved(cleaned_stdin=cleaned_stdin, instrumentation_error=str(e), code=req.code)
         await asyncio.to_thread(
             cache.put, skey, {"instrumented": instrumented, "warnings": warnings}
         )
@@ -702,6 +703,7 @@ async def _resolve(req: ExecuteRequest, kind: str) -> _Resolved:
             trace_call_count=trace_call_count,
             warnings=warnings,
             sandbox_error=str(e),
+            code=req.code,
         )
     return _Resolved(
         cleaned_stdin=cleaned_stdin,
@@ -710,6 +712,7 @@ async def _resolve(req: ExecuteRequest, kind: str) -> _Resolved:
         warnings=warnings,
         run_result=run_result,
         cache_hit=cache_hit,
+        code=req.code,
     )
 
 
@@ -786,7 +789,7 @@ async def _stream_resolved(resolved: _Resolved) -> AsyncGenerator[bytes, None]:
         yield (payload + "\n").encode()
 
     # ── Build CFG ─────────────────────────────────────────────────────
-    cfg_nodes, cfg_edges = await asyncio.to_thread(build_cfg, events)
+    cfg_nodes, cfg_edges = await asyncio.to_thread(build_cfg, events, resolved.code)
 
     # Determine runtime error
     runtime_error: str | None = None
@@ -916,7 +919,7 @@ async def execute(
         logger.debug("Failed to write trace debug file", exc_info=True)
 
     # Build CFG
-    cfg_nodes, cfg_edges = await asyncio.to_thread(build_cfg, events)
+    cfg_nodes, cfg_edges = await asyncio.to_thread(build_cfg, events, req.code)
 
     # Determine runtime error
     runtime_error: str | None = None
@@ -1111,7 +1114,7 @@ async def execute_batch(
 
         # Parse trace and build CFG
         events = await asyncio.to_thread(parse_trace, run_result.trace_raw)
-        cfg_nodes, cfg_edges = await asyncio.to_thread(build_cfg, events)
+        cfg_nodes, cfg_edges = await asyncio.to_thread(build_cfg, events, req.code)
 
         # Determine runtime error
         runtime_error: str | None = None

@@ -28,7 +28,12 @@ export const useCFGStore = create<CFGStore>((set, get) => ({
   activeNodeId: null,
 
   loadCFG: (nodes, edges) =>
-    set({ nodes, edges, expandedNodeIds: new Set(), activeNodeId: null }),
+    set({
+      nodes,
+      edges,
+      expandedNodeIds: new Set(nodes.filter((n) => n.type === "loop").map((n) => n.id)),
+      activeNodeId: null,
+    }),
 
   setActiveNode: (id) => set({ activeNodeId: id }),
 

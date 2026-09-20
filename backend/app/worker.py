@@ -49,7 +49,7 @@ async def _run_payload(payload: dict) -> dict:
         resp = ExecuteResponse(stdout="", compile_error=run_result.compile_error)
         return jsonable_encoder(resp, by_alias=False)
     events = await asyncio.to_thread(parse_trace, run_result.trace_raw, compressed=req.compressed)
-    cfg_nodes, cfg_edges = await asyncio.to_thread(build_cfg, events)
+    cfg_nodes, cfg_edges = await asyncio.to_thread(build_cfg, events, req.code)
     runtime_error: str | None = None
     if run_result.timed_out:
         runtime_error = "Execution timed out (10s limit)"

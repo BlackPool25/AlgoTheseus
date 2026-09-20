@@ -55,18 +55,20 @@ def _make_vars_args(var_names: list[str]) -> str:
 def _trace_enter(point: InjectionPoint) -> str:
     params_args = _make_vars_args(point.param_names)
     sep = ", " if params_args else ""
+    line = point.orig_line if point.orig_line is not None else point.line
     return (
-        f'__TRACE_FUNC_ENTER({point.line}, "{point.func_name}", {point.depth}{sep}{params_args});'
+        f'__TRACE_FUNC_ENTER({line}, "{point.func_name}", {point.depth}{sep}{params_args});'
     )
 
 
 def _trace_exit(point: InjectionPoint) -> str:
     """Emit __TRACE_FUNC_EXIT with the return expression captured."""
+    line = point.orig_line if point.orig_line is not None else point.line
     ret_expr = point.condition_text  # we reuse condition_text to carry the return expr
     if ret_expr and ret_expr != "?":
-        return f'__TRACE_FUNC_EXIT({point.line}, "{point.func_name}", {point.depth}, ({ret_expr}));'
+        return f'__TRACE_FUNC_EXIT({line}, "{point.func_name}", {point.depth}, ({ret_expr}));'
     # void return or no expression
-    return f'__TRACE_FUNC_EXIT_VOID({point.line}, "{point.func_name}", {point.depth});'
+    return f'__TRACE_FUNC_EXIT_VOID({line}, "{point.func_name}", {point.depth});'
 
 
 def _trace_state(
@@ -74,6 +76,7 @@ def _trace_state(
     scope: FunctionScope | None,
     global_vars: list[str] | None = None,
     insert_line: int | None = None,
+    line_map: dict[int, int] | None = None,
 ) -> str:
     # Post-declaration snapshot: a STATE after `int x = 5;` sees x.
     var_names = list(point.var_names)
@@ -115,13 +118,14 @@ def _trace_state(
     # Globals shadowed by a same-named local read as the local — drop them
     # from the globals pack so `g` never mislabels a local value.
     g_names = [g for g in (global_vars or []) if g not in var_names]
+    orig_l = point.orig_line if point.orig_line is not None else point.line
     if not g_names:
         sep = ", " if vars_args else ""
-        return f'__TRACE_STATE({point.line}, "{point.func_name}", {point.depth}{sep}{vars_args});'
+        return f'__TRACE_STATE({orig_l}, "{point.func_name}", {point.depth}{sep}{vars_args});'
     # Commas inside __vars_build(...) are paren-protected, so _G takes 5 args.
     v_json = f"__vars_build({vars_args})" if vars_args else "__vars_build()"
     g_json = f"__vars_build({_make_vars_args(g_names)})"
-    return f'__TRACE_STATE_G({point.line}, "{point.func_name}", {point.depth}, {v_json}, {g_json});'
+    return f'__TRACE_STATE_G({orig_l}, "{point.func_name}", {point.depth}, {v_json}, {g_json});'
 
 
 def _trace_branch(point: InjectionPoint, value_expr: str | None = None) -> str:
@@ -135,12 +139,13 @@ def _trace_branch(point: InjectionPoint, value_expr: str | None = None) -> str:
     # Hoisted single-evaluation path passes the temp name; otherwise the
     # condition text itself is spliced (pure conditions stay byte-identical).
     val = value_expr if value_expr is not None else f"({cond_expr})"
+    line = point.orig_line if point.orig_line is not None else point.line
     ops_vars = list(getattr(point, "cond_vars", []))
     if not ops_vars:
-        return f'__TRACE_BRANCH({point.line}, "{point.func_name}", {point.depth}, "{cond}", {val});'
+        return f'__TRACE_BRANCH({line}, "{point.func_name}", {point.depth}, "{cond}", {val});'
     ops_args = ", ".join(f'"{v}", {v}' for v in ops_vars)
     return (
-        f'__TRACE_BRANCH_OPS({point.line}, "{point.func_name}", {point.depth}, '
+        f'__TRACE_BRANCH_OPS({line}, "{point.func_name}", {point.depth}, '
         f'"{cond}", {val}, {ops_args});'
     )
 
@@ -333,8 +338,9 @@ def _try_hoist_branch(
 
 
 def _trace_loop_iter(point: InjectionPoint) -> str:
+    line = point.orig_line if point.orig_line is not None else point.line
     return (
-        f'__TRACE_LOOP_ITER({point.line}, "{point.func_name}", {point.depth}, '
+        f'__TRACE_LOOP_ITER({line}, "{point.func_name}", {point.depth}, '
         f"{point.counter_var}++);"
     )
 
@@ -852,7 +858,7 @@ def _is_safe_return_expr(expr: str) -> bool:
     return True
 
 
-def _expand_single_line_bodies(source: str) -> str:
+def _expand_single_line_bodies(source: str) -> tuple[str, dict[int, int]]:
     """Split single-line compound bodies into one-statement-per-line form.
 
     Fix 5 (trace-zero): the injector skips whole functions whose body sits
@@ -866,15 +872,16 @@ def _expand_single_line_bodies(source: str) -> str:
     at libclang statement boundaries: after a single-line compound's ``{``,
     after each direct child's extent end, and at the compound's end. Split
     points come from libclang extent offsets only — no textual C++ parsing.
-    Sources without single-line compounds return unchanged.
+    Sources without single-line compounds return unchanged with an identity line map.
     """
+    default_map = {i: i for i in range(1, len(source.splitlines()) + 50)}
     try:
         if not re.search(r"\bfor\s*\(", source) and not any(
             "{" in ln and "}" in ln for ln in source.splitlines()
         ):
-            return source
+            return source, default_map
     except (AttributeError, ValueError):
-        return source
+        return source, default_map
     try:
         import clang.cindex as clang
 
@@ -976,13 +983,15 @@ def _expand_single_line_bodies(source: str) -> str:
                     children = list(node.get_children())
                 except (AttributeError, TypeError, RuntimeError, ValueError):
                     return
-                # Braceless range-for bodies are wrapped only when the body
-                # subtree holds a branch (if/switch): __TRACE_BRANCH splices
-                # the condition text, so it must land inside the loop. Plain
-                # bodies stay unwrapped (S8/R3) — their STATE lands post-loop
-                # with the loop var dropped by _trace_state's lifetime filter.
+                k = _kind(node)
+                # Braceless for / while / range-for bodies on a single line are wrapped
+                # so LOOP_ITER + body statements can be traced.
                 if (
-                    _kind(node) == clang.CursorKind.CXX_FOR_RANGE_STMT
+                    k in (
+                        clang.CursorKind.CXX_FOR_RANGE_STMT,
+                        clang.CursorKind.FOR_STMT,
+                        clang.CursorKind.WHILE_STMT,
+                    )
                     and _in_user(node)
                     and children
                 ):
@@ -991,21 +1000,31 @@ def _expand_single_line_bodies(source: str) -> str:
                     if (
                         bounds is not None
                         and _kind(body) != clang.CursorKind.COMPOUND_STMT
-                        and (
-                            _kind(body)
-                            in (
-                                clang.CursorKind.IF_STMT,
-                                clang.CursorKind.SWITCH_STMT,
-                            )
-                            or _subtree_has_branch(body)
-                        )
                     ):
-                        start, end = bounds
-                        end = _stmt_end(end)
-                        wrappers[start] = wrappers.get(start, "") + "{\n"
-                        wrappers[end] = "\n}" + wrappers.get(end, "")
-                        splits.add(end)
-                if _kind(node) == clang.CursorKind.COMPOUND_STMT and _in_user(node):
+                        is_single_line = (
+                            k in (clang.CursorKind.FOR_STMT, clang.CursorKind.WHILE_STMT)
+                            and node.extent.start.line == body.extent.end.line
+                            and _kind(body) not in (clang.CursorKind.IF_STMT, clang.CursorKind.SWITCH_STMT)
+                            and not _subtree_has_branch(body)
+                        )
+                        is_range_with_branch = (
+                            k == clang.CursorKind.CXX_FOR_RANGE_STMT
+                            and (
+                                _kind(body) in (
+                                    clang.CursorKind.IF_STMT,
+                                    clang.CursorKind.SWITCH_STMT,
+                                )
+                                or _subtree_has_branch(body)
+                            )
+                        )
+                        if is_single_line or is_range_with_branch:
+                            start, end = bounds
+                            end = _stmt_end(end)
+                            wrappers[start] = wrappers.get(start, "") + "{\n"
+                            wrappers[end] = "\n}" + wrappers.get(end, "")
+                            splits.add(end)
+
+                if k == clang.CursorKind.COMPOUND_STMT and _in_user(node):
                     bounds = _extent_ok(node)
                     try:
                         one_line = (
@@ -1032,19 +1051,58 @@ def _expand_single_line_bodies(source: str) -> str:
                     _visit(ch)
 
             _visit(tu.cursor)
-            if not splits:
-                return source
+            if not splits and not wrappers:
+                return source, default_map
             if any(off <= 0 or off > len(raw) for off in splits):
-                return source
-            for off in sorted(splits | wrappers.keys(), reverse=True):
-                insertion = wrappers.get(off, "") + ("\n" if off in splits else "")
-                raw = raw[:off] + insertion.encode("utf-8") + raw[off:]
-            return raw.decode("utf-8")
+                return source, default_map
+
+            orig_lines = [1] * (len(raw) + 1)
+            cur = 1
+            for idx, b in enumerate(raw):
+                orig_lines[idx] = cur
+                if b == 0x0A:
+                    cur += 1
+            orig_lines[len(raw)] = cur
+
+            all_offs = sorted(splits | wrappers.keys())
+            expanded_parts: list[bytes] = []
+            byte_origins: list[int] = []
+            last = 0
+            for off in all_offs:
+                expanded_parts.append(raw[last:off])
+                byte_origins.extend(orig_lines[last:off])
+                ins = (wrappers.get(off, "") + ("\n" if off in splits else "")).encode("utf-8")
+                expanded_parts.append(ins)
+                ins_orig = orig_lines[off] if off < len(orig_lines) else cur
+                byte_origins.extend([ins_orig] * len(ins))
+                last = off
+            expanded_parts.append(raw[last:])
+            byte_origins.extend(orig_lines[last:])
+
+            exp_bytes = b"".join(expanded_parts)
+            exp_text = exp_bytes.decode("utf-8")
+
+            exp_lines = exp_text.splitlines(keepends=True)
+            exp_to_orig: dict[int, int] = {}
+            byte_off = 0
+            for exp_line_num, line_str in enumerate(exp_lines, 1):
+                lb = line_str.encode("utf-8")
+                found = None
+                for k in range(byte_off, byte_off + len(lb)):
+                    if k < len(exp_bytes) and exp_bytes[k] not in (0x20, 0x09, 0x0A, 0x0D):
+                        found = byte_origins[k]
+                        break
+                if found is None:
+                    found = byte_origins[byte_off] if byte_off < len(byte_origins) else cur
+                exp_to_orig[exp_line_num] = found
+                byte_off += len(lb)
+
+            return exp_text, exp_to_orig
         finally:
             Path(_tmp_name).unlink(missing_ok=True)
     except (OSError, ValueError, RuntimeError, UnicodeError):
         logger.debug("single-line expansion skipped", exc_info=True)
-        return source
+        return source, default_map
 
 
 def instrument(
@@ -1070,7 +1128,7 @@ def instrument(
     _orig_source = source
     # Fix 5: walk/scope/serializer must parse the EXPANDED text (line
     # numbers diverge), so a changed source forces the temp-file path.
-    source = _expand_single_line_bodies(source)
+    source, line_map = _expand_single_line_bodies(source)
     parse_path = source_path
     if source_path is None or source != _orig_source:
         with tempfile.NamedTemporaryFile(suffix=".cpp", mode="w", delete=False) as _tmp:
@@ -1082,6 +1140,8 @@ def instrument(
     try:
         walk_result = walk(parse_path)
         scope_map = build_scope_map(parse_path)
+        for p in walk_result.injection_points:
+            p.orig_line = line_map.get(p.line, p.line)
     finally:
         if _tmp_name:
             Path(_tmp_name).unlink(missing_ok=True)
@@ -1227,7 +1287,7 @@ def instrument(
                 # handles the return value via the safe-expr/temp-var paths.
                 add_before(
                     point.line,
-                    _trace_state(point, scope, walk_result.global_vars, point.line),
+                    _trace_state(point, scope, walk_result.global_vars, point.line, line_map=line_map),
                 )
                 continue
             next_line = lines[insert_line].strip() if insert_line < len(lines) else ""
@@ -1261,17 +1321,17 @@ def instrument(
                         continue
                     add_after(
                         end,
-                        _trace_state(point, scope, walk_result.global_vars, end),
+                        _trace_state(point, scope, walk_result.global_vars, end, line_map=line_map),
                     )
                     continue
                 add_before(
                     point.line,
-                    _trace_state(point, scope, walk_result.global_vars, point.line),
+                    _trace_state(point, scope, walk_result.global_vars, point.line, line_map=line_map),
                 )
                 continue
             add_after(
                 insert_line,
-                _trace_state(point, scope, walk_result.global_vars, insert_line),
+                _trace_state(point, scope, walk_result.global_vars, insert_line, line_map=line_map),
             )
 
         elif point.kind == InjectKind.BRANCH:
@@ -1334,14 +1394,15 @@ def instrument(
 
             if _starts_with_return_word(line):
                 expr = line.strip()[len("return") :].strip().rstrip(";")
+                ret_line = line_map.get(i + 1, i + 1)
                 if not expr:
-                    add_before(i + 1, f'__TRACE_FUNC_EXIT_VOID({i + 1}, "{fn}", 0);')
+                    add_before(i + 1, f'__TRACE_FUNC_EXIT_VOID({ret_line}, "{fn}", 0);')
                     break
                 ret_var = f"__algotrace_ret_fallback_{fn}"
                 # P0-07/P0-08: same brace-block scoping as the main temp
                 # path — the temp never leaks to case/goto-crossed scope.
                 indent_fb = " " * (len(line) - len(line.lstrip()))
-                exit_fb = f'__TRACE_FUNC_EXIT({i + 1}, "{fn}", 0, ({ret_var}));'
+                exit_fb = f'__TRACE_FUNC_EXIT({ret_line}, "{fn}", 0, ({ret_var}));'
                 lines[i] = (
                     f"{indent_fb}{{ auto&& {ret_var} = ({expr}); "
                     f"{exit_fb} return {ret_var}; }}\n"

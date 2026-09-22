@@ -45,7 +45,7 @@ _TRACER_H = Path(__file__).parent.parent / "instrumenter" / "tracer.h"
 # - If compile fails, print errors to stderr and exit 1
 # - If compile succeeds, run with stdin from /mnt/code/input.txt
 _CONTAINER_SCRIPT = """
-g++ -O0 -g -std=c++17 -pipe -I /mnt/code -o /tmp/prog /mnt/code/prog.cpp 2>/tmp/compile_err
+g++ -O0 -g -std=c++17 -ftrivial-auto-var-init=zero -pipe -I /mnt/code -o /tmp/prog /mnt/code/prog.cpp 2>/tmp/compile_err
 if [ $? -ne 0 ]; then
     cat /tmp/compile_err >&2
     exit 1

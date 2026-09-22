@@ -123,7 +123,7 @@ class TestCrossInstance:
         assert b.get("big") is None  # skipped L1 -> cross-instance MISS
 
     def test_keys_and_flags_stable(self):
-        assert TOOLCHAIN_FLAGS == "g++ -O0 -g -std=c++17 -pipe"
+        assert TOOLCHAIN_FLAGS == "g++ -O0 -g -std=c++17 -ftrivial-auto-var-init=zero -pipe"
         assert source_key(CODE, {"t": 1}) == source_key(CODE, {"t": 1})
         assert result_key("i", "s", {"t": 1}) == result_key("i", "s", {"t": 1})
         assert source_key(CODE, {"t": 1}) != result_key(CODE, "s", {"t": 1})

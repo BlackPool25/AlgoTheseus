@@ -44,8 +44,33 @@
 #include <iostream>
 #include <unistd.h>
 #include <fcntl.h>
+#include <cstdint>
+#include <cerrno>
 
 inline std::unordered_set<const void*> __trace_freed_addresses;
+
+inline bool __is_readable_ptr(const void* p, size_t size = 1) {
+    if (!p) return false;
+    uintptr_t addr = reinterpret_cast<uintptr_t>(p);
+    if (addr < 4096 || addr >= 0x00007fffffffffffULL) return false;
+    static int pfd[2] = {-1, -1};
+    if (pfd[0] == -1) {
+        if (pipe(pfd) != 0) return false;
+        fcntl(pfd[0], F_SETFD, FD_CLOEXEC);
+        fcntl(pfd[1], F_SETFD, FD_CLOEXEC);
+        fcntl(pfd[0], F_SETFL, O_NONBLOCK);
+        fcntl(pfd[1], F_SETFL, O_NONBLOCK);
+    }
+    ssize_t w = write(pfd[1], p, size);
+    if (w < 0) return false;
+    char buf[128];
+    while (w > 0) {
+        ssize_t r = read(pfd[0], buf, (w > (ssize_t)sizeof(buf)) ? sizeof(buf) : w);
+        if (r <= 0) break;
+        w -= r;
+    }
+    return true;
+}
 
 template<typename T>
 T* __trace_allocated(T* p) {
@@ -515,6 +540,7 @@ std::string __ser(T (&arr)[N]) {
 template<typename T>
 std::string __ser_ptr(T* p, std::set<void*>& visited, int depth) {
     if (!p) return "null";
+    if (!__is_readable_ptr((const void*)p, sizeof(T))) return "null";
     if (depth > 50) return "{\"$depth_limit\":true}";
     if (visited.count((void*)p)) return "{\"$cycle\":true}";
     // For unknown pointer types, just show the address
@@ -528,6 +554,7 @@ template<typename T>
 std::enable_if_t<std::is_pointer_v<T>, std::string> __ser(const T& p) {
     if (!p) return "null";
     if constexpr (std::is_same_v<T, char*> || std::is_same_v<T, const char*>) {
+        if (!__is_readable_ptr((const void*)p, 1)) return "null";
         return __ser(std::string(p));
     } else {
         std::set<void*> visited;

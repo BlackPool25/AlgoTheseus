@@ -48,7 +48,7 @@ DEFAULT_TTL_SECONDS = 3600.0  # 1h TTL eviction
 
 # Toolchain identity baked into every key — bump when the sandbox compiler
 # flags change so stale binaries can never be served under a new toolchain.
-TOOLCHAIN_FLAGS = "g++ -O0 -g -std=c++17 -pipe"
+TOOLCHAIN_FLAGS = "g++ -O0 -g -std=c++17 -ftrivial-auto-var-init=zero -pipe"
 
 
 # Instrumenter identity baked into the source key — bump-proof: any edit to

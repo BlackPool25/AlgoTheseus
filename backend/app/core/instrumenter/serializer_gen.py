@@ -298,6 +298,8 @@ def _emit_struct(s: StructDef) -> str:
             lines.append(
                 f'    o << ",\\"{f.name}\\":";'
                 f'if (!obj.{f.name}) o << "null"; '
+                f'else if (__trace_freed_addresses.count((const void*)obj.{f.name})) {{ int fid = __heap_id_for((const void*)obj.{f.name}); o << "{{\\"$ref\\":" << fid << ",\\"$freed\\":true}}"; }} '
+                f'else if (!__is_readable_ptr((const void*)obj.{f.name}, sizeof({f.target}))) o << "null"; '
                 f"else o << __serialize_{f.target}"
                 f"(*obj.{f.name}, visited, emitted, depth + 1);"
             )
@@ -327,11 +329,19 @@ inline std::string __ser(const {s.name}& obj) {{
 }}
 inline std::string __ser({s.name}* p) {{
     if (!p) return "null";
+    void* addr = (void*)p;
+    int id = __heap_id_for(addr);
+    if (__trace_freed_addresses.count(addr)) return "{{\\"$ref\\":" + std::to_string(id) + ",\\"$freed\\":true}}";
+    if (!__is_readable_ptr(addr, sizeof({s.name}))) return "null";
     std::set<void*> visited, emitted;
     return __serialize_{s.name}(*p, visited, emitted, 0);
 }}
 inline std::string __ser(const {s.name}* p) {{
     if (!p) return "null";
+    void* addr = (void*)p;
+    int id = __heap_id_for(addr);
+    if (__trace_freed_addresses.count(addr)) return "{{\\"$ref\\":" + std::to_string(id) + ",\\"$freed\\":true}}";
+    if (!__is_readable_ptr(addr, sizeof({s.name}))) return "null";
     std::set<void*> visited, emitted;
     return __serialize_{s.name}(*p, visited, emitted, 0);
 }}
@@ -364,7 +374,13 @@ inline std::string __ser(const std::vector<{s.name}*>& v) {{
     for (size_t i = 0; i < v.size(); ++i) {{
         if (i) o << ",";
         if (!v[i]) o << "null";
-        else o << __serialize_{s.name}(*v[i], visited, emitted, 0);
+        else {{
+            void* addr = (void*)v[i];
+            int fid = __heap_id_for(addr);
+            if (__trace_freed_addresses.count(addr)) o << "{{\\"$ref\\":" << fid << ",\\"$freed\\":true}}";
+            else if (!__is_readable_ptr(addr, sizeof({s.name}))) o << "null";
+            else o << __serialize_{s.name}(*v[i], visited, emitted, 0);
+        }}
     }}
     o << "]}}";
     return o.str();

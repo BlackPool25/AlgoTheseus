@@ -216,6 +216,7 @@ def _compile_argv(cdir: Path) -> list[str]:
         "-O0",
         "-g",
         "-std=c++17",
+        "-ftrivial-auto-var-init=zero",
         "-pipe",
         "-ftemplate-depth=100",
         "-I",

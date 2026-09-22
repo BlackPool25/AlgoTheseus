@@ -1207,7 +1207,8 @@ def instrument(
                 return name
 
             def trace_exit_with(var_name: str, _point: InjectionPoint = point) -> str:
-                return f'__TRACE_FUNC_EXIT({_point.line}, "{_point.func_name}", {_point.depth}, ({var_name}));'
+                exit_line = _point.orig_line if _point.orig_line is not None else _point.line
+                return f'__TRACE_FUNC_EXIT({exit_line}, "{_point.func_name}", {_point.depth}, ({var_name}));'
 
             # Only inject when the line starts with 'return' to avoid breaking inline returns.
             if _starts_with_return_word(line_text):

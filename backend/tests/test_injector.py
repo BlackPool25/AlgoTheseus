@@ -176,3 +176,19 @@ class TestInjector:
         assert code == 0, f"instrumented multi-line if failed to compile:\n{stderr}"
         trace_lines = [l for l in stderr.splitlines() if l.startswith("TRACE:")]
         assert len(trace_lines) > 0, "No TRACE: lines produced"
+
+    def test_trace_exit_with_uses_orig_line_after_single_line_expansions(self):
+        """Functions with complex return expressions (handled by trace_exit_with)
+        must emit __TRACE_FUNC_EXIT with the original line number, not expanded line."""
+        source = (
+            "struct Node { int v; Node* n; Node(int x) : v(x), n(nullptr) {} };\n"
+            "Node* helper(Node* head) { if (!head) return head;\n"
+            "return head->n;\n"
+            "}\n"
+            "int main() { Node* h = new Node(1); helper(h); return 0; }\n"
+        )
+        instrumented = instrument(source, None)
+        # Line 3 is 'return head->n;' in original source.
+        # Even after single line body expansions, the exit line must be 3.
+        assert '__TRACE_FUNC_EXIT(3, "helper"' in instrumented
+

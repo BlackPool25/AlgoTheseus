@@ -32,6 +32,8 @@ function resolveGutterLines(
   let prev: number | null = null;
   if (currentEvent.type === "state" && currentEvent.prev_line != null) {
     prev = currentEvent.prev_line;
+  } else if (currentEvent.type === "exit" && currentEvent.return_line != null) {
+    prev = currentEvent.line;
   } else if (currentStep > 0 && currentStep <= trace.length) {
     prev = trace[currentStep - 1]?.line ?? null;
   }

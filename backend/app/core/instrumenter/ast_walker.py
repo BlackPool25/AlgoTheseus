@@ -70,6 +70,7 @@ class InjectKind(Enum):
 # R2 (M3): range-for is a distinct cursor kind, not FOR_STMT. getattr guard so
 # older bindings without it fall back gracefully (excluded from _LOOP_KINDS).
 _RANGE_FOR_KIND: clang.CursorKind | None = getattr(clang.CursorKind, "CXX_FOR_RANGE_STMT", None)
+_DECOMP_KIND: clang.CursorKind | None = getattr(clang.CursorKind, "DECOMPOSITION_DECL", None)
 _LOOP_KINDS: tuple = tuple(
     k
     for k in (
@@ -778,12 +779,19 @@ class ASTWalker:
             # A declaration names its own vars so the injector's scope merge
             # captures them even where the scope map has no entry yet.
             decl_names: list[str] = []
-            if kind == clang.CursorKind.DECL_STMT:
-                decl_names = [
-                    c.spelling
-                    for c in cursor.get_children()
-                    if c.kind == clang.CursorKind.VAR_DECL and c.spelling
-                ]
+            if kind == clang.CursorKind.DECL_STMT or (
+                _RANGE_FOR_KIND is not None and kind == _RANGE_FOR_KIND
+            ):
+                for c in cursor.get_children():
+                    if c.kind == clang.CursorKind.VAR_DECL and c.spelling:
+                        decl_names.append(c.spelling)
+                    elif (
+                        (c.spelling.startswith("[") and c.spelling.endswith("]"))
+                        or (_DECOMP_KIND is not None and c.kind == _DECOMP_KIND)
+                    ):
+                        for sub in c.get_children():
+                            if sub.kind.is_declaration() and sub.spelling and sub.spelling in c.spelling:
+                                decl_names.append(sub.spelling)
             self._maybe_emit_state(cursor, points, func_name, func_depth, seen, decl_names)
 
         # ── Return statement → FUNC_EXIT ──────────────────────────────────────

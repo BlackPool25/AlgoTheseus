@@ -201,12 +201,20 @@ def _run_guarded(
             return -1, True
 
 
-def _read_capped(path: Path, cap: int) -> str:
+def _read_capped(path: Path, cap: int) -> tuple[str, bool]:
     try:
         with open(path, "rb") as f:
-            return f.read(cap).decode("utf-8", errors="replace")
+            data = f.read(cap + 1)
+            byte_truncated = len(data) > cap
+            if byte_truncated:
+                slice_bytes = data[:cap]
+                last_nl = slice_bytes.rfind(b"\n")
+                if last_nl >= 0:
+                    slice_bytes = slice_bytes[: last_nl + 1]
+                return slice_bytes.decode("utf-8", errors="replace"), True
+            return data.decode("utf-8", errors="replace"), False
     except OSError:
-        return ""
+        return "", False
 
 
 def _compile_argv(cdir: Path) -> list[str]:
@@ -215,8 +223,7 @@ def _compile_argv(cdir: Path) -> list[str]:
         "g++",
         "-O0",
         "-g",
-        "-std=c++17",
-        "-ftrivial-auto-var-init=zero",
+        "-std=c++20",
         "-pipe",
         "-ftemplate-depth=100",
         "-I",
@@ -254,7 +261,7 @@ def compile_source_sync(cpp_source: str) -> tuple[bytes | None, str | None, bool
                 drop_privs=False,
             )
         if compile_timed_out or code != 0:
-            err = _read_capped(compile_err, _STDERR_CAP_BYTES)
+            err, _ = _read_capped(compile_err, _STDERR_CAP_BYTES)
             if compile_timed_out and not err:
                 err = f"g++ compile timed out after {EXECUTION_TIMEOUT_SECONDS}s"
             return None, err or "g++ failed with no output", compile_timed_out
@@ -291,9 +298,10 @@ def run_binary_sync(binary_bytes: bytes, stdin_data: str = "") -> RunResult:
             as_bytes=_RUN_RLIMIT_AS,
             drop_privs=True,
         )
-        stdout = _read_capped(run_out, _STDOUT_CAP_BYTES)
-        raw_stderr = _read_capped(run_err, _STDERR_CAP_BYTES)
+        stdout, _ = _read_capped(run_out, _STDOUT_CAP_BYTES)
+        raw_stderr, byte_truncated = _read_capped(run_err, _STDERR_CAP_BYTES)
         trace_raw, stderr_clean, truncated = _split_stderr(raw_stderr)
+        truncated = truncated or byte_truncated
 
         if _is_compile_error(stderr_clean, exit_code) and not trace_raw:
             return RunResult(compile_error=stderr_clean)

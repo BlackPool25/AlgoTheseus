@@ -11,12 +11,12 @@ The binary is compiled to /tmp/prog which lives on the tmpfs, so this works.
 
 # Container resource limits passed directly to docker.containers.run()
 SANDBOX_CONFIG: dict = {
-    "mem_limit": "128m",
+    "mem_limit": "256m",
     "cpu_period": 100_000,
     "cpu_quota": 50_000,  # 50% of one CPU core
     "network_disabled": True,
     "read_only": True,  # filesystem read-only except tmpfs mounts
-    "tmpfs": {"/tmp": "size=64m,exec"},  # exec needed to run the compiled binary
+    "tmpfs": {"/tmp": "size=128m,exec"},  # exec needed to run the compiled binary
     "pids_limit": 64,
     "cap_drop": ["ALL"],
     "security_opt": ["no-new-privileges"],

@@ -494,7 +494,9 @@ export default function App() {
           >
             ✕
           </button>
-          <div className="font-semibold text-red-400 mb-0.5">Execution Error:</div>
+          <div className="font-semibold text-red-400 mb-0.5">
+            {compileError ? "Compilation Error:" : "Execution Error:"}
+          </div>
           {compileError || runtimeError || errorMessage}
         </div>
       )}

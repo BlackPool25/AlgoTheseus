@@ -46,6 +46,8 @@ def _cursor_kind(cursor: clang.Cursor) -> clang.CursorKind | None:
 # R2 (M3): range-for is a distinct cursor kind, not FOR_STMT. getattr guard so
 # older bindings without it fall back gracefully (stays None → never matches).
 _RANGE_FOR_KIND: clang.CursorKind | None = getattr(clang.CursorKind, "CXX_FOR_RANGE_STMT", None)
+_DECOMP_KIND: clang.CursorKind | None = getattr(clang.CursorKind, "DECOMPOSITION_DECL", None)
+_BINDING_DECL_KIND: clang.CursorKind | None = getattr(clang.CursorKind, "BINDING_DECL", None)
 
 _TRY_CATCH_KINDS: tuple = tuple(
     k
@@ -386,12 +388,46 @@ class ScopeTracker:
                 )
                 visible.append(sv)
                 new_vars.append(sv)
+            elif (
+                (c.spelling.startswith("[") and c.spelling.endswith("]"))
+                or (_DECOMP_KIND is not None and c.kind == _DECOMP_KIND)
+            ):
+                for sub in c.get_children():
+                    if sub.kind.is_declaration() and sub.spelling and sub.spelling in c.spelling:
+                        uid = sub.spelling
+                        if any(v.name == sub.spelling for v in visible):
+                            uid = f"{sub.spelling}_{depth}"
+                        sub_line = (
+                            sub.location.line
+                            if (sub.location and sub.location.line > 0)
+                            else (c.location.line if c.location else 0)
+                        )
+                        sv = ScopeVar(
+                            name=sub.spelling,
+                            unique_id=uid,
+                            decl_line=decl_line if decl_line is not None else sub_line,
+                            scope_depth=depth,
+                            extent_end=extent_end,
+                        )
+                        visible.append(sv)
+                        new_vars.append(sv)
         return new_vars
 
     def _decl_line(self, decl_stmt: clang.Cursor) -> int:
         """Line to attribute a DECL_STMT's scope entry to (user-code VAR_DECL)."""
         for c in decl_stmt.get_children():
             if c.kind == clang.CursorKind.VAR_DECL and c.spelling:
+                loc = c.location
+                if loc.file is not None and loc.line > 0:
+                    try:
+                        if os.path.abspath(loc.file.name) == self.source_path:
+                            return loc.line
+                    except ValueError:
+                        pass
+            elif (
+                (c.spelling.startswith("[") and c.spelling.endswith("]"))
+                or (_DECOMP_KIND is not None and c.kind == _DECOMP_KIND)
+            ):
                 loc = c.location
                 if loc.file is not None and loc.line > 0:
                     try:
@@ -448,6 +484,24 @@ class ScopeTracker:
                 )
                 loop_visible.append(sv)
                 loop_new.append(sv)
+            elif (
+                (child.spelling.startswith("[") and child.spelling.endswith("]"))
+                or (_DECOMP_KIND is not None and child.kind == _DECOMP_KIND)
+            ):
+                for sub in child.get_children():
+                    if sub.kind.is_declaration() and sub.spelling and sub.spelling in child.spelling:
+                        uid = sub.spelling
+                        if any(v.name == sub.spelling for v in loop_visible):
+                            uid = f"{sub.spelling}_{depth}"
+                        sv = ScopeVar(
+                            name=sub.spelling,
+                            unique_id=uid,
+                            decl_line=header_line,
+                            scope_depth=depth,
+                            extent_end=loop_end,
+                        )
+                        loop_visible.append(sv)
+                        loop_new.append(sv)
 
         # The loop header line carries the loop vars (replace-by-name so a
         # loop var shadows an outer same-named var); outer visible is untouched.

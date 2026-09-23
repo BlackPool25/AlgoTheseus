@@ -53,12 +53,12 @@ function parseCompileErrors(
   const lines = compileError.split("\n");
 
   for (const line of lines) {
-    // Match: filename:line:col: severity: message
-    const m = line.match(/^[^:]+:(\d+):(\d+):\s*(error|warning|note):\s*(.+)$/);
+    // Match: filename:line[:col]: severity: message
+    const m = line.match(/^[^:]+:(\d+)(?::(\d+))?:\s*(error|fatal error|warning|note|fatal):\s*(.+)$/i);
     if (m) {
       const lineNum = parseInt(m[1], 10);
-      const col = parseInt(m[2], 10);
-      const severity = m[3];
+      const col = m[2] ? parseInt(m[2], 10) : 1;
+      const severity = m[3].toLowerCase();
       const message = m[4];
 
       markers.push({
@@ -68,7 +68,7 @@ function parseCompileErrors(
         endColumn: col + 1,
         message,
         severity:
-          severity === "error"
+          severity.includes("error") || severity.includes("fatal")
             ? monaco.MarkerSeverity.Error
             : severity === "warning"
             ? monaco.MarkerSeverity.Warning

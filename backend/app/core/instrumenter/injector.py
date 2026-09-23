@@ -1241,18 +1241,28 @@ def instrument(
                         add_before(point.line, _trace_exit(point))
                         lines[point.line - 1] = f"{indent}return {ret_expr};{trailing}\n"
                     else:
-                        # P0-07/P0-08: temp scoped in its own brace block so
-                        # case/goto jumps never cross its init (jumping over
-                        # a whole block is legal; every path here returns).
-                        # P0-11: `auto&&` binds non-copyable refs (ostream&)
-                        # without copying; `__ser` serializes the bound ref
-                        # to the "<opaque>" placeholder.
-                        ret_var = make_ret_temp()
-                        lines[point.line - 1] = (
-                            f"{indent}{{ auto&& {ret_var} = ({ret_expr}); "
-                            f"{trace_exit_with(ret_var)} "
-                            f"return {ret_var}; }}{trailing}\n"
-                        )
+                        stripped_ret = ret_expr.strip()
+                        if stripped_ret.startswith("{") and stripped_ret.endswith("}"):
+                            exit_line = point.orig_line if point.orig_line is not None else point.line
+                            add_before(
+                                point.line,
+                                f'__TRACE_FUNC_EXIT_VOID({exit_line}, "{point.func_name}", {point.depth});',
+                            )
+                            lines[point.line - 1] = f"{indent}return {ret_expr};{trailing}\n"
+                        else:
+                            # P0-07/P0-08: temp scoped in its own brace block so
+                            # case/goto jumps never cross its init (jumping over
+                            # a whole block is legal; every path here returns).
+                            # P0-11: `auto&&` binds non-copyable refs (ostream&)
+                            # without copying; `__ser` serializes the bound ref
+                            # to the "<opaque>" placeholder.
+                            # std::forward preserves rvalues for move-only return types.
+                            ret_var = make_ret_temp()
+                            lines[point.line - 1] = (
+                                f"{indent}{{ auto&& {ret_var} = ({ret_expr}); "
+                                f"{trace_exit_with(ret_var)} "
+                                f"return std::forward<decltype({ret_var})>({ret_var}); }}{trailing}\n"
+                            )
                 else:
                     add_before(point.line, _trace_exit(point))
             elif (
@@ -1264,13 +1274,30 @@ def instrument(
                 # Inline if-return on the same line: wrap in braces and inject trace inline.
                 split_ret = _split_return_word(line_text)
                 before, after = split_ret if split_ret is not None else (line_text, "")
-                ret_expr_inline = after.strip().rstrip(";")
+                semi = _blank_return_scan(after).find(";")
+                if semi >= 0:
+                    ret_expr_inline = after[:semi].strip()
+                    rest = after[semi + 1 :]
+                else:
+                    ret_expr_inline = after.strip().rstrip(";")
+                    rest = ""
                 if ret_expr_inline:
-                    ret_var = make_ret_temp()
-                    body = f"auto&& {ret_var} = ({ret_expr_inline}); {trace_exit_with(ret_var)} return {ret_var};"
+                    stripped_inline = ret_expr_inline.strip()
+                    if _is_safe_return_expr(ret_expr_inline):
+                        body = f"{_trace_exit(point)} return {ret_expr_inline};"
+                    elif stripped_inline.startswith("{") and stripped_inline.endswith("}"):
+                        exit_line = point.orig_line if point.orig_line is not None else point.line
+                        body = f'__TRACE_FUNC_EXIT_VOID({exit_line}, "{point.func_name}", {point.depth}); return {ret_expr_inline};'
+                    else:
+                        ret_var = make_ret_temp()
+                        body = (
+                            f"auto&& {ret_var} = ({ret_expr_inline}); "
+                            f"{trace_exit_with(ret_var)} "
+                            f"return std::forward<decltype({ret_var})>({ret_var});"
+                        )
                 else:
                     body = f"{_trace_exit(point)} return;"
-                lines[point.line - 1] = f"{indent}{before.strip()} {{ {body} }}\n"
+                lines[point.line - 1] = f"{indent}{before.strip()} {{ {body} }}{rest}\n"
 
         elif point.kind == InjectKind.STATE:
             # Braceless do-body / bare-do header: any splice splits `do <body> while (...)` — skip (header-adjacent STATEs keep it observable).
@@ -1394,20 +1421,34 @@ def instrument(
             brace_depth += line.count("{") - line.count("}")
 
             if _starts_with_return_word(line):
-                expr = line.strip()[len("return") :].strip().rstrip(";")
+                ret_rest = line.strip()[len("return") :]
+                semi = _blank_return_scan(ret_rest).find(";")
+                if semi >= 0:
+                    expr = ret_rest[:semi].strip()
+                    trailing_fb = ret_rest[semi + 1 :]
+                else:
+                    expr = ret_rest.strip().rstrip(";")
+                    trailing_fb = ""
                 ret_line = line_map.get(i + 1, i + 1)
                 if not expr:
                     add_before(i + 1, f'__TRACE_FUNC_EXIT_VOID({ret_line}, "{fn}", 0);')
                     break
-                ret_var = f"__algotrace_ret_fallback_{fn}"
-                # P0-07/P0-08: same brace-block scoping as the main temp
-                # path — the temp never leaks to case/goto-crossed scope.
                 indent_fb = " " * (len(line) - len(line.lstrip()))
-                exit_fb = f'__TRACE_FUNC_EXIT({ret_line}, "{fn}", 0, ({ret_var}));'
-                lines[i] = (
-                    f"{indent_fb}{{ auto&& {ret_var} = ({expr}); "
-                    f"{exit_fb} return {ret_var}; }}\n"
-                )
+                stripped_fb = expr.strip()
+                if stripped_fb.startswith("{") and stripped_fb.endswith("}"):
+                    lines[i] = (
+                        f"{indent_fb}{{ __TRACE_FUNC_EXIT_VOID({ret_line}, \"{fn}\", 0); "
+                        f"return {expr}; }}{trailing_fb}\n"
+                    )
+                else:
+                    ret_var = f"__algotrace_ret_fallback_{fn}"
+                    # P0-07/P0-08: same brace-block scoping as the main temp
+                    # path — the temp never leaks to case/goto-crossed scope.
+                    exit_fb = f'__TRACE_FUNC_EXIT({ret_line}, "{fn}", 0, ({ret_var}));'
+                    lines[i] = (
+                        f"{indent_fb}{{ auto&& {ret_var} = ({expr}); "
+                        f"{exit_fb} return std::forward<decltype({ret_var})>({ret_var}); }}{trailing_fb}\n"
+                    )
                 break
 
             if brace_depth <= 0:
@@ -1458,7 +1499,7 @@ def instrument(
                     _gen_tmp.flush()
                     _gen_tmp_name = _gen_tmp.name
                 _gen_path = _gen_tmp_name
-            output.append(_serializer_gen.generate_serializers(_gen_path))
+            output.append("\n" + _serializer_gen.generate_serializers(_gen_path))
         finally:
             if _gen_tmp_name is not None:
                 try:

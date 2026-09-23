@@ -31,13 +31,19 @@
 #include <stack>
 #include <queue>
 #include <deque>
+#include <list>
+#include <forward_list>
 #include <map>
 #include <unordered_map>
 #include <set>
 #include <unordered_set>
-#include <set>
+#include <bitset>
+#include <optional>
+#include <variant>
+#include <memory>
 #include <functional>
 #include <type_traits>
+#include <utility>
 #include <tuple>
 #include <array>
 #include <cstring>
@@ -239,32 +245,56 @@ std::string __ser(const std::pair<T1,T2>& p);
 template<typename... Ts>
 std::string __ser(const std::tuple<Ts...>& t);
 
-template<typename T>
-std::string __ser(const std::vector<T>& v);
+template<typename T, typename A = std::allocator<T>>
+std::string __ser(const std::vector<T, A>& v);
+
+template<typename T, typename A = std::allocator<T>>
+std::string __ser(const std::deque<T, A>& v);
+
+template<typename T, typename A = std::allocator<T>>
+std::string __ser(const std::list<T, A>& l);
+
+template<typename T, typename A = std::allocator<T>>
+std::string __ser(const std::forward_list<T, A>& fl);
+
+template<std::size_t N>
+std::string __ser(const std::bitset<N>& b);
 
 template<typename T>
-std::string __ser(const std::deque<T>& v);
+std::string __ser(const std::optional<T>& opt);
 
-template<typename K, typename V>
-std::string __ser(const std::map<K,V>& m);
+template<typename... Ts>
+std::string __ser(const std::variant<Ts...>& var);
 
-template<typename K, typename V>
-std::string __ser(const std::unordered_map<K,V>& m);
-
-template<typename T>
-std::string __ser(const std::set<T>& s);
+template<typename T, typename D = std::default_delete<T>>
+std::string __ser(const std::unique_ptr<T, D>& p);
 
 template<typename T>
-std::string __ser(const std::unordered_set<T>& s);
+std::string __ser(const std::shared_ptr<T>& p);
 
-template<typename T>
-std::string __ser(const std::multiset<T>& s);
+template<typename K, typename V, typename C = std::less<K>, typename A = std::allocator<std::pair<const K, V>>>
+std::string __ser(const std::map<K, V, C, A>& m);
 
-template<typename V>
-std::string __ser(const std::map<std::string,V>& m);
+template<typename K, typename V, typename C = std::less<K>, typename A = std::allocator<std::pair<const K, V>>>
+std::string __ser(const std::multimap<K, V, C, A>& m);
 
-template<typename V>
-std::string __ser(const std::unordered_map<std::string,V>& m);
+template<typename K, typename V, typename H = std::hash<K>, typename P = std::equal_to<K>, typename A = std::allocator<std::pair<const K, V>>>
+std::string __ser(const std::unordered_map<K, V, H, P, A>& m);
+
+template<typename K, typename V, typename H = std::hash<K>, typename P = std::equal_to<K>, typename A = std::allocator<std::pair<const K, V>>>
+std::string __ser(const std::unordered_multimap<K, V, H, P, A>& m);
+
+template<typename T, typename C = std::less<T>, typename A = std::allocator<T>>
+std::string __ser(const std::set<T, C, A>& s);
+
+template<typename T, typename C = std::less<T>, typename A = std::allocator<T>>
+std::string __ser(const std::multiset<T, C, A>& s);
+
+template<typename T, typename H = std::hash<T>, typename P = std::equal_to<T>, typename A = std::allocator<T>>
+std::string __ser(const std::unordered_set<T, H, P, A>& s);
+
+template<typename T, typename H = std::hash<T>, typename P = std::equal_to<T>, typename A = std::allocator<T>>
+std::string __ser(const std::unordered_multiset<T, H, P, A>& s);
 
 template<typename T>
 std::string __ser(const std::vector<std::vector<T>>& v);
@@ -296,12 +326,17 @@ std::enable_if_t<!std::is_array_v<T> && !std::is_pointer_v<T>
 
 // ── STL container serializers ────────────────────────────────────────────────
 
-template<typename T>
-std::string __ser(const std::vector<T>& v) {
+template<typename T, typename A>
+std::string __ser(const std::vector<T, A>& v) {
     std::string out = "[";
-    for (size_t i = 0; i < v.size(); ++i) {
+    size_t limit = v.size() > 500 ? 500 : v.size();
+    for (size_t i = 0; i < limit; ++i) {
         if (i) out += ",";
         out += __ser(v[i]);
+    }
+    if (v.size() > 500) {
+        if (limit > 0) out += ",";
+        out += "\"..<" + std::to_string(v.size() - 500) + " elements omitted>\"";
     }
     return out + "]";
 }
@@ -311,9 +346,14 @@ std::string __ser(const std::vector<T>& v) {
 // so proxy quirks on other toolchains can't pick the wrong overload.
 inline std::string __ser(const std::vector<bool>& v) {
     std::string out = "[";
-    for (size_t i = 0; i < v.size(); ++i) {
+    size_t limit = v.size() > 500 ? 500 : v.size();
+    for (size_t i = 0; i < limit; ++i) {
         if (i) out += ",";
         out += __ser(static_cast<bool>(v[i]));
+    }
+    if (v.size() > 500) {
+        if (limit > 0) out += ",";
+        out += "\"..<" + std::to_string(v.size() - 500) + " elements omitted>\"";
     }
     return out + "]";
 }
@@ -329,16 +369,24 @@ std::string __ser(const std::vector<std::vector<T>>& v) {
 
     if (jagged) {
         std::string out = "{\"_type\":\"graph\",\"adj\":[";
-        for (size_t i = 0; i < v.size(); ++i) {
+        size_t limit = v.size() > 500 ? 500 : v.size();
+        for (size_t i = 0; i < limit; ++i) {
             if (i) out += ",";
             out += __ser(v[i]);
+        }
+        if (v.size() > 500) {
+            out += ",\"...<omitted>\"";
         }
         return out + "]}";
     }
     std::string out = "{\"_type\":\"dp_table\",\"data\":[";
-    for (size_t i = 0; i < v.size(); ++i) {
+    size_t limit = v.size() > 500 ? 500 : v.size();
+    for (size_t i = 0; i < limit; ++i) {
         if (i) out += ",";
         out += __ser(v[i]);
+    }
+    if (v.size() > 500) {
+        out += ",\"...<omitted>\"";
     }
     return out + "]}";
 }
@@ -348,19 +396,60 @@ std::string __ser(const std::vector<std::vector<T>>& v) {
 // arrays via that overload — no separate graph-shape special case.)
 inline std::string __ser(const std::vector<std::vector<bool>>& v) {
     std::string out = "{\"_type\":\"dp_table\",\"data\":[";
-    for (size_t i = 0; i < v.size(); ++i) {
+    size_t limit = v.size() > 500 ? 500 : v.size();
+    for (size_t i = 0; i < limit; ++i) {
         if (i) out += ",";
         out += __ser(v[i]);
+    }
+    if (v.size() > 500) {
+        out += ",\"...<omitted>\"";
     }
     return out + "]}";
 }
 
-template<typename T>
-std::string __ser(const std::deque<T>& v) {
+template<typename T, typename A>
+std::string __ser(const std::deque<T, A>& v) {
     std::string out = "{\"_type\":\"deque\",\"items\":[";
     bool first = true;
-    for (const auto& x : v) { if (!first) out += ","; out += __ser(x); first = false; }
+    size_t count = 0;
+    for (const auto& x : v) {
+        if (count >= 500) { out += ",\"...<omitted>\""; break; }
+        if (!first) out += ",";
+        out += __ser(x);
+        first = false;
+        count++;
+    }
     return out + "]}";
+}
+
+template<typename T, typename A>
+std::string __ser(const std::list<T, A>& l) {
+    std::string out = "[";
+    bool first = true;
+    size_t count = 0;
+    for (const auto& x : l) {
+        if (count >= 500) { out += ",\"...<omitted>\""; break; }
+        if (!first) out += ",";
+        out += __ser(x);
+        first = false;
+        count++;
+    }
+    return out + "]";
+}
+
+template<typename T, typename A>
+std::string __ser(const std::forward_list<T, A>& fl) {
+    std::string out = "[";
+    bool first = true;
+    size_t count = 0;
+    for (const auto& x : fl) {
+        if (count >= 500) { out += ",\"...<omitted>\""; break; }
+        if (!first) out += ",";
+        out += __ser(x);
+        first = false;
+        count++;
+    }
+    return out + "]";
 }
 
 template<typename T>
@@ -371,10 +460,12 @@ std::string __ser(std::stack<T> v) {
     std::string out = "{\"top\":";
     out += items.empty() ? "null" : __ser(items.front());
     out += ",\"items\":[";
-    for (size_t i = 0; i < items.size(); ++i) {
+    size_t limit = items.size() > 500 ? 500 : items.size();
+    for (size_t i = 0; i < limit; ++i) {
         if (i) out += ",";
         out += __ser(items[i]);
     }
+    if (items.size() > 500) out += ",\"...<omitted>\"";
     return out + "]}";
 }
 
@@ -384,11 +475,14 @@ std::string __ser(std::queue<T> v) {
     out += v.empty() ? "null" : __ser(v.front());
     out += ",\"items\":[";
     bool first = true;
+    size_t count = 0;
     while (!v.empty()) {
+        if (count >= 500) { out += ",\"...<omitted>\""; break; }
         if (!first) out += ",";
         out += __ser(v.front());
         v.pop();
         first = false;
+        count++;
     }
     return out + "]}";
 }
@@ -401,85 +495,12 @@ std::string __ser(std::priority_queue<T, Container, Compare> v) {
     std::string out = "{\"_type\":\"pq\",\"top\":";
     out += items.empty() ? "null" : __ser(items[0]);
     out += ",\"items\":[";
-    for (size_t i = 0; i < items.size(); ++i) {
+    size_t limit = items.size() > 500 ? 500 : items.size();
+    for (size_t i = 0; i < limit; ++i) {
         if (i) out += ",";
         out += __ser(items[i]);
     }
-    return out + "]}";
-}
-
-template<typename K, typename V>
-std::string __ser(const std::map<K,V>& m) {
-    std::string out = "{";
-    bool first = true;
-    for (const auto& [k, v] : m) {
-        if (!first) out += ",";
-        // Keys must be strings in JSON
-        out += "\"" + std::to_string(k) + "\":" + __ser(v);
-        first = false;
-    }
-    return out + "}";
-}
-
-// Specialisation for string keys
-template<typename V>
-std::string __ser(const std::map<std::string,V>& m) {
-    std::string out = "{";
-    bool first = true;
-    for (const auto& [k, v] : m) {
-        if (!first) out += ",";
-        out += __ser(k) + ":" + __ser(v);
-        first = false;
-    }
-    return out + "}";
-}
-
-template<typename K, typename V>
-std::string __ser(const std::unordered_map<K,V>& m) {
-    std::string out = "{";
-    bool first = true;
-    for (const auto& [k, v] : m) {
-        if (!first) out += ",";
-        out += "\"" + std::to_string(k) + "\":" + __ser(v);
-        first = false;
-    }
-    return out + "}";
-}
-
-// Specialisation for string keys in unordered_map
-template<typename V>
-std::string __ser(const std::unordered_map<std::string,V>& m) {
-    std::string out = "{";
-    bool first = true;
-    for (const auto& [k, v] : m) {
-        if (!first) out += ",";
-        out += __ser(k) + ":" + __ser(v);
-        first = false;
-    }
-    return out + "}";
-}
-
-template<typename T>
-std::string __ser(const std::set<T>& s) {
-    std::string out = "{\"_type\":\"set\",\"values\":[";
-    bool first = true;
-    for (const auto& x : s) { if (!first) out += ","; out += __ser(x); first = false; }
-    return out + "]}";
-}
-
-template<typename T>
-std::string __ser(const std::unordered_set<T>& s) {
-    std::string out = "{\"_type\":\"set\",\"values\":[";
-    bool first = true;
-    for (const auto& x : s) { if (!first) out += ","; out += __ser(x); first = false; }
-    return out + "]}";
-}
-
-template<typename T>
-std::string __ser(const std::multiset<T>& s) {
-    std::string out = "{\"_type\":\"set\",\"values\":[";
-    bool first = true;
-    for (const auto& x : s) { if (!first) out += ","; out += __ser(x); first = false; }
+    if (items.size() > 500) out += ",\"...<omitted>\"";
     return out + "]}";
 }
 
@@ -509,12 +530,153 @@ std::string __ser(const std::tuple<Ts...>& t) {
 template<typename T, std::size_t N>
 std::string __ser(const std::array<T,N>& a) {
     std::string out = "[";
-    for (std::size_t i = 0; i < N; ++i) {
+    size_t limit = N > 500 ? 500 : N;
+    for (std::size_t i = 0; i < limit; ++i) {
         if (i) out += ",";
         out += __ser(a[i]);
     }
+    if (N > 500) out += ",\"...<omitted>\"";
     return out + "]";
 }
+
+// ── Utility types (bitset, optional, variant, smart pointers) ─────────────────
+
+template<std::size_t N>
+std::string __ser(const std::bitset<N>& b) {
+    return "\"" + b.to_string() + "\"";
+}
+
+template<typename T>
+std::string __ser(const std::optional<T>& opt) {
+    if (!opt.has_value()) return "null";
+    return __ser(*opt);
+}
+
+template<typename... Ts>
+std::string __ser(const std::variant<Ts...>& var) {
+    if (var.valueless_by_exception()) return "null";
+    return std::visit([](const auto& val) -> std::string {
+        return __ser(val);
+    }, var);
+}
+
+template<typename T, typename D>
+std::string __ser(const std::unique_ptr<T, D>& p) {
+    if (!p) return "null";
+    return __ser(p.get());
+}
+
+template<typename T>
+std::string __ser(const std::shared_ptr<T>& p) {
+    if (!p) return "null";
+    return __ser(p.get());
+}
+
+// ── Associative container key serializer ─────────────────────────────────────
+
+template<typename K>
+std::string __ser_key(const K& k) {
+    if constexpr (std::is_same_v<std::decay_t<K>, std::string>) {
+        return __trace_json_escape(k.data(), k.size());
+    } else if constexpr (std::is_same_v<std::decay_t<K>, const char*> || std::is_same_v<std::decay_t<K>, char*>) {
+        return k ? __trace_json_escape(k, strlen(k)) : "null";
+    } else if constexpr (std::is_arithmetic_v<std::decay_t<K>>) {
+        if constexpr (std::is_same_v<std::decay_t<K>, bool>) {
+            return k ? "true" : "false";
+        } else if constexpr (std::is_same_v<std::decay_t<K>, char>) {
+            std::string s(1, k);
+            return __trace_json_escape(s.data(), 1);
+        } else {
+            return std::to_string(k);
+        }
+    } else {
+        std::string s = __ser(k);
+        return __trace_json_escape(s.data(), s.size());
+    }
+}
+
+// ── Associative & Unordered containers ───────────────────────────────────────
+
+template<typename K, typename V, typename C, typename A>
+std::string __ser(const std::map<K, V, C, A>& m) {
+    std::string out = "{";
+    bool first = true;
+    for (const auto& [k, v] : m) {
+        if (!first) out += ",";
+        out += "\"" + __ser_key(k) + "\":" + __ser(v);
+        first = false;
+    }
+    return out + "}";
+}
+
+template<typename K, typename V, typename C, typename A>
+std::string __ser(const std::multimap<K, V, C, A>& m) {
+    std::string out = "{";
+    bool first = true;
+    for (const auto& [k, v] : m) {
+        if (!first) out += ",";
+        out += "\"" + __ser_key(k) + "\":" + __ser(v);
+        first = false;
+    }
+    return out + "}";
+}
+
+template<typename K, typename V, typename H, typename P, typename A>
+std::string __ser(const std::unordered_map<K, V, H, P, A>& m) {
+    std::string out = "{";
+    bool first = true;
+    for (const auto& [k, v] : m) {
+        if (!first) out += ",";
+        out += "\"" + __ser_key(k) + "\":" + __ser(v);
+        first = false;
+    }
+    return out + "}";
+}
+
+template<typename K, typename V, typename H, typename P, typename A>
+std::string __ser(const std::unordered_multimap<K, V, H, P, A>& m) {
+    std::string out = "{";
+    bool first = true;
+    for (const auto& [k, v] : m) {
+        if (!first) out += ",";
+        out += "\"" + __ser_key(k) + "\":" + __ser(v);
+        first = false;
+    }
+    return out + "}";
+}
+
+template<typename T, typename C, typename A>
+std::string __ser(const std::set<T, C, A>& s) {
+    std::string out = "{\"_type\":\"set\",\"values\":[";
+    bool first = true;
+    for (const auto& x : s) { if (!first) out += ","; out += __ser(x); first = false; }
+    return out + "]}";
+}
+
+template<typename T, typename C, typename A>
+std::string __ser(const std::multiset<T, C, A>& s) {
+    std::string out = "{\"_type\":\"set\",\"values\":[";
+    bool first = true;
+    for (const auto& x : s) { if (!first) out += ","; out += __ser(x); first = false; }
+    return out + "]}";
+}
+
+template<typename T, typename H, typename P, typename A>
+std::string __ser(const std::unordered_set<T, H, P, A>& s) {
+    std::string out = "{\"_type\":\"set\",\"values\":[";
+    bool first = true;
+    for (const auto& x : s) { if (!first) out += ","; out += __ser(x); first = false; }
+    return out + "]}";
+}
+
+template<typename T, typename H, typename P, typename A>
+std::string __ser(const std::unordered_multiset<T, H, P, A>& s) {
+    std::string out = "{\"_type\":\"set\",\"values\":[";
+    bool first = true;
+    for (const auto& x : s) { if (!first) out += ","; out += __ser(x); first = false; }
+    return out + "]}";
+}
+
 
 // ── Raw C array serializer (reference overload to defeat pointer decay) ──────
 

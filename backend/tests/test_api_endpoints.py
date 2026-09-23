@@ -27,6 +27,20 @@ def anyio_backend():
     return "asyncio"
 
 
+def _reset_limiter_storage() -> None:
+    limiter = getattr(app.state, "limiter", None)
+    storage = getattr(limiter, "_storage", None)
+    if storage is not None and hasattr(storage, "reset"):
+        storage.reset()
+
+
+@pytest.fixture(autouse=True)
+def _reset_rate_limits():
+    _reset_limiter_storage()
+    yield
+    _reset_limiter_storage()
+
+
 SAMPLE_CODE = """
 #include <vector>
 #include <iostream>
@@ -800,6 +814,95 @@ class TestExecuteBatchEndpoint:
         body = response.json()
         assert body[0]["compile_error"] is not None
         assert "error" in body[0]["compile_error"].lower()
+
+    async def test_execute_instrument_parse_error_returns_clean_compile_error(self):
+        """Invalid C++ code raising InstrumentParseError should return 200 with clean compile_error."""
+        invalid_code = """
+        #include <iostream>
+        struct Node {
+            int val;
+            Node(int _val) : val(_val) {}
+        };
+        int main() {
+            Node* res = new Node();
+            return 0;
+        }
+        """
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+            response = await ac.post(
+                "/execute",
+                json={
+                    "code": invalid_code,
+                    "raw_stdin": "",
+                },
+            )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["compile_error"] is not None
+        assert "prog.cpp:" in body["compile_error"]
+        assert "error:" in body["compile_error"]
+        assert body["stdout"] == ""
+
+    async def test_execute_stream_instrument_parse_error_yields_compile_error(self):
+        """Streaming execute on invalid code yields NDJSON error line with compile_error."""
+        invalid_code = """
+        #include <iostream>
+        int main() {
+            int x = "incompatible type";
+            return 0;
+        }
+        """
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+            response = await ac.post(
+                "/execute",
+                json={
+                    "code": invalid_code,
+                    "raw_stdin": "",
+                    "compressed": True,
+                },
+            )
+
+        assert response.status_code == 200
+        lines = [line for line in response.text.strip().split("\n") if line]
+        assert len(lines) == 1
+        import json
+        payload = json.loads(lines[0])
+        assert payload["type"] == "error"
+        assert "compile_error" in payload
+        assert "prog.cpp:" in payload["compile_error"]
+        assert "error:" in payload["compile_error"]
+
+    async def test_execute_batch_instrument_parse_error(self, tmp_path):
+        """Batch execute on code with parse/type errors returns compile_error for all items."""
+        testcases = tmp_path / "testcases"
+        testcases.mkdir(parents=True)
+        (testcases / "tc1").mkdir()
+        (testcases / "tc1" / "input.txt").write_text("5\n")
+
+        invalid_code = """
+        #include <iostream>
+        int main() {
+            syntax error here;
+            return 0;
+        }
+        """
+        with patch("app.api.routes.execute._TESTCASE_DIR", testcases):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+                response = await ac.post(
+                    "/execute-batch",
+                    json={
+                        "code": invalid_code,
+                        "test_ids": ["tc1"],
+                    },
+                )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert len(body) == 1
+        assert body[0]["compile_error"] is not None
+        assert "prog.cpp:" in body[0]["compile_error"]
+        assert "error:" in body[0]["compile_error"]
 
 
 # ── Health check ──────────────────────────────────────────────────────────────

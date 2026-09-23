@@ -48,6 +48,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import secrets
 import tempfile
 import threading
@@ -73,6 +74,7 @@ from app.core.executor.cache import (
 from app.core.executor.docker_runner import RunResult, _apply_output_guard, run_in_sandbox
 from app.core.executor.sandbox_config import MAX_TRACE_LINES
 from app.core.executor.subprocess_runner import compile_source_sync
+from app.core.instrumenter.diagnostics import InstrumentParseError
 from app.core.instrumenter.injector import instrument
 from app.core.rate_limit import EXECUTE_BATCH_LIMIT, EXECUTE_LIMIT, limiter
 from app.core.stdin.parser import parse_stdin
@@ -186,6 +188,23 @@ INPUT_REQUIRED_DETAIL = (
 # Fail-open: only gates a clear 422, never silently alters runs.
 # Unparseable code returns False so the instrumentation error speaks.
 _STDIN_PLAIN_CALLS = frozenset({"scanf", "getchar", "getc"})
+
+
+def _format_exit_error(exit_code: int, stderr_clean: str) -> str:
+    """Map non-zero exit codes to descriptive crash messages when stderr is empty."""
+    if stderr_clean:
+        return stderr_clean
+    sig = abs(exit_code) - 128 if exit_code > 128 else abs(exit_code)
+    sig_map = {
+        11: "Program crashed: Segmentation fault (SIGSEGV) — likely invalid pointer access or stack overflow",
+        8: "Program crashed: Floating point exception (SIGFPE) — likely integer division by zero",
+        6: "Program aborted (SIGABRT) — unhandled exception, failed assertion, or double free",
+        4: "Program crashed: Illegal instruction (SIGILL)",
+        7: "Program crashed: Bus error (SIGBUS)",
+        9: "Program terminated by SIGKILL (likely out of memory)",
+        25: "Program stopped: output size limit exceeded (SIGXFSZ)",
+    }
+    return sig_map.get(sig, f"Program exited abnormally with exit code {exit_code}")
 
 
 def _ast_callee_name(cursor) -> str:  # type: ignore[no-untyped-def]
@@ -609,6 +628,28 @@ def _log_cold_miss_once() -> None:
         )
 
 
+def _clean_compile_error(err: str) -> str:
+    """Normalize compiler/libclang paths so user sees prog.cpp:line:col."""
+    if not err:
+        return ""
+    clean = re.sub(r"/tmp/algo-theseus/cc_[a-f0-9]+/prog\.cpp", "prog.cpp", err)
+    clean = re.sub(r"/mnt/code/prog\.cpp", "prog.cpp", clean)
+    clean = re.sub(r"/tmp/[^\s:]+\.cpp", "prog.cpp", clean)
+    clean = re.sub(r"/tmp/algo-theseus/cc_[a-f0-9]+/", "", clean)
+    return clean
+
+
+async def _inspect_compile_error(code: str, fallback_err: str) -> str:
+    """Attempt g++ compilation to capture rich diagnostics; fallback to libclang msg."""
+    try:
+        _, compile_err, _ = await asyncio.to_thread(compile_source_sync, code)
+        if compile_err:
+            return _clean_compile_error(compile_err)
+    except Exception:
+        pass
+    return _clean_compile_error(fallback_err)
+
+
 @dataclass
 class _Resolved:
     """Outcome of the shared pre-sandbox pipeline (stdin → instrument → cache/sandbox)."""
@@ -660,6 +701,13 @@ async def _resolve(req: ExecuteRequest, kind: str) -> _Resolved:
         warnings = []
         try:
             instrumented = await asyncio.to_thread(instrument, req.code, None, warnings)
+        except InstrumentParseError as e:
+            clean_err = await _inspect_compile_error(req.code, str(e))
+            return _Resolved(
+                cleaned_stdin=cleaned_stdin,
+                run_result=RunResult(compile_error=clean_err),
+                code=req.code,
+            )
         except (RuntimeError, ValueError, OSError) as e:
             return _Resolved(cleaned_stdin=cleaned_stdin, instrumentation_error=str(e), code=req.code)
         await asyncio.to_thread(
@@ -741,10 +789,11 @@ async def _stream_resolved(resolved: _Resolved) -> AsyncGenerator[bytes, None]:
         return
 
     if resolved.instrumentation_error is not None:
+        clean_err = _clean_compile_error(resolved.instrumentation_error)
         payload = json.dumps(
             {
                 "type": "error",
-                "compile_error": f"Instrumentation error: {resolved.instrumentation_error}",
+                "compile_error": f"Instrumentation error: {clean_err}",
             }
         )
         yield (payload + "\n").encode()
@@ -766,7 +815,8 @@ async def _stream_resolved(resolved: _Resolved) -> AsyncGenerator[bytes, None]:
 
     # Compile error — yield early
     if run_result.compile_error:
-        payload = json.dumps({"type": "error", "compile_error": run_result.compile_error})
+        clean_err = _clean_compile_error(run_result.compile_error)
+        payload = json.dumps({"type": "error", "compile_error": clean_err})
         yield (payload + "\n").encode()
         return
 
@@ -795,8 +845,8 @@ async def _stream_resolved(resolved: _Resolved) -> AsyncGenerator[bytes, None]:
     runtime_error: str | None = None
     if run_result.timed_out:
         runtime_error = "Execution timed out (10s limit)"
-    elif run_result.exit_code != 0 and run_result.stderr_clean:
-        runtime_error = run_result.stderr_clean
+    elif run_result.exit_code != 0:
+        runtime_error = _format_exit_error(run_result.exit_code, run_result.stderr_clean)
     elif not events and resolved.trace_call_count == 0:
         runtime_error = (
             "No trace points were injected — check libclang parsing and instrumentation rules"
@@ -902,7 +952,7 @@ async def execute(
     if run_result.compile_error:
         return ORJSONResponse(
             content=jsonable_encoder(
-                ExecuteResponse(stdout="", compile_error=run_result.compile_error)
+                ExecuteResponse(stdout="", compile_error=_clean_compile_error(run_result.compile_error))
             ),
             headers=headers,
         )
@@ -925,8 +975,8 @@ async def execute(
     runtime_error: str | None = None
     if run_result.timed_out:
         runtime_error = "Execution timed out (10s limit)"
-    elif run_result.exit_code != 0 and run_result.stderr_clean:
-        runtime_error = run_result.stderr_clean
+    elif run_result.exit_code != 0:
+        runtime_error = _format_exit_error(run_result.exit_code, run_result.stderr_clean)
     elif not events and resolved.trace_call_count == 0:
         runtime_error = (
             "No trace points were injected — check libclang parsing and instrumentation rules"
@@ -1001,9 +1051,27 @@ async def execute_batch(
     batch_warnings: list[str] = []
     try:
         instrumented = await asyncio.to_thread(instrument, req.code, None, batch_warnings)
+    except InstrumentParseError as e:
+        clean_err = await _inspect_compile_error(req.code, str(e))
+        return [
+            ExecuteBatchResponseItem(
+                test_id=test_id,
+                stdout="",
+                compile_error=clean_err,
+            )
+            for test_id, _ in test_inputs
+        ]
     except Exception as e:
         logger.exception("Instrumentation failed")
-        raise HTTPException(status_code=422, detail=f"Instrumentation error: {e}")
+        clean_err = await _inspect_compile_error(req.code, f"Instrumentation error: {e}")
+        return [
+            ExecuteBatchResponseItem(
+                test_id=test_id,
+                stdout="",
+                compile_error=clean_err,
+            )
+            for test_id, _ in test_inputs
+        ]
 
     # Debug dump
     try:
@@ -1033,11 +1101,12 @@ async def execute_batch(
                 for test_id, _ in test_inputs
             ]
         if shared_compile_error is not None:
+            clean_shared_err = _clean_compile_error(shared_compile_error)
             return [
                 ExecuteBatchResponseItem(
                     test_id=test_id,
                     stdout="",
-                    compile_error=shared_compile_error,
+                    compile_error=clean_shared_err,
                 )
                 for test_id, _ in test_inputs
             ]
@@ -1109,7 +1178,7 @@ async def execute_batch(
             return ExecuteBatchResponseItem(
                 test_id=test_id,
                 stdout="",
-                compile_error=run_result.compile_error,
+                compile_error=_clean_compile_error(run_result.compile_error),
             )
 
         # Parse trace and build CFG
@@ -1120,8 +1189,8 @@ async def execute_batch(
         runtime_error: str | None = None
         if run_result.timed_out:
             runtime_error = f"Execution timed out ({_BATCH_PER_CASE_TIMEOUT}s limit)"
-        elif run_result.exit_code != 0 and run_result.stderr_clean:
-            runtime_error = run_result.stderr_clean
+        elif run_result.exit_code != 0:
+            runtime_error = _format_exit_error(run_result.exit_code, run_result.stderr_clean)
         elif not events and trace_call_count == 0:
             runtime_error = (
                 "No trace points were injected — check libclang parsing and instrumentation rules"

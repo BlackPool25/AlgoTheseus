@@ -45,7 +45,7 @@ _TRACER_H = Path(__file__).parent.parent / "instrumenter" / "tracer.h"
 # - If compile fails, print errors to stderr and exit 1
 # - If compile succeeds, run with stdin from /mnt/code/input.txt
 _CONTAINER_SCRIPT = """
-g++ -O0 -g -std=c++17 -ftrivial-auto-var-init=zero -pipe -I /mnt/code -o /tmp/prog /mnt/code/prog.cpp 2>/tmp/compile_err
+g++ -O0 -g -std=c++20 -pipe -I /mnt/code -o /tmp/prog /mnt/code/prog.cpp 2>/tmp/compile_err
 if [ $? -ne 0 ]; then
     cat /tmp/compile_err >&2
     exit 1
@@ -144,7 +144,7 @@ def _run_container_sync(cpp_source: str, stdin_data: str) -> RunResult:
             image=SANDBOX_IMAGE,
             command=["sh", "-c", _CONTAINER_SCRIPT],
             volumes={str(tmp): {"bind": "/mnt/code", "mode": "ro"}},
-            tmpfs={"/tmp": "size=64m,exec"},  # exec needed to run the compiled binary
+            tmpfs=SANDBOX_CONFIG.get("tmpfs", {"/tmp": "size=128m,exec"}),  # exec needed to run the compiled binary
             detach=True,
             stdout=True,
             stderr=True,
@@ -155,18 +155,35 @@ def _run_container_sync(cpp_source: str, stdin_data: str) -> RunResult:
             result = container.wait(timeout=EXECUTION_TIMEOUT_SECONDS)
             exit_code = result["StatusCode"]
             timed_out = False
-        except (docker.errors.DockerException, OSError):
-            container.kill()
+        except Exception:
+            try:
+                container.kill()
+            except Exception:
+                pass
             timed_out = True
             exit_code = -1
 
-        stdout_bytes = container.logs(stdout=True, stderr=False)[:1_000_000]
-        stderr_bytes = container.logs(stdout=False, stderr=True)[:1_000_000]
+        raw_stderr_bytes = container.logs(stdout=False, stderr=True)
+        raw_stdout_bytes = container.logs(stdout=True, stderr=False)
+        byte_truncated = False
+        if len(raw_stderr_bytes) > 1_000_000:
+            byte_truncated = True
+            slice_bytes = raw_stderr_bytes[:1_000_000]
+            last_nl = slice_bytes.rfind(b"\n")
+            if last_nl >= 0:
+                stderr_bytes = slice_bytes[: last_nl + 1]
+            else:
+                stderr_bytes = slice_bytes
+        else:
+            stderr_bytes = raw_stderr_bytes
+
+        stdout_bytes = raw_stdout_bytes[:1_000_000]
         container.remove(force=True)
 
         stdout = stdout_bytes.decode("utf-8", errors="replace")
         raw_stderr = stderr_bytes.decode("utf-8", errors="replace")
         trace_raw, stderr_clean, truncated = _split_stderr(raw_stderr)
+        truncated = truncated or byte_truncated
 
         # Detect compile error
         if _is_compile_error(stderr_clean, exit_code) and not trace_raw:

@@ -86,6 +86,10 @@ class StructDef:
     name: str
     fields: list[FieldDef] = field(default_factory=list)
 
+    @property
+    def fn_id(self) -> str:
+        return self.name.replace("::", "_")
+
 
 def _is_user_code(cursor: clang.Cursor, source_path: str) -> bool:
     loc = cursor.location
@@ -117,7 +121,10 @@ def collect_structs(source_path: str) -> list[StructDef]:
     """
     try:
         index = clang.Index.create()
-        tu = index.parse(source_path, args=["-std=c++17", "-O0"])
+        extra_args = [
+            a for a in _libclang_compat.default_extra_args() if not a.startswith("-std=")
+        ] + ["-std=c++20"]
+        tu = index.parse(source_path, args=extra_args)
     except (clang.TranslationUnitLoadError, RuntimeError, ValueError, OSError):
         return []
     try:
@@ -153,7 +160,11 @@ def _collect_from_tu(tu: object, source_path: str) -> list[StructDef]:
 
     visit(tu.cursor)
 
-    names = {c.spelling for c in records}
+    names: set[str] = set()
+    for c in records:
+        qual = c.type.spelling if (c.type and c.type.spelling) else c.spelling
+        names.add(qual)
+        names.add(c.spelling)
     out: list[StructDef] = []
     for cursor in records:
         try:
@@ -169,23 +180,47 @@ def _collect_from_tu(tu: object, source_path: str) -> list[StructDef]:
 def _struct_def(cursor: clang.Cursor, names: set[str], source_path: str) -> StructDef | None:
     if not cursor.spelling or not _FIELD_NAME_RE.match(cursor.spelling):
         return None
+    qual_name = cursor.type.spelling if (cursor.type and cursor.type.spelling) else cursor.spelling
+    fields = _collect_fields_recursive(cursor, names, set())
+    if fields is None:
+        return None
+    return StructDef(name=qual_name, fields=fields)
+
+
+def _collect_fields_recursive(
+    cursor: clang.Cursor, names: set[str], visited_bases: set[str]
+) -> list[FieldDef] | None:
     fields: list[FieldDef] = []
     for child in cursor.get_children():
-        if child.kind != clang.CursorKind.FIELD_DECL:
-            continue
-        if not child.spelling or not _FIELD_NAME_RE.match(child.spelling):
-            return None  # anonymous field → skip whole struct
-        try:
-            if child.is_bitfield():
-                return None  # carve-out: cannot take address
-        except (AttributeError, TypeError, RuntimeError, ValueError):
-            return None
-        try:
-            kind, target = _classify_field(child, names)
-        except (AttributeError, TypeError, RuntimeError, ValueError):
-            return None
-        fields.append(FieldDef(name=child.spelling, kind=kind, target=target))
-    return StructDef(name=cursor.spelling, fields=fields)
+        if child.kind == clang.CursorKind.CXX_BASE_SPECIFIER:
+            if child.access_specifier == clang.AccessSpecifier.PUBLIC:
+                base_decl = child.type.get_declaration()
+                if (
+                    base_decl
+                    and base_decl.is_definition()
+                    and base_decl.spelling not in visited_bases
+                ):
+                    visited_bases.add(base_decl.spelling)
+                    base_fields = _collect_fields_recursive(base_decl, names, visited_bases)
+                    if base_fields is not None:
+                        fields.extend(base_fields)
+        elif child.kind == clang.CursorKind.FIELD_DECL:
+            # S1 / Decision 3: Serialize ONLY public member fields
+            if child.access_specifier != clang.AccessSpecifier.PUBLIC:
+                continue
+            if not child.spelling or not _FIELD_NAME_RE.match(child.spelling):
+                return None  # anonymous field → skip whole struct
+            try:
+                if child.is_bitfield():
+                    return None  # carve-out: cannot take address
+            except (AttributeError, TypeError, RuntimeError, ValueError):
+                return None
+            try:
+                kind, target = _classify_field(child, names)
+            except (AttributeError, TypeError, RuntimeError, ValueError):
+                return None
+            fields.append(FieldDef(name=child.spelling, kind=kind, target=target))
+    return fields
 
 
 def _classify_field(field_cursor: clang.Cursor, names: set[str]) -> tuple[str, str]:
@@ -258,10 +293,21 @@ def generate_serializers(source_path: str) -> str:
     if not structs:
         return '// serializer_gen: no emittable structs (manifest {"structs": []})\n'
     try:
-        parts = [_RUNTIME]
+        macro_words = {
+            "next", "prev", "left", "right", "root", "parent", "child",
+            "depth", "count", "val", "value", "key", "id", "addr", "node",
+            "items", "first", "second"
+        }
+        for s in structs:
+            for f in s.fields:
+                macro_words.add(f.name)
+        push_lines = [f'#pragma push_macro("{w}")\n#undef {w}' for w in sorted(macro_words)]
+        pop_lines = [f'#pragma pop_macro("{w}")' for w in sorted(macro_words, reverse=True)]
+
+        parts = ["\n\n" + "\n".join(push_lines) + "\n", _RUNTIME]
         parts.append(
             "\n".join(
-                f"inline std::string __serialize_{s.name}(const {s.name}& obj, "
+                f"inline std::string __serialize_{s.fn_id}(const {s.name}& obj, "
                 "std::set<void*>& visited, std::set<void*>& emitted, int depth);"
                 for s in structs
             )
@@ -272,6 +318,7 @@ def generate_serializers(source_path: str) -> str:
         for s in structs:
             parts.append(_emit_overloads(s))
             parts.append(_emit_vector_specs(s))
+        parts.append("\n" + "\n".join(pop_lines) + "\n")
         return "\n".join(parts)
     except (AttributeError, TypeError, RuntimeError, ValueError):
         return "// serializer_gen: codegen failed; falling back to $addr behavior\n"
@@ -280,7 +327,7 @@ def generate_serializers(source_path: str) -> str:
 def _emit_struct(s: StructDef) -> str:
     lines = [
         (
-            f"inline std::string __serialize_{s.name}(const {s.name}& obj, "
+            f"inline std::string __serialize_{s.fn_id}(const {s.name}& obj, "
             "std::set<void*>& visited, std::set<void*>& emitted, int depth) {"
         ),
         '    if (depth > 50) return "{\\"$depth_limit\\":true}";',
@@ -295,18 +342,20 @@ def _emit_struct(s: StructDef) -> str:
     ]
     for f in s.fields:
         if f.kind == "struct_ptr":
+            target_fn_id = f.target.replace("::", "_")
             lines.append(
                 f'    o << ",\\"{f.name}\\":";'
                 f'if (!obj.{f.name}) o << "null"; '
                 f'else if (__trace_freed_addresses.count((const void*)obj.{f.name})) {{ int fid = __heap_id_for((const void*)obj.{f.name}); o << "{{\\"$ref\\":" << fid << ",\\"$freed\\":true}}"; }} '
                 f'else if (!__is_readable_ptr((const void*)obj.{f.name}, sizeof({f.target}))) o << "null"; '
-                f"else o << __serialize_{f.target}"
+                f"else o << __serialize_{target_fn_id}"
                 f"(*obj.{f.name}, visited, emitted, depth + 1);"
             )
         elif f.kind == "struct_value":
+            target_fn_id = f.target.replace("::", "_")
             lines.append(
                 f'    o << ",\\"{f.name}\\":" '
-                f"<< __serialize_{f.target}"
+                f"<< __serialize_{target_fn_id}"
                 f"(obj.{f.name}, visited, emitted, depth + 1);"
             )
         else:
@@ -325,7 +374,7 @@ def _emit_overloads(s: StructDef) -> str:
     return f"""\
 inline std::string __ser(const {s.name}& obj) {{
     std::set<void*> visited, emitted;
-    return __serialize_{s.name}(obj, visited, emitted, 0);
+    return __serialize_{s.fn_id}(obj, visited, emitted, 0);
 }}
 inline std::string __ser({s.name}* p) {{
     if (!p) return "null";
@@ -334,7 +383,7 @@ inline std::string __ser({s.name}* p) {{
     if (__trace_freed_addresses.count(addr)) return "{{\\"$ref\\":" + std::to_string(id) + ",\\"$freed\\":true}}";
     if (!__is_readable_ptr(addr, sizeof({s.name}))) return "null";
     std::set<void*> visited, emitted;
-    return __serialize_{s.name}(*p, visited, emitted, 0);
+    return __serialize_{s.fn_id}(*p, visited, emitted, 0);
 }}
 inline std::string __ser(const {s.name}* p) {{
     if (!p) return "null";
@@ -343,7 +392,7 @@ inline std::string __ser(const {s.name}* p) {{
     if (__trace_freed_addresses.count(addr)) return "{{\\"$ref\\":" + std::to_string(id) + ",\\"$freed\\":true}}";
     if (!__is_readable_ptr(addr, sizeof({s.name}))) return "null";
     std::set<void*> visited, emitted;
-    return __serialize_{s.name}(*p, visited, emitted, 0);
+    return __serialize_{s.fn_id}(*p, visited, emitted, 0);
 }}
 """
 
@@ -358,7 +407,7 @@ inline std::string __ser(const std::vector<{s.name}>& v) {{
     o << "{{\\"$id\\":" << id << ",\\"$addr\\":\\"" << (const void*)&v << "\\",\\"items\\":[";
     for (size_t i = 0; i < v.size(); ++i) {{
         if (i) o << ",";
-        o << __serialize_{s.name}(v[i], visited, emitted, 0);
+        o << __serialize_{s.fn_id}(v[i], visited, emitted, 0);
     }}
     o << "]}}";
     return o.str();
@@ -379,7 +428,7 @@ inline std::string __ser(const std::vector<{s.name}*>& v) {{
             int fid = __heap_id_for(addr);
             if (__trace_freed_addresses.count(addr)) o << "{{\\"$ref\\":" << fid << ",\\"$freed\\":true}}";
             else if (!__is_readable_ptr(addr, sizeof({s.name}))) o << "null";
-            else o << __serialize_{s.name}(*v[i], visited, emitted, 0);
+            else o << __serialize_{s.fn_id}(*v[i], visited, emitted, 0);
         }}
     }}
     o << "]}}";
